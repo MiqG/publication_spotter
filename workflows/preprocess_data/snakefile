@@ -1,0 +1,46 @@
+"""
+Author: Miquel Anglada Girotto
+Contact: miquelangladagirotto [at] gmail [dot] com
+Last Update: 2021-01-12
+
+Workflow purpose
+--------------
+Preprocess raw data.
+
+Outline
+-------
+        
+"""
+
+import os
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+
+##### RULES #####
+rule all:
+    input:
+        # preprocess CCLE matrix (sample names)
+        os.path.join(PREP_DIR,'clean','CCLE','exon_psi','CCLE.tsv.gz'),
+        os.path.join(PREP_DIR,'clean','CCLE','metadata','CCLE.tsv')
+        
+        
+rule preprocess_ccle:
+    input:
+        psi_file = os.path.join(RAW_DIR,'inhouse','CCLE','CCLE_ALL_INCLUSION_LEVELS_FULL-Hs2935-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab'),
+        metadata_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv'),
+        ccle_cancertypes_file = os.path.join(RAW_DIR,'articles','Yu2019','ccle_metadata.xls')
+    output:
+        psi_file = os.path.join(PREP_DIR,'CCLE','exon_psi','CCLE.tsv.gz'),
+        metadata_file = os.path.join(PREP_DIR,'CCLE','metadata','CCLE.tsv')
+    shell:
+        """
+        python scripts/preprocess_ccle.py \
+                    --raw_psi_file={input.psi_file} \
+                    --raw_metadata_file={input.metadata_file} \
+                    --ccle_cancertypes_file={input.ccle_cancertypes_file} \
+                    --prep_psi_file={output.psi_file} \
+                    --prep_metadata_file={output.metadata_file}
+        """
