@@ -23,7 +23,7 @@ from tqdm import tqdm
 Development
 -----------
 import os
-ROOT = '~/projects/sso_targets'
+ROOT = '~/projects/publication_splicing_dependency'
 psi_file = os.path.join(ROOT,'data','prep','clean','CCLE','exon_psi','CCLE.tsv.gz')
 genexpr_file = os.path.join(ROOT,'data','raw','DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
 annotation_file = os.path.join(ROOT,'data','references','vastdb_events_annotation.tsv')
@@ -58,7 +58,6 @@ def load_data(psi_file, genexpr_file, rnai_file, metadata_file, annotation_file)
     common_events = set(psi.index).intersection(
         annotation.loc[annotation["GENE"].isin(common_genes), "EVENT"]
     )
-    #common_events = [e for e in common_events if "EX" in e]
 
     psi = psi.loc[common_events, common_samples]
     genexpr = genexpr.loc[common_genes, common_samples]
@@ -171,12 +170,16 @@ def main():
     metadata_file = args.metadata_file
     n_jobs = args.n_jobs
     output_file = args.output_file
-
+    
+    print('Loading data...')
     psi, genexpr, rnai, annotation = load_data(
         psi_file, genexpr_file, rnai_file, metadata_file, annotation_file
     )
-
+    
+    print('Fitting models...')
     result = fit_models(psi, genexpr, rnai, annotation, n_jobs)
+    
+    print('Saving results...')
     result.to_csv(output_file, sep='\t', compression='gzip', index=False)
 
 

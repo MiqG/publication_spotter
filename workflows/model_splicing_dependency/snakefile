@@ -24,10 +24,8 @@ RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 ##### RULES #####
 rule all:
     input:
-        
         # calculate splicing dependencies
-        os.path.join(RESULTS_DIR,'files','splicing_dependencies.tsv.gz'),
-        
+        os.path.join(RESULTS_DIR,'files','splicing_dependencies.tsv.gz')
         # EDA splicing dependencies
         # validation splicing dependencies
         
