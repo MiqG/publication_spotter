@@ -23,7 +23,7 @@ SAVE_PARAMS = {'sep':'\t', 'index':False}
 Development
 -----------
 import os
-ROOT = '/home/miquel/projects/sso_targets'
+ROOT = '/home/miquel/projects/publication_splicing_dependency'
 RAW_DIR = os.path.join(ROOT,'data','raw')
 raw_psi_file = os.path.join(RAW_DIR,'inhouse','CCLE','CCLE_ALL_INCLUSION_LEVELS_FULL-Hs2935-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab')
 raw_metadata_file = os.path.join(ROOT,'data','raw','DepMap','achilles_ccle','sample_info.csv')
@@ -61,8 +61,10 @@ def preprocess_ccle(psi, metadata, cancertypes):
         on="CCLE_Name",
     )
 
-    # drop missing rows in psi
-    psi = psi.dropna(axis=0, thresh="all")
+    # drop rows missing all values
+    is_na = psi.isnull()
+    is_all_na = is_na.sum(1) == is_na.shape[0]
+    psi = psi.loc[~is_all_na]
 
     # rename psi columns
     psi.columns = format_cell_names(psi.columns)

@@ -23,8 +23,8 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 rule all:
     input:
         # preprocess CCLE matrix
-        os.path.join(PREP_DIR,'clean','CCLE','exon_psi','CCLE.tsv.gz'),
-        os.path.join(PREP_DIR,'clean','CCLE','metadata','CCLE.tsv')
+        os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
+        os.path.join(PREP_DIR,'metadata','CCLE.tsv')
         
         
 rule preprocess_ccle:
@@ -33,8 +33,8 @@ rule preprocess_ccle:
         metadata_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv'),
         ccle_cancertypes_file = os.path.join(RAW_DIR,'articles','Yu2019','ccle_metadata.xls')
     output:
-        psi_file = os.path.join(PREP_DIR,'CCLE','exon_psi','CCLE.tsv.gz'),
-        metadata_file = os.path.join(PREP_DIR,'CCLE','metadata','CCLE.tsv')
+        psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
+        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
     shell:
         """
         python scripts/preprocess_ccle.py \
