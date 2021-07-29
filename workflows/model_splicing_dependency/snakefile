@@ -75,7 +75,7 @@ rule figures_validation:
     input:
         crispr_screen_file = os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
     output:
-        directory(os.path.join(RESULTS_DIR,'figures','eda'))
+        directory(os.path.join(RESULTS_DIR,'figures','validation'))
     shell:
         """
         Rscript scripts/figures_validation.R

@@ -22,7 +22,7 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 ##### RULES #####
 rule all:
     input:
-        # preprocess CCLE matrix (sample names)
+        # preprocess CCLE matrix
         os.path.join(PREP_DIR,'clean','CCLE','exon_psi','CCLE.tsv.gz'),
         os.path.join(PREP_DIR,'clean','CCLE','metadata','CCLE.tsv')
         
