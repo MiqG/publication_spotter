@@ -11,8 +11,10 @@
 
 import statsmodels.regression.linear_model as lm
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
+from scipy import stats
 import argparse
 import gc
 from joblib import Parallel, delayed
@@ -24,11 +26,11 @@ Development
 -----------
 import os
 ROOT = '~/projects/publication_splicing_dependency'
-psi_file = os.path.join(ROOT,'data','prep','clean','CCLE','exon_psi','CCLE.tsv.gz')
+psi_file = os.path.join(ROOT,'data','prep','exon_psi','CCLE.tsv.gz')
 genexpr_file = os.path.join(ROOT,'data','raw','DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
-annotation_file = os.path.join(ROOT,'data','references','vastdb_events_annotation.tsv')
+annotation_file = os.path.join(ROOT,'data','raw','VastDB','EVENT_INFO-hg38_noseqs.tsv')
 rnai_file =  os.path.join(ROOT,'data','raw','DepMap','demeter2','D2_combined_gene_dep_scores.csv')
-metadata_file = os.path.join(ROOT,'data','prep','clean','CCLE','metadata','CCLE.tsv')
+metadata_file = os.path.join(ROOT,'data','prep','metadata','CCLE.tsv')
 """
 
 ##### FUNCTIONS #####
@@ -69,14 +71,6 @@ def load_data(psi_file, genexpr_file, rnai_file, metadata_file, annotation_file)
     return psi, genexpr, rnai, annotation
 
 
-def logit(x):
-    return np.log(x/(100-x))
-
-
-def angular(x):
-    return 2*np.arcsin(np.sqrt(x))
-
-
 def fit_model(x_psi, x_genexpr, y_rnai):
 
     X = pd.DataFrame([x_psi, x_genexpr]).T
@@ -90,26 +84,44 @@ def fit_model(x_psi, x_genexpr, y_rnai):
     try:
         # standardize features
         X.values[:, :] = StandardScaler().fit_transform(X)
+        X['interaction'] = X[x_psi.name]*X[x_genexpr.name]
         X['intercept'] = 1.0
         
+        # fit linear model
         model = lm.OLS(y, X).fit()
-            
+        
+        # score
+        pearson_coef, pearson_pvalue = stats.pearsonr(model.predict(X),y)
+        spearman_coef, spearman_pvalue = stats.spearmanr(model.predict(X),y)
+        
         # prepare output
         summary = pd.DataFrame({
             "coefficient": model.params, 
-            "pvalue": model.pvalues,
             "stderr": model.bse,
+            "zscore": model.params / model.bse,
+            "pvalue": model.pvalues,
             "n_obs": model.nobs,
-            "rsquared": model.rsquared
+            "rsquared": model.rsquared,
+            "pearson_coef": pearson_coef,
+            "pearson_pvalue": pearson_pvalue,
         })
+        
     except:
+        X['interaction'] = np.nan
         X['intercept'] = np.nan
+        
+        pearson_coef, pearson_pvalue = np.nan, np.nan
+        spearman_coef, spearman_pvalue = np.nan, np.nan
+        
         summary = pd.DataFrame({
-             "coefficient": [np.nan]*X.shape[1], 
-             "pvalue": np.nan,
-             "stderr": np.nan,
-             "n_obs": np.nan,
-             "rsquared": np.nan
+            "coefficient": [np.nan]*X.shape[1], 
+            "stderr": np.nan,
+            "zscore": np.nan,
+            "pvalue": np.nan,
+            "n_obs": np.nan,
+            "rsquared": np.nan,
+            "pearson_coef": np.nan,
+            "pearson_pvalue": np.nan,
             },
             index=X.columns
         )
@@ -119,15 +131,26 @@ def fit_model(x_psi, x_genexpr, y_rnai):
         'GENE': x_genexpr.name,
         'event_coefficient': summary.loc[x_psi.name,'coefficient'],
         'event_stderr': summary.loc[x_psi.name,'stderr'],
+        'event_zscore': summary.loc[x_psi.name,'zscore'],
         'event_pvalue': summary.loc[x_psi.name,'pvalue'],
         'gene_coefficient': summary.loc[x_genexpr.name,'coefficient'],
         'gene_stderr': summary.loc[x_genexpr.name,'stderr'],
+        'gene_zscore': summary.loc[x_genexpr.name,'zscore'],
         'gene_pvalue': summary.loc[x_genexpr.name,'pvalue'],
+        'interaction_coefficient': summary.loc['interaction','coefficient'],
+        'interaction_stderr': summary.loc['interaction','stderr'],
+        'interaction_zscore': summary.loc['interaction','zscore'],
+        'interaction_pvalue': summary.loc['interaction','pvalue'],
         'intercept_coefficient': summary.loc['intercept','coefficient'],
         'intercept_stderr': summary.loc['intercept','stderr'],
+        'intercept_zscore': summary.loc['intercept','zscore'],
         'intercept_pvalue': summary.loc['intercept','pvalue'],
         'n_obs': summary.loc[x_genexpr.name,'n_obs'],
         'rsquared': summary.loc[x_genexpr.name,'rsquared'],
+        'pearson_coefficient': pearson_coef,
+        'pearson_pvalue': pearson_pvalue,
+        'spearman_coefficient': spearman_coef,
+        'spearman_pvalue': spearman_pvalue,
         'event_mean': x_psi.mean(),
         'event_std': x_psi.std(),
         'gene_mean': x_genexpr.mean(),
