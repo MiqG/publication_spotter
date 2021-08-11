@@ -91,8 +91,9 @@ def fit_model(x_psi, x_genexpr, y_rnai):
         model = lm.OLS(y, X).fit()
         
         # score
-        pearson_coef, pearson_pvalue = stats.pearsonr(model.predict(X),y)
-        spearman_coef, spearman_pvalue = stats.spearmanr(model.predict(X),y)
+        prediction = model.predict(X)
+        pearson_coef, pearson_pvalue = stats.pearsonr(prediction,y)
+        spearman_coef, spearman_pvalue = stats.spearmanr(prediction,y)
         
         # prepare output
         summary = pd.DataFrame({
@@ -102,14 +103,13 @@ def fit_model(x_psi, x_genexpr, y_rnai):
             "pvalue": model.pvalues,
             "n_obs": model.nobs,
             "rsquared": model.rsquared,
-            "pearson_coef": pearson_coef,
-            "pearson_pvalue": pearson_pvalue,
         })
         
     except:
         X['interaction'] = np.nan
         X['intercept'] = np.nan
         
+        prediction = np.nan
         pearson_coef, pearson_pvalue = np.nan, np.nan
         spearman_coef, spearman_pvalue = np.nan, np.nan
         
@@ -120,8 +120,6 @@ def fit_model(x_psi, x_genexpr, y_rnai):
             "pvalue": np.nan,
             "n_obs": np.nan,
             "rsquared": np.nan,
-            "pearson_coef": np.nan,
-            "pearson_pvalue": np.nan,
             },
             index=X.columns
         )
@@ -147,6 +145,10 @@ def fit_model(x_psi, x_genexpr, y_rnai):
         'intercept_pvalue': summary.loc['intercept','pvalue'],
         'n_obs': summary.loc[x_genexpr.name,'n_obs'],
         'rsquared': summary.loc[x_genexpr.name,'rsquared'],
+        'prediction_mean': np.mean(prediction),
+        'prediction_median': np.median(prediction),
+        'prediction_std': np.std(prediction),
+        'prediction_range': np.max(prediction) - np.min(prediction),
         'pearson_coefficient': pearson_coef,
         'pearson_pvalue': pearson_pvalue,
         'spearman_coefficient': spearman_coef,
