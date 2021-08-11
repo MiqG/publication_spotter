@@ -1,0 +1,13 @@
+gene	exon	sequence	coordinates	reference	doi	cancer_type	sso_type	sso_chemistry	sso_sequence	notes
+ERG	4			Ling et al. 2020	https://doi.org/10.1038/s41416-020-0951-2	PRAD	exon_skipping	morpholino		
+MKNK2	14b			Mogilevsky et al. 2018	https://doi.org/10.1093/nar/gky921	GBM	exon_skipping	2'OME-PS/2'OMOE-PS	ggaagugacugucccaccuucaga	high PSI in both normal brain and GBM
+BCL2L1	2			Bauman et al. 2010	https://doi.org/10.1093/nar/gkq731	LUAD	exon_skipping			
+STAT5B	19			Shchelkunova et al 2013	https://doi.org/10.7150/ijbs.5194		intron_retention	morpholino		
+NUMB	9			Bechara et al. 2013	https://doi.org/10.1016/j.molcel.2013.11.010	LUAD	exon_skipping	2'OME-PS		
+SOX9				Cooper et al. 2009	https://doi.org/10.1093/nar/gkp441	BRCA	intron_retention	2'OME-PS		
+MCL1	2			Jeng-Jer et al.2009	https://doi.org/10.1038/jid.2009.83	BCC	exon_skipping			
+ERBB2	19			Pankratova et al. 2010	https://doi.org/10.3892/ijo_00000472		exon_skipping			
+MST1R	16			LeFave et al. 2011	https://doi.org/10.1038/emboj.2011.259	GBM	exon_skipping	morpholino		
+HNRNPH1	4			LeFave et al. 2011	https://doi.org/10.1038/emboj.2011.259		exon_skipping			
+PKM	10			Goldberg et al. 2012	https://doi.org/10.1084/jem.20111487	COAD	exon_skipping			
+TERT	7;8			Wong et al. 2013	https://doi.org/10.1016/j.celrep.2013.03.011	CESC;LUAD;COAD	exon_skipping			
