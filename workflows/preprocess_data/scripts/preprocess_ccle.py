@@ -18,6 +18,7 @@ import string
 
 # variables
 SAVE_PARAMS = {'sep':'\t', 'index':False}
+THRESH_NON_MISSING = 50
 
 """
 Development
@@ -51,7 +52,7 @@ def format_cell_names(x):
     return x.values
 
 
-def preprocess_ccle(psi, metadata, cancertypes):
+def preprocess_ccle(psi, metadata, cancertypes, event_type):
     # add cancertypes to metadata
     metadata = pd.merge(
         metadata,
@@ -59,12 +60,14 @@ def preprocess_ccle(psi, metadata, cancertypes):
             columns={"CCLE_name": "CCLE_Name", "disease": "cancer_type"}
         ),
         on="CCLE_Name",
+        how='left'
     )
 
     # drop rows missing all values
     is_na = psi.isnull()
-    is_all_na = is_na.sum(1) == is_na.shape[0]
-    psi = psi.loc[~is_all_na]
+    non_missing = is_na.shape[1] - is_na.sum(1)
+    to_keep = non_missing >= THRESH_NON_MISSING
+    psi = psi.loc[to_keep].copy()
 
     # rename psi columns
     psi.columns = format_cell_names(psi.columns)
@@ -76,6 +79,10 @@ def preprocess_ccle(psi, metadata, cancertypes):
     
     # rename
     psi = psi.rename(columns = metadata.set_index('stripped_cell_line_name')['DepMap_ID'].to_dict())
+    
+    # split PSI by event_type
+    psi = psi.loc[psi.index.str.contains(event_type)].copy()
+        
     return psi, metadata
 
 
@@ -86,6 +93,7 @@ def parse_args():
     parser.add_argument("--ccle_cancertypes_file", type=str)
     parser.add_argument("--prep_psi_file", type=str)
     parser.add_argument("--prep_metadata_file", type=str)
+    parser.add_argument("--event_type", type=str)
 
     args = parser.parse_args()
 
@@ -99,11 +107,11 @@ def main():
     ccle_cancertypes_file = args.ccle_cancertypes_file
     prep_psi_file = args.prep_psi_file
     prep_metadata_file = args.prep_metadata_file
+    event_type = args.event_type
 
     # load
     psi, metadata, cancertypes = load_data(raw_psi_file, raw_metadata_file, ccle_cancertypes_file)
-    
-    psi, metadata = preprocess_ccle(psi, metadata, cancertypes)
+    psi, metadata = preprocess_ccle(psi, metadata, cancertypes, event_type)
     
     # save
     psi.reset_index().to_csv(prep_psi_file, compression='gzip', **SAVE_PARAMS)
