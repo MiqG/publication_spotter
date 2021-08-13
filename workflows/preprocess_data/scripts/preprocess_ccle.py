@@ -80,7 +80,7 @@ def preprocess_ccle(psi, metadata, cancertypes, event_type):
     # rename
     psi = psi.rename(columns = metadata.set_index('stripped_cell_line_name')['DepMap_ID'].to_dict())
     
-    # split PSI by event_type
+    # subset PSI by event_type
     psi = psi.loc[psi.index.str.contains(event_type)].copy()
         
     return psi, metadata

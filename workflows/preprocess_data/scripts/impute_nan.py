@@ -15,7 +15,13 @@ SAVE_PARAMS = {'sep':'\t', 'compression':'gzip', 'index':False}
 
 ##### FUNCTIONS #####
 def load_data(input_file):
-    data = pd.read_table(input_file, index_col=0)
+    if 'csv' in input_file:
+        data = pd.read_csv(input_file, index_col=0)
+    elif 'tsv' in input_file:
+        data = pd.read_table(input_file, index_col=0)
+    else:
+        print('Wrong input file format.')
+        data = None
     return data
 
 

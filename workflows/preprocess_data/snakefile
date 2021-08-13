@@ -21,14 +21,25 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 
 EVENT_TYPES = ['EX','ALTA','ALTD']
 
+ACHILLES_RAW = {
+    'demeter2': os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
+    'genexpr': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
+}
+
 ##### RULES #####
 rule all:
     input:
-        # preprocess CCLE matrix
+        # preprocess CCLE PSI matrix
         expand(os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
+        # preprocess achilles data
+        expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=ACHILLES_RAW.keys()),
+        
         # impute CCLE PSI matrix
-        expand(os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        expand(os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # impute RNAi matrix
+        os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz')
         
         
 rule preprocess_ccle:
@@ -51,13 +62,49 @@ rule preprocess_ccle:
                     --prep_metadata_file={params.metadata_file} \
                     --event_type={params.event_type}
         """
+
         
+rule preprocess_achilles:
+    input:
+        lambda wildcards: ACHILLES_RAW[wildcards.dataset]
+    output:
+        os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz')
+    params:
+        metadata_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv')
+    shell:
+        """
+        python scripts/preprocess_achilles.py \
+                    --raw_achilles_file={input} \
+                    --raw_metadata_file={params.metadata_file} \
+                    --prep_achilles_file={output}
+        """
+
         
 rule impute_psi_ccle:
     input:
         os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz')
     output:
         os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-{event_type}.tsv.gz')
+    params:
+        method = 'knn',
+        method_kws = '\'{"n_neighbors":5}\'',
+        features_as_rows = True
+    shell:
+        """
+        python scripts/impute_nan.py \
+                    --input_file={input} \
+                    --output_file={output} \
+                    --method={params.method} \
+                    --method_kws={params.method_kws} \
+                    --features_as_rows={params.features_as_rows}
+        """
+    
+
+rule impute_rnai_ccle:
+    input:
+        os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
+    output:
+        os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz')
     params:
         method = 'knn',
         method_kws = '\'{"n_neighbors":5}\'',
