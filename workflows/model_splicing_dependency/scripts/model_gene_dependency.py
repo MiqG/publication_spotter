@@ -26,11 +26,11 @@ Development
 -----------
 import os
 ROOT = '~/projects/publication_splicing_dependency'
-psi_file = os.path.join(ROOT,'data','prep','exon_psi','CCLE.tsv.gz')
-genexpr_file = os.path.join(ROOT,'data','raw','DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
-annotation_file = os.path.join(ROOT,'data','raw','VastDB','EVENT_INFO-hg38_noseqs.tsv')
-rnai_file =  os.path.join(ROOT,'data','raw','DepMap','demeter2','D2_combined_gene_dep_scores.csv')
-metadata_file = os.path.join(ROOT,'data','prep','metadata','CCLE.tsv')
+psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz'),
+genexpr_file = os.path.join(PREP_DIR,'genexpr','CCLE.tsv.gz'),
+rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
+annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
+metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
 """
 
 ##### FUNCTIONS #####
@@ -38,7 +38,7 @@ def load_data(psi_file, genexpr_file, rnai_file, metadata_file, annotation_file)
     psi = pd.read_table(psi_file, index_col=0)
     genexpr = pd.read_table(genexpr_file, index_col=0)
     annotation = pd.read_table(annotation_file)
-    rnai = pd.read_csv(rnai_file, index_col=0)
+    rnai = pd.read_table(rnai_file, index_col=0)
     metadata = pd.read_table(metadata_file)
     
     # drop undetected & uninformative events
@@ -46,11 +46,11 @@ def load_data(psi_file, genexpr_file, rnai_file, metadata_file, annotation_file)
     psi = psi.loc[psi.std(axis=1)!=0]
     
     # strip gene names
-    genexpr.index = [symbol for symbol, entrez in genexpr.index.str.split(" ")]
-    rnai.index = [symbol for symbol, entrez in rnai.index.str.split(" ")]
+    # genexpr.index = [symbol for symbol, entrez in genexpr.index.str.split(" ")]
+    # rnai.index = [symbol for symbol, entrez in rnai.index.str.split(" ")]
 
     # rename samples
-    rnai = rnai.rename(columns=metadata.set_index("CCLE_Name")["DepMap_ID"].to_dict())
+    # rnai = rnai.rename(columns=metadata.set_index("CCLE_Name")["DepMap_ID"].to_dict())
 
     # subset
     common_samples = (

@@ -21,25 +21,27 @@ RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 
+EVENT_TYPES = ['EX','ALTA','ALTD']
+
 ##### RULES #####
 rule all:
     input:
         # calculate splicing dependencies
-        os.path.join(RESULTS_DIR,'files','splicing_dependencies.tsv.gz')
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependencies-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
         # EDA splicing dependencies
         # validation splicing dependencies
         
         
 rule model_gene_dependency:
     input:
-        psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
-        genexpr_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz'),
-        rnai_file =  os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
+        psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz'),
+        genexpr_file = os.path.join(PREP_DIR,'genexpr','CCLE.tsv.gz'),
+        rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
         annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
         metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv') 
     output:
-        os.path.join(RESULTS_DIR,'files','splicing_dependencies.tsv.gz')
-    threads: 10
+        os.path.join(RESULTS_DIR,'files','splicing_dependencies-{event_type}.tsv.gz')
+    threads: 15
     shell:
         """
         python scripts/model_gene_dependency.py \
