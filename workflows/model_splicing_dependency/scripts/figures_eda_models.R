@@ -10,7 +10,7 @@
 # 
 # Outline
 # -------
-# - pvalue distributions of linear models?
+# - pvalue distributions of linear models? p-values vs n. observations?
 # - scoring of linear models? spearman vs pearson?
 # - which events/genes/interaction/intercepts have extreme z-scores?
 # - to which biological processes are they related?

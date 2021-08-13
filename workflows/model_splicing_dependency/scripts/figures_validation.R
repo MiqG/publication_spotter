@@ -12,7 +12,7 @@
 # - prediction of fitness effect of exon CRISPR screen Thomas 2020: if we run the model with less data, do we get the same predictions? (How robust are the predictions?)
 # - cancer associated genes tend to rank at the top
 # - tested targets
-# - HsaEX0044216 (NUMB)
+# - HsaEX0044216 (NUMB) in certain cancer cell lines
 
 
 require(tidyverse)
