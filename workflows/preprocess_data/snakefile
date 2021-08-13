@@ -9,7 +9,7 @@ Preprocess raw data.
 
 Outline
 -------
-        
+
 """
 
 import os
@@ -24,7 +24,10 @@ rule all:
     input:
         # preprocess CCLE matrix
         os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
-        os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+        os.path.join(PREP_DIR,'metadata','CCLE.tsv'),
+        
+        # impute CCLE PSI matrix
+        os.path.join(PREP_DIR,'exon_psi_imputed','CCLE.tsv.gz')
         
         
 rule preprocess_ccle:
@@ -44,3 +47,24 @@ rule preprocess_ccle:
                     --prep_psi_file={output.psi_file} \
                     --prep_metadata_file={output.metadata_file}
         """
+        
+        
+rule impute_psi_ccle:
+    input:
+        os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz')
+    output:
+        os.path.join(PREP_DIR,'exon_psi_imputed','CCLE.tsv.gz')
+    params:
+        method = 'knn',
+        method_kws = '\'{"n_neighbors":5}\'',
+        features_as_rows = True
+    shell:
+        """
+        python scripts/impute_nan.py \
+                    --input_file={input} \
+                    --output_file={output} \
+                    --method={params.method} \
+                    --method_kws={params.method_kws} \
+                    --features_as_rows={params.features_as_rows}
+        """
+    
