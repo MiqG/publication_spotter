@@ -1,0 +1,37 @@
+import os
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+RESULTS_DIR = os.path.join(ROOT,'results','eda_data')
+
+EVENT_TYPES = ['EX','ALTA','ALTD']
+
+CCLE_MATRICES = {
+    'psi-EX': os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-EX.tsv.gz'),
+    'psi-ALTA': os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-ALTA.tsv.gz'),
+    'psi-ALTD': os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-ALTD.tsv.gz'),
+    'genexpr': os.path.join(PREP_DIR,'genexpr','CCLE.tsv.gz'),
+    'demeter2': os.path.join(PREP_DIR,'demeter2_imputed','D2_combined_gene_dep_scores.tsv.gz')
+}
+
+
+##### RULES #####
+rule all:
+    input:
+        # decompose CCLE matrices
+        expand(os.path.join(RESULTS_DIR,'files','eda_data','decompose_and_cluster','{dataset}.tsv.gz'), dataset=CCLE_MATRICES.keys())
+
+        
+rule decompose_matrices:
+    input:
+        lambda wildcards: CCLE_MATRICES[wildcards.dataset]
+    output:
+        os.path.join(RESULTS_DIR,'files','eda_data','decompose_and_cluster','{dataset}.tsv.gz')
+    shell:
+        """
+        python scripts/decompose_and_cluster.py \
+                    --matrix_file={input} \
+                    --output_file={output} 
+        """
