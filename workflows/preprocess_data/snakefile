@@ -21,7 +21,7 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 
 EVENT_TYPES = ['EX','ALTA','ALTD']
 
-ACHILLES_RAW = {
+DEPMAP_RAW = {
     'demeter2': os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
     'genexpr': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
 }
@@ -32,8 +32,8 @@ rule all:
         # preprocess CCLE PSI matrix
         expand(os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-        # preprocess achilles data
-        expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=ACHILLES_RAW.keys()),
+        # preprocess DepMap data
+        expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=DEPMAP_RAW.keys()),
         
         # impute CCLE PSI matrix
         expand(os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
@@ -64,9 +64,9 @@ rule preprocess_ccle:
         """
 
         
-rule preprocess_achilles:
+rule preprocess_depmap:
     input:
-        lambda wildcards: ACHILLES_RAW[wildcards.dataset]
+        lambda wildcards: DEPMAP_RAW[wildcards.dataset]
     output:
         os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz')
     params:
