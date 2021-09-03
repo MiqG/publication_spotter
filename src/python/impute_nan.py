@@ -5,6 +5,7 @@
 import argparse
 import json
 import pandas as pd
+import numpy as np
 
 # imputation methods
 from sklearn.impute import KNNImputer
@@ -35,12 +36,21 @@ def get_imputation_method(method, method_kws):
 
 def impute_nan(data, method, method_kws, features_as_rows=True):
     method = get_imputation_method(method, method_kws)
+    output = np.full(data.shape, np.nan)
+
     if features_as_rows:
-        imputed = method.fit_transform(data.T).T
+        # do not consider features missing all values
+        all_missing = data.isnull().all(axis=1)
+        imputed = method.fit_transform(data.loc[~all_missing].T).T
+        output[~all_missing,:] = imputed
     else:
-        imputed = method.fit_transform(data)
-    imputed = pd.DataFrame(imputed, index = data.index, columns = data.columns)
-    return imputed
+        # do not consider features missing all values
+        all_missing = data.isnull().all(axis=0)
+        imputed = method.fit_transform(data[~all_missing])
+        output[:,~all_missing] = imputed
+    
+    output = pd.DataFrame(output, index = data.index, columns = data.columns)
+    return output
 
 
 def parse_args():
@@ -67,6 +77,7 @@ def main():
     # run
     print('Loading data...')
     data = load_data(input_file)
+    
     print('Imputing data...')
     result = impute_nan(data, method, method_kws, features_as_rows)
     
