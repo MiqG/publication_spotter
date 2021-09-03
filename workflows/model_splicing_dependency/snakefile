@@ -26,8 +26,12 @@ EVENT_TYPES = ['EX','ALTA','ALTD']
 ##### RULES #####
 rule all:
     input:
-        # calculate splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','splicing_dependencies-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        # fit gene dependencies
+        expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # compute splicing dependencies
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        
         # EDA splicing dependencies
         # validation splicing dependencies
         
@@ -40,7 +44,7 @@ rule model_gene_dependency:
         annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
         metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv') 
     output:
-        os.path.join(RESULTS_DIR,'files','splicing_dependencies-{event_type}.tsv.gz')
+        os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz')
     threads: 15
     shell:
         """
@@ -55,6 +59,23 @@ rule model_gene_dependency:
         """
         
         
+rule compute_splicing_dependency:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}.tsv.gz')
+    shell:
+        """
+        python scripts/compute_splicing_dependency.py \
+                    --psi_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --models_file={input.models} \
+                    --output_file={output}
+        """
+    
+    
 rule figures_eda:
     input:
         psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
@@ -62,7 +83,7 @@ rule figures_eda:
         rnai_file =  os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
         annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
         metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv'),
-        dependencies_file = os.path.join(RESULTS_DIR,'files','splicing_dependencies.tsv.gz')
+        dependencies_file = os.path.join(RESULTS_DIR,'files','models_gene_dependency.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','eda'))
     shell:
