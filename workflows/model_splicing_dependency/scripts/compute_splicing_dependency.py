@@ -23,7 +23,7 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
 genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
-models_file = os.path.join(RESULTS_DIR,'files','splicing_dependencies-EX.tsv.gz')
+models_file = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
 """
 
 ##### FUNCTIONS #####
@@ -97,7 +97,7 @@ def main():
     result = compute_splicing_dependency(models, psi, genexpr)
 
     print("Saving results...")
-    result.to_csv(output_file, sep="\t", compression="gzip", index=False)
+    result.reset_index().to_csv(output_file, sep="\t", compression="gzip", index=False)
 
 
 ##### SCRIPT #####

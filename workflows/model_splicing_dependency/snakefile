@@ -20,6 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+SRC_DIR=os.path.join(ROOT,'src')
 
 EVENT_TYPES = ['EX','ALTA','ALTD']
 
@@ -30,9 +31,17 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # compute splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-        # EDA splicing dependencies
+        # impute splicing dependencies
+        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # embed splicing dependencies
+        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # EDA models of splicing dependencies
+        os.path.join(RESULTS_DIR,'figures','eda_models')
+        
         # validation splicing dependencies
         
         
@@ -76,21 +85,76 @@ rule compute_splicing_dependency:
         """
     
     
-rule figures_eda:
+rule impute_splicing_dependency:
     input:
-        psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
-        genexpr_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz'),
-        rnai_file =  os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
-        annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv'),
-        dependencies_file = os.path.join(RESULTS_DIR,'files','models_gene_dependency.tsv.gz')
+        os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}.tsv.gz')
     output:
-        directory(os.path.join(RESULTS_DIR,'figures','eda'))
+        os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        method = 'knn',
+        method_kws = '\'{"n_neighbors":5}\'',
+        features_as_rows = True
     shell:
         """
-        Rscript scripts/figures_eda.R
+        python {params.script_dir}/impute_nan.py \
+                    --input_file={input} \
+                    --output_file={output} \
+                    --method={params.method} \
+                    --method_kws={params.method_kws} \
+                    --features_as_rows={params.features_as_rows}
+        """
+
+        
+rule embed_matrices:
+    input:
+        os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python')
+    shell:
+        """
+        python {params.script_dir}/embed_and_cluster.py \
+                    --matrix_file={input} \
+                    --output_file={output} 
+        """
+        
+        
+rule figures_eda_models:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
+        rnai = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
+        embedded_dependency = os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency-EX.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv'),
+        indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
+        genes_splicing_factors = os.path.join(ROOT,'support','splicing_factors-symbols.txt')
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','eda_models'))
+    shell:
+        """
+        Rscript scripts/figures_eda_models.R \
+                    --psi_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --rnai_file={input.rnai} \
+                    --models_file={input.models} \
+                    --embedded_dependency_file={input.embedded_dependency} \
+                    --metadata_file={input.metadata} \
+                    --indices_file={input.indices} \
+                    --genes_splicing_factors_file={input.genes_splicing_factors} \
+                    --figs_dir={output}
         """
     
+    
+rule figures_interaction_analysis:
+    input:
+    output:
+    shell:
+        """
+        Rscript scripts/figures_interaction_analysis.R
+        """
     
 rule figures_validation:
     input:
