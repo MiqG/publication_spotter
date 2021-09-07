@@ -23,20 +23,20 @@ EVENT_TYPES = ['EX','ALTA','ALTD']
 
 DEPMAP_RAW = {
     'demeter2': os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
-    'genexpr': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
+    'genexpr_tpm': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
 }
 
 ##### RULES #####
 rule all:
     input:
         # preprocess CCLE PSI matrix
-        expand(os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # preprocess DepMap data
         expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=DEPMAP_RAW.keys()),
         
         # impute CCLE PSI matrix
-        expand(os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # impute RNAi matrix
         os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz'),
@@ -54,7 +54,7 @@ rule preprocess_ccle:
         metadata_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv'),
         ccle_cancertypes_file = os.path.join(RAW_DIR,'articles','Yu2019','ccle_metadata.xls')
     output:
-        psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz')
+        psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz')
     params:
         event_type = '{event_type}',
         metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
@@ -88,9 +88,9 @@ rule preprocess_depmap:
         
 rule impute_psi_ccle:
     input:
-        os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz')
+        os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz')
     output:
-        os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-{event_type}.tsv.gz')
+        os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz')
     params:
         method = 'knn',
         method_kws = '\'{"n_neighbors":5}\'',
@@ -128,7 +128,7 @@ rule impute_rnai_ccle:
         
 rule compute_transcriptome_indices_ccle:
     input:
-        os.path.join(PREP_DIR,'genexpr','CCLE.tsv.gz')
+        os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
     output:
         os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
     shell:
