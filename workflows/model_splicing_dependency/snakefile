@@ -20,7 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
-SRC_DIR=os.path.join(ROOT,'src')
+SRC_DIR = os.path.join(ROOT,'src')
+SUPPORT_DIR = os.path.join(ROOT,'support')
 
 EVENT_TYPES = ['EX','ALTA','ALTD']
 
@@ -40,9 +41,13 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
-        os.path.join(RESULTS_DIR,'figures','eda_models')
+        os.path.join(RESULTS_DIR,'figures','eda_models'),
+        
+        # EDA relationship between interaction terms in linear models and NMD
+        os.path.join(RESULTS_DIR,'figures','interaction_analysis')
         
         # validation splicing dependencies
+        
         
         
 rule model_gene_dependency:
@@ -130,7 +135,7 @@ rule figures_eda_models:
         embedded_dependency = os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency-EX.tsv.gz'),
         metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv'),
         indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
-        genes_splicing_factors = os.path.join(ROOT,'support','splicing_factors-symbols.txt')
+        genes_splicing_factors = os.path.join(SUPPORT_DIR,'splicing_factors-symbols.txt')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','eda_models'))
     shell:
@@ -150,11 +155,18 @@ rule figures_eda_models:
     
 rule figures_interaction_analysis:
     input:
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
+        possible_interactions = os.path.join(SUPPORT_DIR,'possible_pairwise_interaction_categories.tsv')
     output:
+        directory(os.path.join(RESULTS_DIR,'figures','interaction_analysis'))
     shell:
         """
-        Rscript scripts/figures_interaction_analysis.R
+        Rscript scripts/figures_interaction_analysis.R \
+                    --models_file={input.models} \
+                    --possible_interactions_file={input.possible_interactions} \
+                    --figs_dir={output}
         """
+        
     
 rule figures_validation:
     input:

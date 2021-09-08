@@ -25,25 +25,25 @@ source(file.path(ROOT,'src','R','utils.R'))
 
 MIN_OBS = 50
 THRESH_ZSCORE = 1.96
-
+THRESH_PVALUE = 0.05
 
 # Development
 # -----------
-psi_file = file.path(ROOT,'data','raw','articles','Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
-genexpr_file = file.path(ROOT,'data','raw','articles','Thomas2020','vast_out','TPM-hg38-2.tab.gz')
-dependency_file = file.path(ROOT,'results','model_splicing_dependency','files','splicing_dependencies.tsv.gz')
-possible_interactions_file = file.path(ROOT,'support','possible_pairwise_interaction_categories.tsv')
-figs_dir = file.path(ROOT,'results','model_splicing_dependency','figures','eda_models')
+# PREP_DIR = file.path(ROOT,'data','prep')
+# RESULTS_DIR = file.path(ROOT,'results','model_splicing_dependency')
+# models_file = file.path(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
+# possible_interactions_file = file.path(ROOT,'support','possible_pairwise_interaction_categories.tsv')
+# figs_dir = file.path(ROOT,'results','model_splicing_dependency','figures','interaction_analysis')
 
 
 ##### FUNCTIONS #####
-get_interaction_categories = function(dependency, possible_interactions){
+get_interaction_categories = function(models, possible_interactions){
     # study interaction between event inclusion and gene expression
     possible_interactions = possible_interactions %>% 
         mutate(combined=paste0(beta_a,beta_b,beta_ab))
     
     ## interactions
-    zscores = dependency %>% 
+    zscores = models %>% 
         column_to_rownames("event_gene") %>% 
         dplyr::select(paste0(c('event','gene','interaction'),"_zscore"))
     intcats = (abs(zscores) > THRESH_ZSCORE) * sign(zscores)
@@ -51,7 +51,7 @@ get_interaction_categories = function(dependency, possible_interactions){
     intcats = intcats %>% 
         rownames_to_column("event_gene") %>%
         mutate(combined = paste0(event_zscore,gene_zscore,interaction_zscore)) %>%
-        left_join(possible_interactions[,c('combined','category')],by='combined') %>%
+        left_join(possible_interactions,by='combined') %>%
         dplyr::select(event_gene,category) %>%
         rename(interaction_category=category) %>% 
         mutate(interaction_category=factor(
@@ -63,9 +63,9 @@ get_interaction_categories = function(dependency, possible_interactions){
 }
 
 
-plot_interactions = function(){
+plot_interactions = function(models){
     
-    X = dependency
+    X = models
     
     plts = list()
     
@@ -79,12 +79,12 @@ plot_interactions = function(){
         labs(x='Interaction Category', y='Counts') +
         theme_pubr(x.text.angle = 70, border=TRUE)
     
-    plts[['interactions-counts_max_zscore']] = X %>% 
-        group_by(event_type, interaction_category, max_zscore) %>%
+    plts[['interactions-counts_max_effect']] = X %>% 
+        group_by(event_type, interaction_category, max_effect) %>%
         summarise(n = n()) %>% mutate(freq = 100*(n / sum(n))) %>%
         ggbarplot(x='interaction_category', y='freq', facet.by = 'event_type', 
-                  fill='max_zscore', color=NA, palette='lancet') + 
-        labs(x='Interaction Category', y='%', fill='Max. Z-score') +
+                  fill='max_effect', color=NA, palette='lancet') + 
+        labs(x='Interaction Category', y='%', fill='Max. Sign. Effect') +
         theme_pubr(x.text.angle = 70, border=TRUE)
     
     # across event types and additive interactions, which term has a higher zscore
@@ -116,9 +116,9 @@ plot_interactions = function(){
 }
 
 
-make_plots = function(){
+make_plots = function(models){
     plts = list(
-
+        plot_interactions(models)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -131,46 +131,60 @@ save_plt = function(plts, plt_name, extension='.pdf',
         filename = file.path(directory,paste0(plt_name,extension))
         save_plot(filename, 
                   plts[[plt_name]], 
-                  width=width, height=height, dpi=dpi)
+                  base_width=width, base_height=height, dpi=dpi)
 }
 
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, 'event_dependency-volcano', '.png', figs_dir, width=20, height=10)    
+    save_plt(plts, 'interactions-counts_overview', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'interactions-counts_max_effect', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'interactions-effect_size_diffs', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'interactions-effect_size_counts', '.pdf', figs_dir, width=5, height=5)
 }
 
 
 main = function(){
     args = getParsedArgs()
-    dependency_file = args$dependency_file
+    models_file = args$models_file
+    possible_interactions_file = args$possible_interactions_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
     
     # load
     possible_interactions = read_tsv(possible_interactions_file)
-    dependency = read_tsv(dependency_file) %>%
+    models = read_tsv(models_file) %>%
         filter(n_obs>MIN_OBS) %>%
         mutate(event_gene = paste0(EVENT,'_',GENE),
                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
     
-    # add interaction categories to dependency
-    intcats = get_interaction_categories(dependency, possible_interactions)
-    dependency = dependency %>% left_join(intcats,by='event_gene')
+    # add interaction categories to models
+    intcats = get_interaction_categories(models, possible_interactions)
+    models = models %>% left_join(intcats,by='event_gene')
     
-    # add who has the largest effect size?
-    effect_size = dependency %>% 
+    # add who has the largest significant effect size?
+    zscores = models %>% 
         column_to_rownames('event_gene') %>% 
         dplyr::select(paste0(c('event','gene','interaction'),'_zscore'))
-    effect_size[is.na(effect_size)] = 0
-    effect_size[['max_zscore']] = c('event','gene','interaction')[apply(abs(effect_size),1,which.max)]
-    effect_size = effect_size %>% dplyr::select(max_zscore) %>% rownames_to_column('event_gene')
-    dependency = dependency %>% left_join(effect_size, by='event_gene')
+    significant = abs(zscores) > THRESH_ZSCORE
+    significant[is.na(significant)] = FALSE
+    
+    effect_size = models %>% 
+        column_to_rownames('event_gene') %>% 
+        dplyr::select(paste0(c('event','gene','interaction'),'_coefficient'))
+    effect_size[!significant] = 0
+    
+    effect_size[['max_effect']] = c('event','gene','interaction')[apply(abs(effect_size),1,which.max)]
+    effect_size = effect_size %>% 
+        dplyr::select(max_effect) %>% 
+        rownames_to_column('event_gene')
+    models = models %>% left_join(effect_size, by='event_gene')
     
     # are exons with significant interaction terms associated to NMD?
     
+    
     # plot
-    plts = make_plots()
+    plts = make_plots(models)
 
     # save
     save_plots(plts, figs_dir)
