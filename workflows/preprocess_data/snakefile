@@ -17,6 +17,7 @@ import os
 # variables
 ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
 RAW_DIR = os.path.join(ROOT,'data','raw')
+SRC_DIR = os.path.join(ROOT,'src')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 
 EVENT_TYPES = ['EX','ALTA','ALTD']
@@ -29,8 +30,13 @@ DEPMAP_RAW = {
 ##### RULES #####
 rule all:
     input:
-        # preprocess CCLE PSI matrix
+        # preprocess CCLE
+        ## metadata
+        os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+        ## PSI
         expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        ## gene expression
+        os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
         
         # preprocess DepMap data
         expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=['demeter2']),
@@ -41,7 +47,7 @@ rule all:
         # impute RNAi matrix
         os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz'),
         
-        # compute transcriptome indicies
+        # compute transcriptome indices
         os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
         
         # count mutation frequency
@@ -52,9 +58,9 @@ rule prepare_metadata_ccle:
     input:
         sample_info = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv'),
         ccle_cancertypes = os.path.join(RAW_DIR,'articles','Yu2019','ccle_metadata.xls'),
-        sample_annotation = os.path.join(CCLE_DIR,'ENA_filereport-PRJNA523380-CCLE.tsv')
+        sample_annotation = os.path.join(RAW_DIR,'CCLE','ENA_filereport-PRJNA523380-CCLE.tsv')
     output:
-        os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+        os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
     params:
         dataset = 'metadata'
     shell:
@@ -63,7 +69,7 @@ rule prepare_metadata_ccle:
                     --dataset={params.dataset} \
                     --sample_info_file={input.sample_info} \
                     --ccle_cancer_types_file={input.ccle_cancertypes} \
-                    --sample_annotation_file={input.sample_annotation}
+                    --sample_annot_file={input.sample_annotation} \
                     --output_file={output}
         """
 
@@ -71,8 +77,7 @@ rule prepare_metadata_ccle:
 rule preprocess_psi_ccle:
     input:
         psi_file = os.path.join(RAW_DIR,'CCLE','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
-        tpm_file = os.path.join(RAW_DIR,'CCLE','vast_out','TPM-hg38-1019.tab.gz'),
-        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
     output:
         os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz')
     params:
@@ -81,9 +86,9 @@ rule preprocess_psi_ccle:
     shell:
         """
         python scripts/preprocess_ccle.py \
-                    --dataset={input.dataset} \
+                    --dataset={params.dataset} \
                     --event_type={params.event_type} \
-                    --psi_file={input.psi_file} \
+                    --mat_file={input.psi_file} \
                     --metadata_file={input.metadata_file} \
                     --output_file={output} \
         """
@@ -92,19 +97,18 @@ rule preprocess_psi_ccle:
 rule preprocess_tpm_ccle:
     input:
         tpm_file = os.path.join(RAW_DIR,'CCLE','vast_out','TPM-hg38-1019.tab.gz'),
-        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
     output:
-        os.path.join(PREP_DIR,'gene_tpm','CCLE.tsv.gz')
+        os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
     params:
-        dataset = 'genexpr_tpm',
-        event_type = '{event_type}',
+        dataset = 'genexpr_tpm'
     shell:
         """
         python scripts/preprocess_ccle.py \
-                    --dataset={input.dataset} \
-                    --psi_file={input.psi_file} \
+                    --dataset={params.dataset} \
+                    --mat_file={input.tpm_file} \
                     --metadata_file={input.metadata_file} \
-                    --output_file={output.psi_file} \
+                    --output_file={output} \
         """
 
 
@@ -130,12 +134,13 @@ rule impute_psi_ccle:
     output:
         os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz')
     params:
+        script_dir=os.path.join(SRC_DIR,'python'),
         method = 'knn',
         method_kws = '\'{"n_neighbors":5}\'',
         features_as_rows = True
     shell:
         """
-        python scripts/impute_nan.py \
+        python {params.script_dir}/impute_nan.py \
                     --input_file={input} \
                     --output_file={output} \
                     --method={params.method} \
@@ -150,12 +155,13 @@ rule impute_rnai_ccle:
     output:
         os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz')
     params:
+        script_dir=os.path.join(SRC_DIR,'python'),
         method = 'knn',
         method_kws = '\'{"n_neighbors":5}\'',
         features_as_rows = True
     shell:
         """
-        python scripts/impute_nan.py \
+        python {params.script_dir}/impute_nan.py \
                     --input_file={input} \
                     --output_file={output} \
                     --method={params.method} \
