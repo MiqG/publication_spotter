@@ -23,7 +23,7 @@ EVENT_TYPES = ['EX','ALTA','ALTD']
 
 DEPMAP_RAW = {
     'demeter2': os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
-    'genexpr_tpm': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
+    #'genexpr_tpm': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
 }
 
 ##### RULES #####
@@ -33,7 +33,7 @@ rule all:
         expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # preprocess DepMap data
-        expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=DEPMAP_RAW.keys()),
+        expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=['demeter2']),
         
         # impute CCLE PSI matrix
         expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
@@ -47,29 +47,67 @@ rule all:
         # count mutation frequency
         os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz')
         
-        
-rule preprocess_ccle:
+
+rule prepare_metadata_ccle:
     input:
-        psi_file = os.path.join(RAW_DIR,'inhouse','CCLE','CCLE_ALL_INCLUSION_LEVELS_FULL-Hs2935-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab'),
-        metadata_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv'),
-        ccle_cancertypes_file = os.path.join(RAW_DIR,'articles','Yu2019','ccle_metadata.xls')
+        sample_info = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv'),
+        ccle_cancertypes = os.path.join(RAW_DIR,'articles','Yu2019','ccle_metadata.xls'),
+        sample_annotation = os.path.join(CCLE_DIR,'ENA_filereport-PRJNA523380-CCLE.tsv')
     output:
-        psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz')
+        os.path.join(PREP_DIR,'metadata','CCLE.tsv')
     params:
-        event_type = '{event_type}',
-        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+        dataset = 'metadata'
     shell:
         """
         python scripts/preprocess_ccle.py \
-                    --raw_psi_file={input.psi_file} \
-                    --raw_metadata_file={input.metadata_file} \
-                    --ccle_cancertypes_file={input.ccle_cancertypes_file} \
-                    --prep_psi_file={output.psi_file} \
-                    --prep_metadata_file={params.metadata_file} \
-                    --event_type={params.event_type}
+                    --dataset={params.dataset} \
+                    --sample_info_file={input.sample_info} \
+                    --ccle_cancer_types_file={input.ccle_cancertypes} \
+                    --sample_annotation_file={input.sample_annotation}
+                    --output_file={output}
         """
 
+
+rule preprocess_psi_ccle:
+    input:
+        psi_file = os.path.join(RAW_DIR,'CCLE','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        tpm_file = os.path.join(RAW_DIR,'CCLE','vast_out','TPM-hg38-1019.tab.gz'),
+        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+    output:
+        os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz')
+    params:
+        dataset = 'event_psi',
+        event_type = '{event_type}',
+    shell:
+        """
+        python scripts/preprocess_ccle.py \
+                    --dataset={input.dataset} \
+                    --event_type={params.event_type} \
+                    --psi_file={input.psi_file} \
+                    --metadata_file={input.metadata_file} \
+                    --output_file={output} \
+        """
         
+
+rule preprocess_tpm_ccle:
+    input:
+        tpm_file = os.path.join(RAW_DIR,'CCLE','vast_out','TPM-hg38-1019.tab.gz'),
+        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+    output:
+        os.path.join(PREP_DIR,'gene_tpm','CCLE.tsv.gz')
+    params:
+        dataset = 'genexpr_tpm',
+        event_type = '{event_type}',
+    shell:
+        """
+        python scripts/preprocess_ccle.py \
+                    --dataset={input.dataset} \
+                    --psi_file={input.psi_file} \
+                    --metadata_file={input.metadata_file} \
+                    --output_file={output.psi_file} \
+        """
+
+
 rule preprocess_depmap:
     input:
         lambda wildcards: DEPMAP_RAW[wildcards.dataset]
