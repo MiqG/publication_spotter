@@ -126,7 +126,7 @@ def preprocess_ccle(data, dataset):
         output = psi.reset_index()
     
     elif dataset=='genexpr_tpm':
-        genexpr = data['genexpr']
+        genexpr = data['genexpr'].dropna()
         metadata = data['metadata']
         
         # log-transform
@@ -143,7 +143,7 @@ def preprocess_ccle(data, dataset):
         # rename
         genexpr = genexpr.rename(columns = metadata.set_index('run_accession')['DepMap_ID'].to_dict())
         
-        output = genexpr.reset_index().drop(columns='ID')
+        output = genexpr.reset_index().drop(columns='NAME')
         
     return output
 

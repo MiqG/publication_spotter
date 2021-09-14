@@ -46,7 +46,7 @@ TUMORPURITY = tp.set_index("Sample.ID").copy()
 TUMORPURITY.drop(columns=["Cancer.type"], inplace=True)
 
 # variables
-SAVE_PARAMS = {'sep':'\t','index':False,'compression':'gzip'}
+SAVE_PARAMS = {"sep": "\t", "index": False, "compression": "gzip"}
 MITOTIC_INDEX_SYMBOLS = [
     "CDKN3",
     "ILF2",
@@ -74,23 +74,26 @@ ADHESION_SIGNATURE = pd.read_table(
 Development
 -----------
 import os
-from sso_targets import config
-prep_clean_tcga_dir = os.path.join(config.ROOT,'data','prep','clean','TCGA')
-
-cancer = 'GBMplusNormalVastDB'
-
-genexpr_file = os.path.join(config.ROOT,'data','raw','DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
-is_ccle = True
-annotation_file = None
-metadata_file = None
-translate_from = None
-translate_to = None
+ROOT = '/home/miquel/projects/publication_splicing_dependency'
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
+annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+translate_from = 'ENSEMBL'
+translate_to = 'GENE'
 """
 
 ##### FUNCTIONS #####
-def prepare_inputs(genexpr_file):
+def prepare_inputs(genexpr_file, annotation_file, translate_from, translate_to):
     genexpr = pd.read_table(genexpr_file, index_col=0)
-    
+
+    if annotation_file is not None:
+        annot = pd.read_table(annotation_file)
+        annot = annot[[translate_from, translate_to]].drop_duplicates().dropna()
+        genexpr = genexpr.rename(
+            index=annot.set_index(translate_from)[translate_to].to_dict()
+        )
+
     return genexpr.loc[~genexpr.index.duplicated()]
 
 
@@ -197,14 +200,7 @@ class TranscriptomeIndices:
 
         # prepare output
         transcriptome_indices = pd.concat(
-            [
-                mki67,
-                mitotic_index,
-                stemness,
-                tumor_purity,
-                adhesion_index,
-            ],
-            axis=1,
+            [mki67, mitotic_index, stemness, tumor_purity, adhesion_index,], axis=1,
         )
 
         return transcriptome_indices
@@ -223,7 +219,6 @@ def parse_args():
     parser.add_argument("--annotation_file", type=str, default=None)
     parser.add_argument("--translate_from", type=str, default=None)
     parser.add_argument("--translate_to", type=str, default=None)
-    parser.add_argument("--metadata_file", type=str, default=None)
     parser.add_argument("--output_file", type=str, default=None)
 
     args = parser.parse_args()
@@ -237,11 +232,10 @@ def main():
     annotation_file = args.annotation_file
     translate_from = args.translate_from
     translate_to = args.translate_to
-    metadata_file = args.metadata_file
     output_file = args.output_file
 
     # read and prepare data
-    genexpr = prepare_inputs(genexpr_file)
+    genexpr = prepare_inputs(genexpr_file, annotation_file, translate_from, translate_to)
 
     # compute transcriptome indices
     ti = TranscriptomeIndices(genexpr)

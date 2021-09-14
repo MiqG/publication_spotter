@@ -172,14 +172,21 @@ rule impute_rnai_ccle:
         
 rule compute_transcriptome_indices_ccle:
     input:
-        os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
+    params:
+        translate_from = 'ENSEMBL',
+        translate_to = 'GENE'
     shell:
         """
         python scripts/TranscriptomeIndices.py \
-                        --genexpr_file={input} \
+                        --genexpr_file={input.genexpr} \
                         --output_file={output} \
+                        --annotation_file={input.annotation} \
+                        --translate_from={params.translate_from} \
+                        --translate_to={params.translate_to}
         """
         
         
