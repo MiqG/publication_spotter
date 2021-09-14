@@ -11,7 +11,6 @@
 
 import statsmodels.api as sm
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -30,11 +29,10 @@ import os
 ROOT = '~/projects/publication_splicing_dependency'
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
-psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
+psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-ALTA.tsv.gz')
 genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
 rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
-annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
-metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
+annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 """
 
 ##### FUNCTIONS #####
@@ -44,6 +42,8 @@ def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
     annotation = pd.read_table(annotation_file)
     rnai = pd.read_table(rnai_file, index_col=0)
     
+    gene_annot = annotation[['ENSEMBL','GENE']].drop_duplicates().dropna()
+    
     # drop undetected & uninformative events
     psi = psi.dropna(thresh=2)
     psi = psi.loc[psi.std(axis=1)!=0]
@@ -52,14 +52,18 @@ def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
     common_samples = (
         set(rnai.columns).intersection(psi.columns).intersection(genexpr.columns)
     )
-    common_genes = set(rnai.index).intersection(genexpr.index)
+    
+    common_genes = set(
+        gene_annot.loc[gene_annot['GENE'].isin(rnai.index),'ENSEMBL']
+    ).intersection(genexpr.index)
+    
     common_events = set(psi.index).intersection(
-        annotation.loc[annotation["GENE"].isin(common_genes), "EVENT"]
+        annotation.loc[annotation["ENSEMBL"].isin(common_genes), "EVENT"]
     )
 
     psi = psi.loc[common_events, common_samples]
     genexpr = genexpr.loc[common_genes, common_samples]
-    rnai = rnai.loc[common_genes, common_samples]
+    rnai = rnai.loc[gene_annot.set_index('ENSEMBL').loc[common_genes,'GENE'], common_samples]
     annotation = annotation.loc[annotation["EVENT"].isin(common_events)]
 
     gc.collect()
@@ -129,7 +133,7 @@ def fit_rlmmodel(y, X):
     
 def fit_linear_model(y, X, method):
     if method=='OLS':
-        summary = fit_statsmodel(y,X)
+        summary = fit_olsmodel(y,X)
     elif method=='bayes':
         summary = fit_pymcmodel(y,X)
     elif method=='RLM':
@@ -139,7 +143,7 @@ def fit_linear_model(y, X, method):
 
     
 def fit_model(x_psi, x_genexpr, y_rnai, method):
-
+    
     X = pd.DataFrame([x_psi, x_genexpr]).T
     y = y_rnai
     
@@ -173,7 +177,8 @@ def fit_model(x_psi, x_genexpr, y_rnai, method):
         
     summary = pd.Series({
         'EVENT': x_psi.name,
-        'GENE': x_genexpr.name,
+        'ENSEMBL': x_genexpr.name,
+        'GENE': y_rnai.name,
         'event_coefficient': summary.loc[x_psi.name,'coefficient'],
         'event_stderr': summary.loc[x_psi.name,'stderr'],
         'event_zscore': summary.loc[x_psi.name,'zscore'],
@@ -202,10 +207,11 @@ def fit_model(x_psi, x_genexpr, y_rnai, method):
 
 def fit_models(psi, genexpr, rnai, annotation, n_jobs):
     results = Parallel(n_jobs=n_jobs)(
-        delayed(fit_model)(psi.loc[event], genexpr.loc[gene], rnai.loc[gene], method='OLS')
-        for gene, event in tqdm(annotation[["GENE", "EVENT"]].values)
+        delayed(fit_model)(psi.loc[event], genexpr.loc[ensembl], rnai.loc[gene], method='OLS')
+        for event, ensembl, gene in tqdm(annotation.values)
     )
     results = pd.DataFrame(results)
+    
     return results
 
 

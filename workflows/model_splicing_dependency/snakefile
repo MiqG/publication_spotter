@@ -55,7 +55,7 @@ rule model_gene_dependency:
         psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
         genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
         rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
-        annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
+        annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz')
     threads: 15
