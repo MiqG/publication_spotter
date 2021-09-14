@@ -32,19 +32,19 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # compute splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # embed splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
-        os.path.join(RESULTS_DIR,'figures','eda_models'),
+        #os.path.join(RESULTS_DIR,'figures','eda_models'),
         
         # EDA relationship between interaction terms in linear models and NMD
-        os.path.join(RESULTS_DIR,'figures','interaction_analysis')
+        #os.path.join(RESULTS_DIR,'figures','interaction_analysis')
         
         # validation splicing dependencies
         
@@ -52,11 +52,10 @@ rule all:
         
 rule model_gene_dependency:
     input:
-        psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz'),
-        genexpr_file = os.path.join(PREP_DIR,'genexpr','CCLE.tsv.gz'),
+        psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
+        genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
         rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
-        annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv') 
+        annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
     output:
         os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz')
     threads: 15
@@ -67,7 +66,6 @@ rule model_gene_dependency:
                     --genexpr_file={input.genexpr_file} \
                     --annotation_file={input.annotation_file} \
                     --rnai_file={input.rnai_file} \
-                    --metadata_file={input.metadata_file} \
                     --output_file={output} \
                     --n_jobs={threads}
         """

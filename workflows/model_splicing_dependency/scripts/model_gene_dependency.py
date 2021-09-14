@@ -9,7 +9,7 @@
 # cell fitness independently of gene expression.
 #
 
-import statsmodels.regression.linear_model as lm
+import statsmodels.api as sm
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import pandas as pd
@@ -21,37 +21,33 @@ from joblib import Parallel, delayed
 import multiprocessing
 from tqdm import tqdm
 
+import pymc3 as pm
+
 """
 Development
 -----------
 import os
 ROOT = '~/projects/publication_splicing_dependency'
-psi_file = os.path.join(PREP_DIR,'exon_psi','CCLE-{event_type}.tsv.gz'),
-genexpr_file = os.path.join(PREP_DIR,'genexpr','CCLE.tsv.gz'),
-rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
-annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv')
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
+genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
+rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
+annotation_file = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
+metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
 """
 
 ##### FUNCTIONS #####
-def load_data(psi_file, genexpr_file, rnai_file, metadata_file, annotation_file):
+def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
     psi = pd.read_table(psi_file, index_col=0)
     genexpr = pd.read_table(genexpr_file, index_col=0)
     annotation = pd.read_table(annotation_file)
     rnai = pd.read_table(rnai_file, index_col=0)
-    metadata = pd.read_table(metadata_file)
     
     # drop undetected & uninformative events
     psi = psi.dropna(thresh=2)
     psi = psi.loc[psi.std(axis=1)!=0]
     
-    # strip gene names
-    # genexpr.index = [symbol for symbol, entrez in genexpr.index.str.split(" ")]
-    # rnai.index = [symbol for symbol, entrez in rnai.index.str.split(" ")]
-
-    # rename samples
-    # rnai = rnai.rename(columns=metadata.set_index("CCLE_Name")["DepMap_ID"].to_dict())
-
     # subset
     common_samples = (
         set(rnai.columns).intersection(psi.columns).intersection(genexpr.columns)
@@ -71,15 +67,86 @@ def load_data(psi_file, genexpr_file, rnai_file, metadata_file, annotation_file)
     return psi, genexpr, rnai, annotation
 
 
-def fit_model(x_psi, x_genexpr, y_rnai):
+def fit_pymcmodel(y, X):
+    
+    with pm.Model() as model:
+        pm.glm.GLM(y=y, x=X, intercept=False)
+        trace = pm.sample(1000, cores=1)
+    
+    df_trace = pm.trace_to_dataframe(trace)[X.columns]
+    
+    summary = pd.DataFrame({
+        'coefficient': df_trace.mean(axis=0),
+        'stderr': df_trace.std(axis=0),
+        'q250': df_trace.quantile(0.025, axis=0),
+        'q975': df_trace.quantile(0.975, axis=0),
+        'zscore': df_trace.mean(axis=0) / df_trace.std(axis=0),
+        'pvalue': np.nan,
+        'n_obs': len(y)
+    })
+    
+    return summary
+    
+    
+def fit_olsmodel(y, X):
+    # fit linear model
+    model = sm.OLS(y, X).fit()
+    
+    # score
+    # prediction = model.predict(X)
+    # pearson_coef, pearson_pvalue = stats.pearsonr(prediction,y)
+    # spearman_coef, spearman_pvalue = stats.spearmanr(prediction,y)
+
+    # prepare output
+    summary = pd.DataFrame({
+        "coefficient": model.params, 
+        "stderr": model.bse,
+        "zscore": model.params / model.bse,
+        "pvalue": model.pvalues,
+        "n_obs": model.nobs,
+        "rsquared": model.rsquared
+    })
+    
+    return summary
+
+
+def fit_rlmmodel(y, X):
+    # fit linear model
+    model = sm.RLM(y, X).fit()
+
+    # prepare output
+    summary = pd.DataFrame({
+        "coefficient": model.params, 
+        "stderr": model.bse,
+        "zscore": model.params / model.bse,
+        "pvalue": model.pvalues,
+        "n_obs": model.nobs,
+        "rsquared": model.rsquared
+    })
+    
+    return summary
+    
+    
+def fit_linear_model(y, X, method):
+    if method=='OLS':
+        summary = fit_statsmodel(y,X)
+    elif method=='bayes':
+        summary = fit_pymcmodel(y,X)
+    elif method=='RLM':
+        summary = fit_statsmodel(y,X)
+        
+    return summary
+
+    
+def fit_model(x_psi, x_genexpr, y_rnai, method):
 
     X = pd.DataFrame([x_psi, x_genexpr]).T
     y = y_rnai
     
     # dropna
     is_nan = X.isnull().any(1) | y.isnull()
-    X = X.loc[~is_nan]
-    y = y[~is_nan]
+    X = X.loc[~is_nan].copy()
+    y = y[~is_nan].copy()
     
     try:
         # standardize features
@@ -87,42 +154,22 @@ def fit_model(x_psi, x_genexpr, y_rnai):
         X['interaction'] = X[x_psi.name]*X[x_genexpr.name]
         X['intercept'] = 1.0
         
-        # fit linear model
-        model = lm.OLS(y, X).fit()
-        
-        # score
-        prediction = model.predict(X)
-        pearson_coef, pearson_pvalue = stats.pearsonr(prediction,y)
-        spearman_coef, spearman_pvalue = stats.spearmanr(prediction,y)
-        
-        # prepare output
-        summary = pd.DataFrame({
-            "coefficient": model.params, 
-            "stderr": model.bse,
-            "zscore": model.params / model.bse,
-            "pvalue": model.pvalues,
-            "n_obs": model.nobs,
-            "rsquared": model.rsquared,
-        })
-        
+        summary = fit_linear_model(y, X, method)
+
     except:
         X['interaction'] = np.nan
         X['intercept'] = np.nan
-        
-        prediction = np.nan
-        pearson_coef, pearson_pvalue = np.nan, np.nan
-        spearman_coef, spearman_pvalue = np.nan, np.nan
         
         summary = pd.DataFrame({
             "coefficient": [np.nan]*X.shape[1], 
             "stderr": np.nan,
             "zscore": np.nan,
             "pvalue": np.nan,
-            "n_obs": np.nan,
-            "rsquared": np.nan,
+            "n_obs": np.nan
             },
             index=X.columns
         )
+
         
     summary = pd.Series({
         'EVENT': x_psi.name,
@@ -144,11 +191,6 @@ def fit_model(x_psi, x_genexpr, y_rnai):
         'intercept_zscore': summary.loc['intercept','zscore'],
         'intercept_pvalue': summary.loc['intercept','pvalue'],
         'n_obs': summary.loc[x_genexpr.name,'n_obs'],
-        'rsquared': summary.loc[x_genexpr.name,'rsquared'],
-        'pearson_coefficient': pearson_coef,
-        'pearson_pvalue': pearson_pvalue,
-        'spearman_coefficient': spearman_coef,
-        'spearman_pvalue': spearman_pvalue,
         'event_mean': x_psi.mean(),
         'event_std': x_psi.std(),
         'gene_mean': x_genexpr.mean(),
@@ -159,9 +201,8 @@ def fit_model(x_psi, x_genexpr, y_rnai):
 
 
 def fit_models(psi, genexpr, rnai, annotation, n_jobs):
-    # compute sample covariance
     results = Parallel(n_jobs=n_jobs)(
-        delayed(fit_model)(psi.loc[event], genexpr.loc[gene], rnai.loc[gene])
+        delayed(fit_model)(psi.loc[event], genexpr.loc[gene], rnai.loc[gene], method='OLS')
         for gene, event in tqdm(annotation[["GENE", "EVENT"]].values)
     )
     results = pd.DataFrame(results)
@@ -174,7 +215,6 @@ def parse_args():
     parser.add_argument("--genexpr_file", type=str)
     parser.add_argument("--annotation_file", type=str)
     parser.add_argument("--rnai_file", type=str)
-    parser.add_argument("--metadata_file", type=str)
     parser.add_argument("--n_jobs", type=int)
     parser.add_argument("--output_file", type=str)
 
@@ -188,13 +228,12 @@ def main():
     genexpr_file = args.genexpr_file
     annotation_file = args.annotation_file
     rnai_file = args.rnai_file
-    metadata_file = args.metadata_file
     n_jobs = args.n_jobs
     output_file = args.output_file
     
     print('Loading data...')
     psi, genexpr, rnai, annotation = load_data(
-        psi_file, genexpr_file, rnai_file, metadata_file, annotation_file
+        psi_file, genexpr_file, rnai_file, annotation_file
     )
     
     print('Fitting models...')
