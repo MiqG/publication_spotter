@@ -192,17 +192,21 @@ rule compute_transcriptome_indices_ccle:
         
 rule mutation_frequency:
     input:
-        os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv')
+        snv = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
+        annotation = os.path.join(RAW_DIR,'ENSEMBL','gene_annotation-hg19.tsv.gz')
     output:
         os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz')
     params:
         id_col = 'DepMap_ID',
-        groupby_cols = 'Hugo_Symbol,Variant_Classification'
+        gene_col = 'Hugo_Symbol',
+        effect_col = 'Variant_Classification'
     shell:
         """
         python scripts/count_mutations_per_gene_and_variant.py \
-                    --snv_file={input} \
+                    --snv_file={input.snv} \
+                    --annotation_file={input.annotation} \
                     --id_col={params.id_col} \
-                    --groupby_cols={params.groupby_cols} \
+                    --gene_col={params.gene_col} \
+                    --effect_col={params.effect_col} \
                     --output_file={output}
         """
