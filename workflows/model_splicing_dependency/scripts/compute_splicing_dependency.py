@@ -11,131 +11,158 @@
 # gene_dependency = intercept + psi + genexpr + psi*genexpr
 # splicing_dependency = intercept + psi + psi*genexprs
 
+import os
 import pandas as pd
 import numpy as np
-import pymc3 as pm
-from tqdm import tqdm
 import argparse
+from tqdm import tqdm
+from joblib import Parallel, delayed
 
 SAVE_PARAMS = {"sep": "\t", "compression": "gzip", "index": False}
 
 """
 Development
 -----------
-import os
 ROOT = '~/projects/publication_splicing_dependency'
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
-psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
-genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
+psi_file = os.path.join(PREP_DIR,'event_psi','LUAD.tsv')
+genexpr_file = os.path.join(PREP_DIR,'gene_counts','LUAD.tsv')
 models_file = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
+models_coefs_dir = os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-EX')
+gene_lengths_file = os.path.join(ROOT,'data','raw','VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
+normalize_counts = True
 """
 
 ##### FUNCTIONS #####
-def load_data(models_file, psi_file, genexpr_file):
-    models = pd.read_table(models_file)
+def compute_tpm(gene_counts, gene_lengths):
+    X = gene_counts / gene_lengths.loc[gene_counts.index].values
+    tpm = 1e6 * X / X.sum(axis=0)
+
+    return np.log2(tpm + 1)
+
+
+def load_data(
+    models_file,
+    models_coefs_dir,
+    psi_file,
+    genexpr_file,
+    normalize_counts,
+    gene_lengths_file,
+):
+    # read
+    models = pd.read_table(models_file).set_index(["EVENT", "ENSEMBL"])
+    coefs = {
+        "event": pd.read_pickle(os.path.join(models_coefs_dir, "event.pickle.gz")),
+        "interaction": pd.read_pickle(
+            os.path.join(models_coefs_dir, "interaction.pickle.gz")
+        ),
+        "intercept": pd.read_pickle(
+            os.path.join(models_coefs_dir, "intercept.pickle.gz")
+        ),
+    }
     psi = pd.read_table(psi_file, index_col=0)
     genexpr = pd.read_table(genexpr_file, index_col=0)
 
-    # drop events that cannot be inferred
-    idx_todrop = (
-        models[
-            [
-                "event_coefficient",
-                "event_stderr",
-                "gene_coefficient",
-                "gene_stderr",
-                "intercept_coefficient",
-                "intercept_stderr",
-            ]
-        ]
-        .isin([np.nan, -np.inf, np.inf])
-        .any(axis=1)
-    )
-    models = models.loc[~idx_todrop]
-
     # subset
     ## common event - genes
-    common_genes = set(models["ENSEMBL"]).intersection(genexpr.index)
-    common_events = set(
-        models.loc[models["ENSEMBL"].isin(common_genes), "EVENT"]
-    ).intersection(psi.index)
+    event_gene = coefs["event"][["EVENT", "GENE", "ENSEMBL"]]
+    events_avail = set(event_gene["EVENT"])
+    genes_avail = set(event_gene["ENSEMBL"])
+
+    common_events = events_avail.intersection(psi.index).intersection(
+        event_gene.loc[event_gene["ENSEMBL"].isin(genexpr.index), "EVENT"]
+    )
+    common_genes = genes_avail.intersection(genexpr.index).intersection(
+        event_gene.loc[event_gene["EVENT"].isin(psi.index), "ENSEMBL"]
+    )
 
     ## common elements
     common_samples = set(psi.columns).intersection(genexpr.columns)
 
-    models = models.loc[
-        models["EVENT"].isin(common_events) & models["ENSEMBL"].isin(common_genes)
-    ].copy()
+    coefs = {
+        k: coef.loc[
+            coef["EVENT"].isin(common_events) & coef["ENSEMBL"].isin(common_genes)
+        ].copy()
+        for k, coef in coefs.items()
+    }
     psi = psi.loc[common_events, common_samples].copy()
     genexpr = genexpr.loc[common_genes, common_samples].copy()
 
-    return models, psi, genexpr
+    if normalize_counts:
+        print("Normalizing counts...")
+        gene_lengths = pd.read_table(gene_lengths_file, header=None, index_col=0)
+        gene_lengths.columns = ["length"]
+        genexpr = compute_tpm(genexpr, gene_lengths)
 
-
-def sample_splicing_dependency(summary, x_psi, x_genexpr, size=1000):
-    # prep input data
-    ## standardize event splicing and gene expression
-    E = x_psi.values
-    G = x_genexpr.values
-    E = (E - summary["event_mean"]) / summary["event_std"]
-    G = (G - summary["gene_mean"]) / summary["gene_mean"]
-    EG = E * G
-    ## save with the right shape
-    event_vals = E.reshape(-1, 1)
-    interaction_vals = EG.reshape(-1, 1)
-
-    # coefficients
-    coefs_event = (
-        pm.Normal.dist(mu=summary["event_coefficient"], sigma=summary["event_stderr"])
-        .random(size=size)
-        .reshape(1, -1)
+    # standardize PSI and TPMs
+    event_mean = models.loc[(psi.index, slice(None)), "event_mean"].values.reshape(
+        -1, 1
     )
-    coefs_interaction = (
-        pm.Normal.dist(
-            mu=summary["interaction_coefficient"], sigma=summary["interaction_stderr"]
+    event_std = models.loc[(psi.index, slice(None)), "event_std"].values.reshape(-1, 1)
+    psi = (psi - event_mean) / event_std
+
+    gene_mean = (
+        models.loc[(slice(None), genexpr.index), "gene_mean"]
+        .reset_index(["ENSEMBL"])
+        .drop_duplicates()["gene_mean"]
+        .values.reshape(-1, 1)
+    )
+    gene_std = (
+        models.loc[(slice(None), genexpr.index), "gene_std"]
+        .reset_index(["ENSEMBL"])
+        .drop_duplicates()["gene_std"]
+        .values.reshape(-1, 1)
+    )
+    genexpr = (genexpr - gene_mean) / gene_std
+
+    return coefs, psi, genexpr
+
+
+def compute_single_splicing_dependency(
+    b_event, b_interaction, b_intercept, x_psi, x_genexpr
+):
+
+    samples = x_psi.index
+    event = x_psi.name
+
+    PSI = x_psi.values.reshape(1, -1)
+    TPM = x_genexpr.values.reshape(1, -1)
+    PROD = PSI * TPM
+
+    # compute
+    y = b_intercept + b_event * PSI + b_interaction * PROD
+
+    # summarize
+    mean = pd.Series(np.mean(y, axis=0), index=samples, name=event)
+    std = pd.Series(np.std(y, axis=0), index=samples, name=event)
+
+    summary = {"mean": mean, "std": std}
+
+    return summary
+
+
+def compute_splicing_dependency(coefs, psi, genexpr, n_jobs):
+    # unpack coefficients
+    coefs_event = coefs["event"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
+    coefs_interaction = coefs["interaction"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
+    coefs_intercept = coefs["intercept"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
+
+    # predict splicing dependency for each combination of parameters
+    event_gene = coefs_event.index.to_frame()
+
+    result = Parallel(n_jobs=n_jobs)(
+        delayed(compute_single_splicing_dependency)(
+            b_event=coefs_event.loc[(event,gene)].values.reshape(-1, 1),
+            b_interaction=coefs_interaction.loc[(event,gene)].values.reshape(-1, 1),
+            b_intercept=coefs_intercept.loc[(event,gene)].values.reshape(-1, 1),
+            x_psi=psi.loc[event],
+            x_genexpr=genexpr.loc[gene],
         )
-        .random(size=size)
-        .reshape(1, -1)
+        for event, gene in tqdm(event_gene[["EVENT", "ENSEMBL"]].values)
     )
-    coefs_intercept = (
-        pm.Normal.dist(
-            mu=summary["intercept_coefficient"], sigma=summary["intercept_stderr"]
-        )
-        .random(size=size)
-        .reshape(1, -1)
-    )
-
-    # predict y
-    y_pred = (
-        coefs_intercept
-        + coefs_event * event_vals
-        + coefs_interaction * interaction_vals
-    )
-
-    # summarize predictions
-    mean = pd.Series(y_pred.mean(axis=1), name=x_psi.name, index=x_psi.index)
-    std = pd.Series(y_pred.std(axis=1), name=x_psi.name, index=x_psi.index)
-
-    return mean, std
-
-
-def compute_splicing_dependency(models, psi, genexpr):
-    models = models.set_index(["EVENT", "ENSEMBL"])
-
-    spldep_mean = []
-    spldep_std = []
-    for event, ensembl in tqdm(models.index):
-        tmp_mean, tmp_std = sample_splicing_dependency(
-            models.loc[(event, ensembl)], psi.loc[event], genexpr.loc[ensembl]
-        )
-        spldep_mean.append(tmp_mean)
-        spldep_std.append(tmp_std)
-
-        del tmp_mean, tmp_std
-
-    spldep_mean = pd.DataFrame(spldep_mean)
-    spldep_std = pd.DataFrame(spldep_std)
+    spldep_mean = pd.DataFrame([r["mean"] for r in result])
+    spldep_std = pd.DataFrame([r["std"] for r in result])
 
     return spldep_mean, spldep_std
 
@@ -145,8 +172,12 @@ def parse_args():
     parser.add_argument("--psi_file", type=str)
     parser.add_argument("--genexpr_file", type=str)
     parser.add_argument("--models_file", type=str)
+    parser.add_argument("--models_coefs_dir", type=str)
+    parser.add_argument("--normalize_counts", type=bool, default=False)
     parser.add_argument("--spldep_mean_file", type=str)
     parser.add_argument("--spldep_std_file", type=str)
+    parser.add_argument("--gene_lengths_file", type=str)
+    parser.add_argument("--n_jobs", type=int)
 
     args = parser.parse_args()
     return args
@@ -157,20 +188,24 @@ def main():
     psi_file = args.psi_file
     genexpr_file = args.genexpr_file
     models_file = args.models_file
-    spldep_mean = args.spldep_mean_file
-    spldep_std = args.spldep_std_file
+    models_coefs_dir = args.models_coefs_dir
+    normalize_counts = args.normalize_counts
+    gene_lengths_file = args.gene_lengths_file
+    spldep_mean_file = args.spldep_mean_file
+    spldep_std_file = args.spldep_std_file
+    n_jobs = args.n_jobs
 
     print("Loading data...")
-    models, psi, genexpr = load_data(models_file, psi_file, genexpr_file)
+    coefs, psi, genexpr = load_data(
+        models_file, models_coefs_dir, psi_file, genexpr_file, normalize_counts, gene_lengths_file
+    )
 
     print("Computing splicing dependencies...")
-    spldep_mean, spldep_std = compute_splicing_dependency(models, psi, genexpr)
+    spldep_mean, spldep_std = compute_splicing_dependency(coefs, psi, genexpr, n_jobs)
 
     print("Saving results...")
-    spldep_mean.reset_index().to_csv(spldep_mean_file, **SAVE_PARAMS)
-    spldep_std.reset_index().to_csv(
-        spldep_std_file, sep="\t", compression="gzip", index=False
-    )
+    spldep_mean.to_csv(spldep_mean_file, **SAVE_PARAMS)
+    spldep_std.to_csv(spldep_std_file, **SAVE_PARAMS)
 
 
 ##### SCRIPT #####

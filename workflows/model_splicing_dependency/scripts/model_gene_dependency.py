@@ -63,7 +63,7 @@ def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
 
     psi = psi.loc[common_events, common_samples]
     genexpr = genexpr.loc[common_genes, common_samples]
-    rnai = rnai.loc[gene_annot.set_index('ENSEMBL').loc[common_genes,'GENE'], common_samples]
+    rnai = rnai.loc[set(gene_annot.set_index('ENSEMBL').loc[common_genes,'GENE']), common_samples]
     annotation = annotation.loc[annotation["EVENT"].isin(common_events)]
 
     gc.collect()
