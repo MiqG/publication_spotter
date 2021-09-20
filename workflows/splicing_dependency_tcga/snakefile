@@ -1,0 +1,200 @@
+"""
+Author: Miquel Anglada Girotto
+Contact: miquelangladagirotto [at] gmail [dot] com
+Last Update: 2021-01-12
+
+Workflow purpose
+--------------
+Workflow to analyze putative associations between exons and cancer at single-exon level.
+
+
+Outline
+-------
+- infer splicing dependency
+- differential splicing dependency
+- differential splicing
+
+"""
+
+import os
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_tcga')
+SRC_DIR = os.path.join(ROOT,'src')
+MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+
+EVENT_TYPES = ['EX'] # ['EX','ALTA','ALTD']
+CANCER_TYPES = [
+    'BRCA',
+    'COAD',
+    'GBM',
+    'HNSC',
+    'KICH',
+    'KIRC',
+    'KIRP',
+    'LGG',
+    'LIHC',
+    'LUAD',
+    'LUSC',
+    'PRAD',
+    'READ',
+    'THCA',
+    'UCEC',
+    'UCS'
+]
+
+RESPONSE_CANCER_TYPES = [
+    'UCEC',
+    'PRAD',
+    'LIHC',
+    'LGG',
+    'BRCA',
+    'LUAD',
+    'HNSC',
+    'COAD',
+    'READ',
+    'UCS'
+]
+
+
+##### RULES #####
+rule all:
+    input:
+        # compute splicing dependencies TCGA
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
+
+        # differential sample type TCGA
+        ## splicing dependency
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
+        ## PSI
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-event_psi-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
+        
+        # differential drug response TCGA
+        ## splicing dependency
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), cancer=RESPONSE_CANCER_TYPES, event_type=EVENT_TYPES),
+        ## PSI
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), cancer=RESPONSE_CANCER_TYPES, event_type=EVENT_TYPES)
+        
+
+rule compute_splicing_dependency_tcga:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
+        genexpr = os.path.join(PREP_DIR,'gene_counts','{cancer}.tsv'),
+        models = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'),
+        models_coefs = os.path.join(MODELS_DIR,'files','splicing_dependency_coefs-{event_type}'),
+        gene_lengths = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
+    output:
+        spldep_mean = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'),
+        spldep_std = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_std-{event_type}.tsv.gz')
+    threads: 15
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        normalize_counts = True
+    shell:
+        """
+        python {params.script_dir}/compute_splicing_dependency.py \
+                    --psi_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --models_file={input.models} \
+                    --models_coefs_dir={input.models_coefs} \
+                    --normalize_counts={params.normalize_counts} \
+                    --gene_lengths_file={input.gene_lengths} \
+                    --spldep_mean_file={output.spldep_mean} \
+                    --spldep_std_file={output.spldep_std} \
+                    --n_jobs={threads}
+        """
+        
+        
+rule differential_splicing_dependency_sample_type:
+    input:
+        spldep_mean = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        padj_method = 'fdr_bh'
+    shell:
+        """
+        python {params.script_dir}/MannWhitneyU.py \
+                    --data_file={input.spldep_mean} \
+                    --metadata_file={input.metadata} \
+                    --sample_col='sampleID' \
+                    --comparison_col='sample_type' \
+                    --condition_a='Primary Tumor' \
+                    --condition_b='Solid Tissue Normal' \
+                    --output_file={output} \
+                    --padj_method={params.padj_method} 
+        """
+        
+        
+rule differential_event_psi_sample_type:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-event_psi-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        padj_method = 'fdr_bh'
+    shell:
+        """
+        python {params.script_dir}/MannWhitneyU.py \
+                    --data_file={input.psi} \
+                    --metadata_file={input.metadata} \
+                    --sample_col='sampleID' \
+                    --comparison_col='sample_type' \
+                    --condition_a='Primary Tumor' \
+                    --condition_b='Solid Tissue Normal' \
+                    --output_file={output} \
+                    --padj_method={params.padj_method} 
+        """
+        
+        
+rule differential_splicing_dependency_drug_response:
+    input:
+        spldep_mean = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        padj_method = 'fdr_bh'
+    shell:
+        """
+        python {params.script_dir}/MannWhitneyU.py \
+                    --data_file={input.spldep_mean} \
+                    --metadata_file={input.metadata} \
+                    --sample_col='sampleID' \
+                    --comparison_col='sample_type' \
+                    --condition_a='Primary Tumor' \
+                    --condition_b='Solid Tissue Normal' \
+                    --output_file={output} \
+                    --padj_method={params.padj_method} 
+        """
+        
+        
+rule differential_psi_drug_response:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
+        metadata = os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        padj_method = 'fdr_bh'
+    shell:
+        """
+        python {params.script_dir}/MannWhitneyU.py \
+                    --data_file={input.psi} \
+                    --metadata_file={input.metadata} \
+                    --sample_col='sampleID' \
+                    --comparison_col='sample_type' \
+                    --condition_a='Primary Tumor' \
+                    --condition_b='Solid Tissue Normal' \
+                    --output_file={output} \
+                    --padj_method={params.padj_method} 
+        """
