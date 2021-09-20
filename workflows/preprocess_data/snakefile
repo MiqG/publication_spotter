@@ -51,8 +51,10 @@ rule all:
         os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
         
         # count mutation frequency
-        os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz')
+        os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz'),
         
+        # Thomas 2020
+        os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
 
 rule prepare_metadata_ccle:
     input:
@@ -210,3 +212,19 @@ rule mutation_frequency:
                     --effect_col={params.effect_col} \
                     --output_file={output}
         """
+        
+        
+rule prepare_thomas2020:
+    input:
+        screen = os.path.join(RAW_DIR,'articles','Thomas2020','crispr_screen.xlsx'),
+        mapping = os.path.join(RAW_DIR,'articles','Thomas2020','event_mapping_vastdb.tsv')
+    output:
+        os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
+    shell:
+        """
+        Rscript scripts/preprocess_Thomas2020.R \
+                    --thomas_crispr_screen_file={input.screen} \
+                    --thomas_event_mapping_file={input.mapping} \
+                    --output_file={output}
+        """
+        
