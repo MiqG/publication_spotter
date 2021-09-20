@@ -21,6 +21,24 @@ SRC_DIR = os.path.join(ROOT,'src')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 
 EVENT_TYPES = ['EX','ALTA','ALTD']
+CANCER_TYPES = [
+    'BRCA',
+    'COAD',
+    'GBM',
+    'HNSC',
+    'KICH',
+    'KIRC',
+    'KIRP',
+    'LGG',
+    'LIHC',
+    'LUAD',
+    'LUSC',
+    'PRAD',
+    'READ',
+    'THCA',
+    'UCEC',
+    'UCS'
+]
 
 DEPMAP_RAW = {
     'demeter2': os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
@@ -54,7 +72,13 @@ rule all:
         os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz'),
         
         # Thomas 2020
-        os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
+        os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
+        
+        # merge metadata TCGA
+        os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
+        
+        # Moiso 2021
+        os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz')
 
 rule prepare_metadata_ccle:
     input:
@@ -227,4 +251,36 @@ rule prepare_thomas2020:
                     --thomas_event_mapping_file={input.mapping} \
                     --output_file={output}
         """
-        
+
+
+rule merge_tcga_metadata:
+    input:
+        metadata_files = [os.path.join(PREP_DIR,'metadata','%s.tsv' % cancer) 
+                          for cancer in CANCER_TYPES]
+    output:
+        os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz')
+    run:
+        import pandas as pd
+        metadata = []
+        for f in input.metadata_files:
+            df = pd.read_table(f)
+            metadata.append(df)
+            del df
+        metadata = pd.concat(metadata)
+        metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
+    
+    
+rule prepare_moiso2021:
+        input:
+            metadata = os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
+            response = os.path.join(RAW_DIR,'articles','Moiso2021','drug_response_filtered.tsv')
+        output:
+            os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz')
+        shell:
+            """
+            python scripts/preprocess_Moiso2021.py \
+                        --metadata_file={input.metadata} \
+                        --response_file={input.response} \
+                        --output_file={output}
+            """
+            
