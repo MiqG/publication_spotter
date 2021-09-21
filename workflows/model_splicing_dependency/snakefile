@@ -24,24 +24,6 @@ SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 
 EVENT_TYPES = ['EX','ALTA','ALTD']
-CANCER_TYPES = [
-    'BRCA',
-    'COAD',
-    'GBM',
-    'HNSC',
-    'KICH',
-    'KIRC',
-    'KIRP',
-    'LGG',
-    'LIHC',
-    'LUAD',
-    'LUSC',
-    'PRAD',
-    'READ',
-    'THCA',
-    'UCEC',
-    'UCS'
-]
 
 
 ##### RULES #####
@@ -54,25 +36,22 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-{event_type}'), event_type=EVENT_TYPES),
         
         # compute splicing dependencies
-        #expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        #expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_std-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_std-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies
-        # expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # embed splicing dependencies
-        # expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
-        #os.path.join(RESULTS_DIR,'figures','eda_models'),
+        os.path.join(RESULTS_DIR,'figures','eda_models'),
         
         # EDA relationship between interaction terms in linear models and NMD
         #os.path.join(RESULTS_DIR,'figures','interaction_analysis')
         
         # validation splicing dependencies
-        
-        # compute splicing dependencies TCGA
-        expand(os.path.join(RESULTS_DIR,'files','TCGA','{cancer}-splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX'], cancer=CANCER_TYPES)
         
         
 rule model_gene_dependency:
@@ -120,18 +99,24 @@ rule compute_splicing_dependency:
     input:
         psi = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
         genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'),
         models_coefs = os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-{event_type}')
     output:
         spldep_mean = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
         spldep_std = os.path.join(RESULTS_DIR,'files','splicing_dependency_std-{event_type}.tsv.gz')
+    threads: 15
+    params:
+        script_dir=os.path.join(SRC_DIR,'python')
     shell:
         """
-        python scripts/compute_splicing_dependency.py \
+        python {params.script_dir}/compute_splicing_dependency.py \
                     --psi_file={input.psi} \
                     --genexpr_file={input.genexpr} \
+                    --models_file={input.models} \
                     --models_coefs_dir={input.models_coefs} \
                     --spldep_mean_file={output.spldep_mean} \
-                    --spldep_std_file={output.spldep_std}
+                    --spldep_std_file={output.spldep_std} \
+                    --n_jobs={threads}
         """
     
     
@@ -173,27 +158,17 @@ rule embed_matrices:
         
 rule figures_eda_models:
     input:
-        psi = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz'),
-        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
         models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
-        rnai = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
-        embedded_dependency = os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-EX.tsv.gz'),
-        metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv'),
-        indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
-        genes_splicing_factors = os.path.join(SUPPORT_DIR,'splicing_factors-symbols.txt')
+        msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
+        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','eda_models'))
     shell:
         """
         Rscript scripts/figures_eda_models.R \
-                    --psi_file={input.psi} \
-                    --genexpr_file={input.genexpr} \
-                    --rnai_file={input.rnai} \
                     --models_file={input.models} \
-                    --embedded_dependency_file={input.embedded_dependency} \
-                    --metadata_file={input.metadata} \
-                    --indices_file={input.indices} \
-                    --genes_splicing_factors_file={input.genes_splicing_factors} \
+                    --msigdb_dir={input.msigdb} \
+                    --protein_impact_file={input.protein_impact} \
                     --figs_dir={output}
         """
     
@@ -221,32 +196,4 @@ rule figures_validation:
     shell:
         """
         Rscript scripts/figures_validation.R
-        """
-    
-    
-rule compute_splicing_dependency_tcga:
-    input:
-        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
-        genexpr = os.path.join(PREP_DIR,'gene_counts','{cancer}.tsv'),
-        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'),
-        models_coefs = os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-{event_type}'),
-        gene_lengths = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
-    output:
-        spldep_mean = os.path.join(RESULTS_DIR,'files','TCGA','{cancer}-splicing_dependency_mean-{event_type}.tsv.gz'),
-        spldep_std = os.path.join(RESULTS_DIR,'files','TCGA','{cancer}-splicing_dependency_std-{event_type}.tsv.gz')
-    threads: 15
-    params:
-        normalize_counts = True
-    shell:
-        """
-        python scripts/compute_splicing_dependency.py \
-                    --psi_file={input.psi} \
-                    --genexpr_file={input.genexpr} \
-                    --models_file={input.models} \
-                    --models_coefs_dir={input.models_coefs} \
-                    --normalize_counts={params.normalize_counts} \
-                    --gene_lengths_file={input.gene_lengths} \
-                    --spldep_mean_file={output.spldep_mean} \
-                    --spldep_std_file={output.spldep_std} \
-                    --n_jobs={threads}
         """
