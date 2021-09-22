@@ -40,14 +40,6 @@ PALETTE_VARS = 'uchicago'
 
 # Development
 # -----------
-# psi_file = file.path(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
-# genexpr_file = file.path(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
-# rnai_file = file.path(PREP_DIR,'demeter2','CCLE.tsv.gz')
-# embedded_dependency_file = file.path(RESULTS_DIR,'files','embedded_splicing_dependency_mean-EX.tsv.gz')
-# metadata_file = file.path(PREP_DIR,'metadata','CCLE.tsv.gz')
-# indices_file = file.path(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
-# genes_splicing_factors_file = file.path(ROOT,'support','splicing_factors-symbols.txt')
-
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RESULTS_DIR = file.path(ROOT,'results','model_splicing_dependency')
 # models_file = file.path(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
