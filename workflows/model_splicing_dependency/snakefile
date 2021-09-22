@@ -48,6 +48,9 @@ rule all:
         # EDA models of splicing dependencies
         os.path.join(RESULTS_DIR,'figures','eda_models'),
         
+        # EDA embeddings of splicing dependencies
+        os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
+        
         # EDA relationship between interaction terms in linear models and NMD
         #os.path.join(RESULTS_DIR,'figures','interaction_analysis')
         
@@ -169,6 +172,23 @@ rule figures_eda_models:
                     --models_file={input.models} \
                     --msigdb_dir={input.msigdb} \
                     --protein_impact_file={input.protein_impact} \
+                    --figs_dir={output}
+        """
+    
+    
+rule figures_embeddings:
+    input:
+        embedded_dependency = os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-EX.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+        indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'))
+    shell:
+        """
+        Rscript scripts/figures_embedding.R \
+                    --embedded_dependency_file={input.embedded_dependency} \
+                    --metadata_file={input.metadata} \
+                    --indices_file={input.indices} \
                     --figs_dir={output}
         """
     
