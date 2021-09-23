@@ -51,10 +51,12 @@ rule all:
         # EDA embeddings of splicing dependencies
         os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
         
+        # Validation
+        ## CRISPR event KO dataset (Thomas 2020)
+        os.path.join(RESULTS_DIR,'figures','validation_crispr'),
+        
         # EDA relationship between interaction terms in linear models and NMD
         #os.path.join(RESULTS_DIR,'figures','interaction_analysis')
-        
-        # validation splicing dependencies
         
         
 rule model_gene_dependency:
@@ -163,7 +165,8 @@ rule figures_eda_models:
     input:
         models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
         msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
-        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz')
+        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
+        mut_freq = os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','eda_models'))
     shell:
@@ -172,6 +175,7 @@ rule figures_eda_models:
                     --models_file={input.models} \
                     --msigdb_dir={input.msigdb} \
                     --protein_impact_file={input.protein_impact} \
+                    --mut_freq_file={input.mut_freq}
                     --figs_dir={output}
         """
     
@@ -207,13 +211,28 @@ rule figures_interaction_analysis:
                     --figs_dir={output}
         """
         
-    
-rule figures_validation:
+        
+rule figures_validation_crispr:
     input:
-        crispr_screen_file = os.path.join(PREP_DIR,'exon_psi','CCLE.tsv.gz'),
+        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
+        annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
+        psi = os.path.join(RAW_DIR,'articles','Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'articles','Thomas2020','vast_out','TPM-hg38-2.tab.gz'),
+        crispr_screen = os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
     output:
-        directory(os.path.join(RESULTS_DIR,'figures','validation'))
+        directory(os.path.join(RESULTS_DIR,'figures','validation_crispr'))
+    params:
+        total = 100
     shell:
         """
-        Rscript scripts/figures_validation.R
+        Rscript scripts/figures_validation_crispr.R \
+                    --protein_impact_file={input.protein_impact} \
+                    --annotation_file={input.annotation} \
+                    --psi_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --crispr_screen_file={input.crispr_screen} \
+                    --models_file={input.models} \
+                    --figs_dir={output} \
+                    --total={params.total}
         """

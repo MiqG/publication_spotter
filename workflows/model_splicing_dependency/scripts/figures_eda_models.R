@@ -45,6 +45,7 @@ PALETTE_VARS = 'uchicago'
 # models_file = file.path(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
 # protein_impact_file = file.path(ROOT,'data','raw','VastDB','PROT_IMPACT-hg38-v3.tab.gz')
+# mut_freq_file = file.path(ROOT,'data','prep','mutation_freq','CCLE.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','eda_models')
 
 
@@ -316,6 +317,60 @@ plot_coefs = function(models){
 }
 
 
+plot_mutations = function(models, mut_freq){
+    X = models %>% filter(n_obs<MIN_OBS) %>% left_join(mut_freq, by='GENE')
+    
+    plts = list()
+    plts[['mutations-entropy_scatter']] = mut_freq %>% 
+        ggplot(aes(x=length, y=entropy)) + 
+        geom_scattermore(pointsize = 2, pixels = c(1000,1000)) + 
+        theme_pubr() + 
+        labs(x='Gene Length', y='Entropy')
+    
+    plts[['mutations-max_rel_entropy-scatter']] = mut_freq %>% 
+        ggplot(aes(x=length, y=max_rel_entropy)) + 
+        geom_scattermore(pointsize = 2, pixels = c(1000,1000)) + 
+        theme_pubr() + 
+        labs(x='Gene Length', y='Max. Rel. Entropy')
+    
+    plts[['mutations-min_rel_entropy-scatter']] = mut_freq %>% 
+        ggplot(aes(x=length, y=min_rel_entropy)) + 
+        geom_scattermore(pointsize = 2, pixels = c(1000,1000)) + 
+        theme_pubr() + 
+        labs(x='Gene Length', y='Min. Rel. Entropy')
+    
+    plts[['mutations-rel_entropy-mut_effect']] = mut_freq %>%
+        ggboxplot(x='Variant_Classification', y='log_rel_entropy') + 
+        theme_pubr(x.text.angle = 45) + 
+        labs(x='Mutation Effect', y='log2(Rel. Entropy)')
+    
+    plts[['mutations-rel_mut_freq-mut_effect']] = mut_freq %>%
+        ggboxplot(x='Variant_Classification', y='mut_freq_per_kb') + 
+        theme_pubr(x.text.angle = 45) + 
+        yscale('log10') +
+        labs(x='Mutation Effect', y='log10(Mut. Freq. per Kb)')
+    
+    # do significant models have low mutation rate?
+    plts[['mutations-rel_mut_freq_vs_sign_models']] = X %>% 
+        mutate(is_significant = event_pvalue<THRESH_PVALUE | 
+                                interaction_pvalue<THRESH_PVALUE) %>%
+        group_by(GENE, Variant_Classification, mut_freq_per_kb) %>%
+        summarize(is_significant = any(is_significant, na.rm=TRUE)) %>%
+        drop_na() %>%
+        ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
+                   group=interaction(Variant_Classification,is_significant))) +
+        geom_violin(aes(fill=is_significant), color=FALSE) +
+        geom_boxplot(width=0.3, outlier.size=0.5, position=position_dodge(0.9)) +
+        stat_compare_means(aes(group=is_significant), method='wilcox.test', label='p.signif') +
+        yscale('log10') + 
+        fill_palette('lancet') +
+        labs(x='Mutation Effect', y='log10(Mut. Freq. per Kb)', fill='Signif. Model') +
+        theme_pubr(x.text.angle=70)
+    
+    return(plts)
+}
+
+
 plot_enrichments = function(result, 
                             pattern='',
                             palette='lancet', 
@@ -338,13 +393,14 @@ plot_enrichments = function(result,
 }
 
 
-make_plots = function(models, results_enrich){
+make_plots = function(models, results_enrich, mut_freq){
     plts = list(
         plot_qc(models),
         plot_coefs(models),
         plot_enrichments(results_enrich[['hallmarks']], 'hallmarks'),
         plot_enrichments(results_enrich[['oncogenic_signatures']], 'oncogenic_signatures'),
-        plot_enrichments(results_enrich[['GO_BP']], 'GO_BP')
+        plot_enrichments(results_enrich[['GO_BP']], 'GO_BP'),
+        plot_mutations(models, mut_freq)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -387,6 +443,14 @@ save_plots = function(plts, figs_dir){
     ## GO BP
     save_plt(plts, 'GO_BP-enrichment-dotplot', '.pdf', figs_dir, width=15, height=10)
     save_plt(plts, 'GO_BP-enrichment-cnetplot', '.png', figs_dir, width=20, height=20)
+    
+    # mutations
+    save_plt(plts, 'mutations-entropy_scatter', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'mutations-max_rel_entropy-scatter', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'mutations-min_rel_entropy-scatter', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'mutations-rel_entropy-mut_effect', '.pdf', figs_dir, width=8, height=6)
+    save_plt(plts, 'mutations-rel_mut_freq-mut_effect', '.pdf', figs_dir, width=8, height=6)
+    save_plt(plts, 'mutations-rel_mut_freq_vs_sign_models', '.pdf', figs_dir, width=8, height=6)
 }
 
 
@@ -415,6 +479,7 @@ main = function(){
     models_file = args$models_file
     msigdb_dir = args$msigdb_dir
     protein_impact_file = args$protein_impact_file
+    mut_freq_file = args$mut_freq_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
@@ -423,6 +488,9 @@ main = function(){
     models = read_tsv(models_file) %>% 
         mutate(event_gene = paste0(EVENT,'_',GENE),
                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
+    mut_freq = read_tsv(mut_freq_file) %>% 
+        dplyr::rename(GENE=Hugo_Symbol) %>% 
+        mutate(log_rel_entropy=log2(max_rel_entropy))
     ontologies = list(
         "hallmarks" = read.gmt(file.path(msigdb_dir,'h.all.v7.4.symbols.gmt')),
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,'c6.all.v7.4.symbols.gmt')),
