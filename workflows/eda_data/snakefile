@@ -12,7 +12,7 @@ EVENT_TYPES = ['EX','ALTA','ALTD']
 CCLE_MATRICES = {
     'psi-EX': os.path.join(PREP_DIR,'event_psi_imputed','CCLE-EX.tsv.gz'),
     'psi-ALTA': os.path.join(PREP_DIR,'event_psi_imputed','CCLE-ALTA.tsv.gz'),
-    #'psi-ALTD': os.path.join(PREP_DIR,'event_psi_imputed','CCLE-ALTD.tsv.gz'),
+    'psi-ALTD': os.path.join(PREP_DIR,'event_psi_imputed','CCLE-ALTD.tsv.gz'),
     'genexpr': os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
     'demeter2': os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz')
 }

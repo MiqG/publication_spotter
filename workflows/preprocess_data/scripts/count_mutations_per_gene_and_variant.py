@@ -84,9 +84,10 @@ def compute_mutation_entropy_per_gene_and_effect(snv, annot, gene_col, effect_co
     entropies = df.groupby([gene_col, effect_col])\
                   .apply(compute_mutation_entropy)\
                   .reset_index()
-    
-    entropies['max_entropy'] = -(1/entropies['length'])*np.log2(1/entropies['length'])
-    entropies['rel_entropy'] = entropies['entropy'] / entropies['max_entropy']
+    entropies['min_entropy'] = -(1/entropies['length'])*np.log2(1/entropies['length'])
+    entropies['max_entropy'] = -np.log2(1/entropies['length']) # -len*(1/len)*log2(1/len)
+    entropies['max_rel_entropy'] = entropies['entropy'] / entropies['max_entropy']
+    entropies['min_rel_entropy'] = entropies['entropy'] / entropies['min_entropy']
     
     return entropies
         
