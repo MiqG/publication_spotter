@@ -371,6 +371,34 @@ plot_mutations = function(models, mut_freq){
 }
 
 
+plot_protein_impact = function(models, protein_impact){
+    X = models %>% 
+        filter(n_obs<MIN_OBS) %>% 
+        mutate(is_significant = event_pvalue<THRESH_PVALUE | 
+                                interaction_pvalue<THRESH_PVALUE) %>% 
+        left_join(protein_impact, by='EVENT') %>%
+        group_by(term, is_significant) %>%
+        summarize(n=n()) %>%
+        drop_na() %>%
+        mutate(freq=n/sum(n))
+    
+    plts = list()
+    plts[['protein_impact-counts']] = X %>%
+        ggbarplot(x='term', y='n', fill='is_significant', palette='lancet',
+                  position=position_dodge(0.8), color=NA, label=TRUE) +
+        labs(x='Protein Impact', y='Count', fill='Signif. Model') +
+        theme_pubr(x.text.angle=45)
+    
+    plts[['protein_impact-ratios']] = X %>%
+        ggbarplot(x='term', y='freq', fill='is_significant',
+                  palette='lancet', color=NA) +
+        labs(x='Protein Impact', y='Proportion', fill='Signif. Model') +
+        theme_pubr(x.text.angle=45)
+    
+    return(plts)
+}
+
+
 plot_enrichments = function(result, 
                             pattern='',
                             palette='lancet', 
@@ -393,14 +421,15 @@ plot_enrichments = function(result,
 }
 
 
-make_plots = function(models, results_enrich, mut_freq){
+make_plots = function(models, results_enrich, mut_freq, protein_impact){
     plts = list(
         plot_qc(models),
         plot_coefs(models),
         plot_enrichments(results_enrich[['hallmarks']], 'hallmarks'),
         plot_enrichments(results_enrich[['oncogenic_signatures']], 'oncogenic_signatures'),
         plot_enrichments(results_enrich[['GO_BP']], 'GO_BP'),
-        plot_mutations(models, mut_freq)
+        plot_mutations(models, mut_freq),
+        plot_protein_impact(models, protein_impact)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -451,6 +480,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'mutations-rel_entropy-mut_effect', '.pdf', figs_dir, width=8, height=6)
     save_plt(plts, 'mutations-rel_mut_freq-mut_effect', '.pdf', figs_dir, width=8, height=6)
     save_plt(plts, 'mutations-rel_mut_freq_vs_sign_models', '.pdf', figs_dir, width=8, height=6)
+    
+    # protein impact
+    save_plt(plts, 'protein_impact-counts', '.pdf', figs_dir, width=8, height=6)
+    save_plt(plts, 'protein_impact-ratios', '.pdf', figs_dir, width=8, height=6)
+    
 }
 
 
@@ -496,8 +530,8 @@ main = function(){
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,'c6.all.v7.4.symbols.gmt')),
         "GO_BP" = read.gmt(file.path(msigdb_dir,'c5.go.bp.v7.4.symbols.gmt')),
         "protein_impact" = read_tsv(protein_impact_file) %>%
-                            dplyr::rename(event=EventID, term=ONTO) %>%
-                            dplyr::select(term,event)
+                            dplyr::rename(EVENT=EventID, term=ONTO) %>%
+                            dplyr::select(term,EVENT)
     )
     
     # run enrichments
@@ -508,7 +542,8 @@ main = function(){
     results_enrich = get_enrichment_result(enrichments)
     
     # plot
-    plts = make_plots(models, results_enrich)
+    plts = make_plots(models, results_enrich, mut_freq, 
+                      protein_impact=ontologies[['protein_impact']])
 
     # make figdata
     figdata = make_figdata(results_enrich)

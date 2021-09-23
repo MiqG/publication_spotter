@@ -236,8 +236,8 @@ plot_clusters = function(embedding, metadata, spldep){
                 summarize(n=n()) %>% 
                 mutate(freq=n/sum(n)) %>% 
                 ggbarplot(x='leiden_labels', y='freq', fill='get(col_oi)', color=NA, 
-                          palette=palette) + labs(x='Proportion', y='Count', fill=col_oi) + 
-                labs(x='Cluster', y='Proportion')
+                          palette=palette) +
+                labs(x='Cluster', y='Proportion', fill=col_oi)
             plts[[col_oi]] = plt
         }
     }
