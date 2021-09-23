@@ -12,13 +12,11 @@
 
 require(tidyverse)
 require(ggrepel)
-require(readxl)
 require(ggpubr)
-require(latex2exp)
-require(ggrepel)
-require(ComplexHeatmap)
 require(cowplot)
 require(scattermore)
+require(pheatmap)
+require(clusterProfiler)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -29,14 +27,92 @@ THRESH_PVALUE = 0.05
 
 # Development
 # -----------
+# RAW_DIR = file.path(ROOT,'data','raw')
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RESULTS_DIR = file.path(ROOT,'results','model_splicing_dependency')
 # models_file = file.path(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
 # possible_interactions_file = file.path(ROOT,'support','possible_pairwise_interaction_categories.tsv')
+# protein_impact_file = file.path(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz')
+# msigdb_dir = file.path(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
 # figs_dir = file.path(ROOT,'results','model_splicing_dependency','figures','interaction_analysis')
 
 
 ##### FUNCTIONS #####
+get_genes_lists = function(models){
+    df = models 
+    genes_lists = df[,c('GENE','interaction_category')] %>% 
+        filter(interaction_category!='no_regulation') %>%
+        mutate(interaction_category=factor(interaction_category)) %>% 
+        distinct() %>%
+        with(., split(GENE, interaction_category))
+    return(genes_lists)
+}
+
+
+get_events_lists = function(models){
+    df = models 
+    events_lists = df[,c('EVENT','interaction_category')] %>% 
+        filter(interaction_category!='no_regulation') %>%
+        mutate(interaction_category=factor(interaction_category)) %>% 
+        distinct() %>%
+        with(., split(EVENT, interaction_category))
+    return(events_lists)
+}
+
+
+get_universe = function(models){
+    df = models
+    universe = df[,c('EVENT','GENE')] %>% apply(., 2, unique)
+    names(universe) = c('events','genes')
+    return(universe)
+}
+
+
+run_enrichment = function(genes, events, universe, ontologies){
+    enrichments = list()
+    enrichments[['hallmarks']] = enricher(genes, TERM2GENE=ontologies[['hallmarks']], universe=universe[['genes']])
+    enrichments[['oncogenic_signatures']] = enricher(genes, TERM2GENE=ontologies[['oncogenic_signatures']], universe=universe[['genes']])
+    enrichments[['GO_BP']] = enricher(genes, TERM2GENE=ontologies[['GO_BP']], universe=universe[['genes']])
+    enrichments[['protein_impact']] = enricher(events, TERM2GENE=ontologies[['protein_impact']], universe=universe[['events']])
+    
+    return(enrichments)
+}
+
+
+run_enrichments = function(genes_lists, events_lists, universe, ontologies){
+    enrichments = sapply(names(genes_lists), function(cond){
+            genes = genes_lists[[cond]]
+            events = events_lists[[cond]]
+            run_enrichment(genes, events, universe, ontologies)
+        }, simplify=FALSE)
+    return(enrichments)
+}
+
+
+get_enrichment_result = function(enrich_list, thresh=0.05){
+    ## groups are extracted from names
+    ontos = names(enrich_list[[1]])
+    groups = names(enrich_list)
+    results = sapply(
+        ontos, function(onto){
+        result = lapply(groups, function(group){
+            result = enrich_list[[group]][[onto]]
+            if(!is.null(result)){
+                result = result@result
+                result$Cluster = group
+            }
+            return(result)
+        })
+        result[sapply(result, is.null)] = NULL
+        result = do.call(rbind,result)
+        ## filter by p.adjusted
+        result = result %>% filter(p.adjust<thresh)
+    }, simplify=FALSE)
+    
+    return(results)
+}
+
+
 get_interaction_categories = function(models, possible_interactions){
     # study interaction between event inclusion and gene expression
     possible_interactions = possible_interactions %>% 
@@ -79,46 +155,65 @@ plot_interactions = function(models){
         labs(x='Interaction Category', y='Counts') +
         theme_pubr(x.text.angle = 70, border=TRUE)
     
-    plts[['interactions-counts_max_effect']] = X %>% 
-        group_by(event_type, interaction_category, max_effect) %>%
-        summarise(n = n()) %>% mutate(freq = 100*(n / sum(n))) %>%
-        ggbarplot(x='interaction_category', y='freq', facet.by = 'event_type', 
-                  fill='max_effect', color=NA, palette='lancet') + 
-        labs(x='Interaction Category', y='%', fill='Max. Sign. Effect') +
-        theme_pubr(x.text.angle = 70, border=TRUE)
-    
-    # across event types and additive interactions, which term has a higher zscore
-    # more frequently?
-    effect_sizes = X %>% 
-        filter(interaction_category!='no_regulation') %>% 
-        replace_na(list(event_zscore = 0, gene_zscore = 0)) %>%
-        mutate(
-            zscore_diff = event_zscore - gene_zscore,
-            zscore_diffsign = ifelse(sign(zscore_diff)>0, 'Splicing', 'Expression') 
-        )
-    plts[['interactions-effect_size_diffs']] = effect_sizes %>%
-        ggviolin(x='interaction_category', y='zscore_diff', 
-                 fill = 'zscore_diffsign', color=NA, palette='npg') + 
-        geom_boxplot(aes(fill=zscore_diffsign), 
-                     position = position_dodge(0.8), 
-                     width=0.3, outlier.size = 0.5) +
-        facet_wrap(~event_type) +
-        labs(x='Interaction Category', 
-             y=TeX('$Splicing_{Z-score} - Expression_{Z-score}$'),
-             fill='Larger Effect Size') +
-        theme_pubr(x.text.angle = 70, border=TRUE)
-    
-    plts[['interactions-effect_size_counts']] = effect_sizes %>%
-        count(event_type, interaction_category, zscore_diffsign) %>%
-        ggtexttable()
+    # Is some interaction category associated to some protein impact?
+    plts[['interactions-rel_protein_impact']] = X %>% 
+        group_by(interaction_category,ONTO) %>% 
+        summarize(n=n()) %>% 
+        mutate(freq= n/sum(n)) %>% 
+        drop_na() %>%
+        ggbarplot(x='interaction_category', y='freq', fill='ONTO', 
+                  color=NA, palette='simpsons') +
+        labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
+        theme_pubr(x.text.angle = 70, legend = 'right')
         
+    
+    plts[['interactions-overall_protein_impact']] = X %>% 
+        filter(interaction_category!='no_regulation') %>% 
+        group_by(ONTO,interaction_category) %>% 
+        summarize(n=n()) %>% 
+        ungroup() %>% 
+        mutate(freq=n/sum(n)) %>% 
+        drop_na() %>% 
+        pivot_wider(id_cols='ONTO', 
+                    names_from='interaction_category', 
+                    values_from='freq') %>% replace(is.na(.), 0) %>% 
+        column_to_rownames('ONTO') %>% 
+        t() %>% 
+        pheatmap(border_color = 'white', silent = TRUE)
+    
     return(plts)
 }
 
 
-make_plots = function(models){
+plot_enrichments = function(result, 
+                            pattern='',
+                            palette='lancet', 
+                            legend_label='Interaction Category'){
+    res = new("compareClusterResult", compareClusterResult = result)
+    
+    # prepare palette
+    n = length(unique(result$Cluster))
+    palette = get_palette(palette, n)
+    
+    # plot
     plts = list(
-        plot_interactions(models)
+        'enrichment-dotplot' = dotplot(res),
+        'enrichment-cnetplot' = cnetplot(res) + 
+            scale_fill_manual(values=palette) + labs(fill=legend_label)
+    )
+    names(plts) = paste0(pattern,'-',names(plts))
+    
+    return(plts)
+}
+
+
+make_plots = function(models, results_enrich){
+    plts = list(
+        plot_interactions(models),
+        plot_enrichments(results_enrich[['hallmarks']], 'hallmarks'),
+        plot_enrichments(results_enrich[['oncogenic_signatures']], 'oncogenic_signatures'),
+        plot_enrichments(results_enrich[['GO_BP']], 'GO_BP'),
+        plot_enrichments(results_enrich[['protein_impact']], 'protein_impact')
     )
     plts = do.call(c,plts)
     return(plts)
@@ -136,10 +231,24 @@ save_plt = function(plts, plt_name, extension='.pdf',
 
 
 save_plots = function(plts, figs_dir){
+    # interactions
     save_plt(plts, 'interactions-counts_overview', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'interactions-counts_max_effect', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'interactions-effect_size_diffs', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'interactions-effect_size_counts', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'interactions-rel_protein_impact', '.pdf', figs_dir, width=7, height=5)
+    save_plt(plts, 'interactions-overall_protein_impact', '.pdf', figs_dir, width=10, height=10)
+    
+    # enrichments
+    ## hallmarks
+    save_plt(plts, 'hallmarks-enrichment-dotplot', '.pdf', figs_dir, width=15, height=10)
+    save_plt(plts, 'hallmarks-enrichment-cnetplot', '.png', figs_dir, width=20, height=20)
+    ## oncogenic signatures
+    save_plt(plts, 'oncogenic_signatures-enrichment-dotplot', '.pdf', figs_dir, width=15, height=10)
+    save_plt(plts, 'oncogenic_signatures-enrichment-cnetplot', '.png', figs_dir, width=20, height=20)
+    ## GO BP
+    save_plt(plts, 'GO_BP-enrichment-dotplot', '.pdf', figs_dir, width=15, height=10)
+    save_plt(plts, 'GO_BP-enrichment-cnetplot', '.png', figs_dir, width=20, height=20)
+    ## protein impact
+    save_plt(plts, 'protein_impact-enrichment-dotplot', '.pdf', figs_dir, width=15, height=10)
+    save_plt(plts, 'protein_impact-enrichment-cnetplot', '.png', figs_dir, width=20, height=20)
 }
 
 
@@ -147,6 +256,8 @@ main = function(){
     args = getParsedArgs()
     models_file = args$models_file
     possible_interactions_file = args$possible_interactions_file
+    protein_impact_file = args$protein_impact_file
+    msigdb_dir = args$msigdb_dir
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
@@ -156,35 +267,32 @@ main = function(){
     models = read_tsv(models_file) %>%
         filter(n_obs>MIN_OBS) %>%
         mutate(event_gene = paste0(EVENT,'_',GENE),
-               event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
+               event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT))) 
+    ontologies = list(
+        "hallmarks" = read.gmt(file.path(msigdb_dir,'h.all.v7.4.symbols.gmt')),
+        "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,'c6.all.v7.4.symbols.gmt')),
+        "GO_BP" = read.gmt(file.path(msigdb_dir,'c5.go.bp.v7.4.symbols.gmt')),
+        "protein_impact" = read_tsv(protein_impact_file) %>%
+                            dplyr::rename(EVENT=EventID, term=ONTO) %>%
+                            dplyr::select(term,EVENT)
+        )
+    
+    # add protein impact
+    models = models %>% left_join(ontologies[['protein_impact']], by='EVENT')
     
     # add interaction categories to models
     intcats = get_interaction_categories(models, possible_interactions)
     models = models %>% left_join(intcats,by='event_gene')
     
-    # add who has the largest significant effect size?
-    zscores = models %>% 
-        column_to_rownames('event_gene') %>% 
-        dplyr::select(paste0(c('event','gene','interaction'),'_zscore'))
-    significant = abs(zscores) > THRESH_ZSCORE
-    significant[is.na(significant)] = FALSE
-    
-    effect_size = models %>% 
-        column_to_rownames('event_gene') %>% 
-        dplyr::select(paste0(c('event','gene','interaction'),'_coefficient'))
-    effect_size[!significant] = 0
-    
-    effect_size[['max_effect']] = c('event','gene','interaction')[apply(abs(effect_size),1,which.max)]
-    effect_size = effect_size %>% 
-        dplyr::select(max_effect) %>% 
-        rownames_to_column('event_gene')
-    models = models %>% left_join(effect_size, by='event_gene')
-    
-    # are exons with significant interaction terms associated to NMD?
-    
-    
+    # run enrichments
+    genes_lists = get_genes_lists(models)
+    events_lists = get_events_lists(models)
+    universe = get_universe(models)
+    enrichments = run_enrichments(genes_lists, events_lists, universe, ontologies)
+    results_enrich = get_enrichment_result(enrichments)
+ 
     # plot
-    plts = make_plots(models)
+    plts = make_plots(models, results_enrich)
 
     # save
     save_plots(plts, figs_dir)

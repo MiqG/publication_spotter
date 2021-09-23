@@ -25,7 +25,6 @@ require(scattermore)
 require(ggrepel)
 
 require(clusterProfiler)
-require(enrichplot)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
