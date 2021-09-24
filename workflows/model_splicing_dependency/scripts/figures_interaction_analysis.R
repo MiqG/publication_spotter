@@ -128,12 +128,8 @@ get_interaction_categories = function(models, possible_interactions){
         rownames_to_column("event_gene") %>%
         mutate(combined = paste0(event_zscore,gene_zscore,interaction_zscore)) %>%
         left_join(possible_interactions,by='combined') %>%
-        dplyr::select(event_gene,category) %>%
-        rename(interaction_category=category) %>% 
-        mutate(interaction_category=factor(
-            interaction_category, 
-            levels = c('buffering','synergistic','dominant','additive','no_regulation')
-        ))
+        dplyr::select(event_gene,category,combined) %>%
+        rename(interaction_category=category, interaction_subcategory=combined)
     
     return(intcats)
 }
@@ -149,35 +145,45 @@ plot_interactions = function(models){
     plts[['interactions-counts_overview']] = X %>% 
         count(event_type, interaction_category) %>%
         ggbarplot(x='interaction_category', y='n', facet.by = 'event_type', 
-                  label=TRUE, fill='interaction_category', color=NA, palette='Set2') + 
+                  label=TRUE, fill='interaction_category', color=NA, palette='Set1') + 
         guides(fill=FALSE) + 
         yscale('log10', .format=TRUE) + 
         labs(x='Interaction Category', y='Counts') +
-        theme_pubr(x.text.angle = 70, border=TRUE)
+        theme_pubr(x.text.angle = 45, border=TRUE)
+    
+    plts[['interactions-counts_subcategories']] = X %>%
+        mutate(interaction_subcategory = gsub('-1','1',interaction_subcategory)) %>%
+        group_by(interaction_category, interaction_subcategory) %>%
+        summarize(n=n()) %>%
+        mutate(freq=n/sum(n)) %>%
+        ggbarplot(x='interaction_category', y='freq', fill='interaction_subcategory', 
+                  color=NA, palette='Set2') +
+        theme_pubr(x.text.angle = 45, legend = 'right') +
+        labs(x='Interaction Category', y='Proportion', fill='Interaction\nSubcategory')
     
     # Is some interaction category associated to some protein impact?
     plts[['interactions-rel_protein_impact']] = X %>% 
-        group_by(interaction_category,ONTO) %>% 
+        group_by(interaction_category,term) %>% 
         summarize(n=n()) %>% 
         mutate(freq= n/sum(n)) %>% 
         drop_na() %>%
-        ggbarplot(x='interaction_category', y='freq', fill='ONTO', 
+        ggbarplot(x='interaction_category', y='freq', fill='term', 
                   color=NA, palette='simpsons') +
         labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
-        theme_pubr(x.text.angle = 70, legend = 'right')
+        theme_pubr(x.text.angle = 45, legend = 'right')
         
     
     plts[['interactions-overall_protein_impact']] = X %>% 
         filter(interaction_category!='no_regulation') %>% 
-        group_by(ONTO,interaction_category) %>% 
+        group_by(term,interaction_category) %>% 
         summarize(n=n()) %>% 
         ungroup() %>% 
         mutate(freq=n/sum(n)) %>% 
         drop_na() %>% 
-        pivot_wider(id_cols='ONTO', 
+        pivot_wider(id_cols='term', 
                     names_from='interaction_category', 
                     values_from='freq') %>% replace(is.na(.), 0) %>% 
-        column_to_rownames('ONTO') %>% 
+        column_to_rownames('term') %>% 
         t() %>% 
         pheatmap(border_color = 'white', silent = TRUE)
     
@@ -233,6 +239,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
 save_plots = function(plts, figs_dir){
     # interactions
     save_plt(plts, 'interactions-counts_overview', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'interactions-counts_subcategories', '.pdf', figs_dir, width=8, height=5)
     save_plt(plts, 'interactions-rel_protein_impact', '.pdf', figs_dir, width=7, height=5)
     save_plt(plts, 'interactions-overall_protein_impact', '.pdf', figs_dir, width=10, height=10)
     

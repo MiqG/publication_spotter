@@ -54,9 +54,12 @@ rule all:
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
         os.path.join(RESULTS_DIR,'figures','validation_crispr'),
+        ## EDA known genes of interest
+        # os.path.join(RESULTS_DIR,'figures','validation_genes_oi'),
         
-        # EDA relationship between interaction terms in linear models and NMD
-        #os.path.join(RESULTS_DIR,'figures','interaction_analysis')
+        # EDA relationship between interaction terms in linear models
+        os.path.join(RESULTS_DIR,'figures','interaction_analysis')
+        
         
         
 rule model_gene_dependency:
@@ -239,4 +242,15 @@ rule figures_validation_crispr:
                     --models_file={input.models} \
                     --figs_dir={output} \
                     --total={params.total}
+        """
+        
+        
+rule figures_validation_genes_oi:
+    input:
+    output:
+        os.path.join(RESULTS_DIR,'figures','validation_genes_oi')
+    shell:
+        """
+        Rscript scripts/figures_validation_genes_oi.R \
+                    --
         """
