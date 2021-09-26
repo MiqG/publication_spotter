@@ -70,24 +70,28 @@ rule all:
         ## splicing dependency
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
         ## PSI
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
-        ## combine
-        expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        ## plot
-        # os.path.join(RESULTS_DIR,'figures','diffspldep_sample_type'),
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
         
         # differential drug response TCGA
         ## splicing dependency
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), cancer=RESPONSE_CANCER_TYPES, event_type=EVENT_TYPES),
         ## PSI
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), cancer=RESPONSE_CANCER_TYPES, event_type=EVENT_TYPES),
-
-        # run GSEA for each differential analysis
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','gsea-{dataset}-{comparison}-{event_type}.tsv.gz'), event_type=EVENT_TYPES, comparison=['RESPONDER_vs_NONRESPONDER'], cancer=RESPONSE_CANCER_TYPES, dataset=DATASETS),
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','gsea-{dataset}-{comparison}-{event_type}.tsv.gz'), event_type=EVENT_TYPES, comparison=['PrimaryTumor_vs_SolidTissueNormal'], cancer=CANCER_TYPES, dataset=DATASETS),
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER.tsv.gz'), cancer=RESPONSE_CANCER_TYPES),
         
         # combine differential analyses
-        expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-{comparison}-{event_type}.tsv.gz'), event_type=EVENT_TYPES, comparison=COMPARISONS),
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # run GSEA for each differential analysis
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','gsea-{comparison}-{event_type}.tsv.gz'), event_type=EVENT_TYPES, comparison=['RESPONDER_vs_NONRESPONDER'], cancer=RESPONSE_CANCER_TYPES, dataset=DATASETS),
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','gsea-{comparison}-{event_type}.tsv.gz'), event_type=EVENT_TYPES, comparison=['PrimaryTumor_vs_SolidTissueNormal'], cancer=CANCER_TYPES, dataset=DATASETS),
+        
+        # combine GSEA
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES)
+        
+        ## plot
+        # os.path.join(RESULTS_DIR,'figures','diffspldep_sample_type'),
         
 
 rule compute_splicing_dependency_tcga:
@@ -142,12 +146,12 @@ rule differential_splicing_dependency_sample_type:
         """
         
         
-rule differential_event_psi_sample_type:
+rule differential_psi_sample_type:
     input:
         psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
         metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv')
     output:
-        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
     params:
         script_dir=os.path.join(SRC_DIR,'python'),
         padj_method = 'fdr_bh'
@@ -193,7 +197,7 @@ rule differential_psi_drug_response:
         psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
         metadata = os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz')
     output:
-        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz')
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER.tsv.gz')
     params:
         script_dir=os.path.join(SRC_DIR,'python'),
         padj_method = 'fdr_bh'
@@ -211,21 +215,64 @@ rule differential_psi_drug_response:
         """
         
         
-rule combine_differential_analyses_by_comparison:
+rule combine_differential_analyses_sample_type:
     input:
-        psi_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-{comparison}-{event_type}.tsv.gz').format(cancer=cancer, comparison='{comparison}', event_type='{event_type}')
-         for cancer in RESPONSE_CANCER_TYPES],
-        spldep_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz').format(cancer=cancer, comparison='{comparison}', event_type='{event_type}')
-                  for cancer in RESPONSE_CANCER_TYPES]
+        psi_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+                     for cancer in CANCER_TYPES],
+        spldep_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+                        for cancer in CANCER_TYPES]
+    params:
+        event_type = '{event_type}'
     output:
-        os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-{comparison}-{event_type}.tsv.gz')
+        os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
     run:
         import os
         import pandas as pd
+        
+        event_type = params.event_type
+        
         dfs = []
         for psi_file, spldep_file in zip(input.psi_files, input.spldep_files):
             # combine
             psi = pd.read_table(psi_file).set_index('EVENT').add_prefix('psi__')
+            psi = psi.loc[psi.index.str.contains(event_type)].copy() # filter event types
+            spldep = pd.read_table(spldep_file).set_index('index').add_prefix('spldep__')
+            df = pd.concat([psi,spldep],axis=1).reset_index()
+            
+            # add cancer type
+            cancer_type = os.path.basename(os.path.dirname(psi_file))
+            print(cancer_type)
+            df['cancer_type'] = cancer_type
+            
+            dfs.append(df)
+            
+            del psi, spldep, df
+            
+        dfs = pd.concat(dfs)  
+        dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        
+rule combine_differential_analyses_drug_response:
+    input:
+        psi_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+                     for cancer in RESPONSE_CANCER_TYPES],
+        spldep_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+                        for cancer in RESPONSE_CANCER_TYPES]
+    params:
+        event_type = '{event_type}'
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+                
+        event_type = params.event_type
+        
+        dfs = []
+        for psi_file, spldep_file in zip(input.psi_files, input.spldep_files):
+            # combine
+            psi = pd.read_table(psi_file).set_index('EVENT').add_prefix('psi__')
+            psi = psi.loc[psi.index.str.contains(event_type)].copy() # filter event types
             spldep = pd.read_table(spldep_file).set_index('index').add_prefix('spldep__')
             df = pd.concat([psi,spldep],axis=1).reset_index()
             
@@ -244,26 +291,71 @@ rule combine_differential_analyses_by_comparison:
         
 rule gsea_differential_analyses:
     input:
-        diff_result = os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-{dataset}-{comparison}-{event_type}.tsv.gz'),
+        diff_psi = os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-{comparison}.tsv.gz'),
+        diff_spldep = os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-{comparison}-{event_type}.tsv.gz'),
         annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
         msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
         protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz')
     output:
-        os.path.join(RESULTS_DIR,'files','{cancer}','gsea-{dataset}-{comparison}-{event_type}.tsv.gz')
+        os.path.join(RESULTS_DIR,'files','{cancer}','gsea-{comparison}-{event_type}.tsv.gz')
     shell:
         """
         Rscript scripts/run_gsea.R \
-                    --diff_result_file={input.diff_result} \
+                    --diff_psi_file={input.diff_psi} \
+                    --diff_spldep_file={input.diff_spldep} \
                     --annotation_file={input.annotation} \
                     --msigdb_dir={input.msigdb} \
                     --protein_impact_file={input.protein_impact} \
                     --output_file={output}
-                    
-        # afterwards, we need to combine adding a Cluster (cancer_type) column
-        # and whether is a PSI or Splicing Dep. differential analysis
         """
-
+     
+    
+rule combine_gsea_results_sample_type:
+    input:
+        [os.path.join(RESULTS_DIR,'files','{cancer}','gsea-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+        for cancer in CANCER_TYPES]
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','gsea-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for gsea_result_file in input:
+            df = pd.read_table(gsea_result_file)
+            cancer_type = os.path.basename(os.path.dirname(gsea_result_file))
+            df['cancer_type'] = cancer_type
+            dfs.append(df)
+            print(cancer_type)
+            
+            del df, cancer_type
+            
+        dfs = pd.concat(dfs)  
+        dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
         
+        
+rule combine_gsea_results_drug_response:
+    input:
+        [os.path.join(RESULTS_DIR,'files','{cancer}','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+        for cancer in RESPONSE_CANCER_TYPES]
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for gsea_result_file in input:
+            df = pd.read_table(gsea_result_file)
+            cancer_type = os.path.basename(os.path.dirname(gsea_result_file))
+            df['cancer_type'] = cancer_type
+            dfs.append(df)
+            print(cancer_type)
+            
+            del df, cancer_type
+            
+        dfs = pd.concat(dfs)  
+        dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+    
 rule figures_differential_splicing_dependency_sample_type:
     input:
         diff_result = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
