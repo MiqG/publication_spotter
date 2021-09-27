@@ -58,7 +58,7 @@ rule all:
         # os.path.join(RESULTS_DIR,'figures','validation_genes_oi'),
         
         # EDA relationship between interaction terms in linear models
-        os.path.join(RESULTS_DIR,'figures','interaction_analysis')
+        # os.path.join(RESULTS_DIR,'figures','interaction_analysis')
         
         
         
@@ -204,7 +204,7 @@ rule figures_interaction_analysis:
     input:
         models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
         possible_interactions = os.path.join(SUPPORT_DIR,'possible_pairwise_interaction_categories.tsv'),
-        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz')
+        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
         msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
     output:
         directory(os.path.join(RESULTS_DIR,'figures','interaction_analysis'))
@@ -213,7 +213,7 @@ rule figures_interaction_analysis:
         Rscript scripts/figures_interaction_analysis.R \
                     --models_file={input.models} \
                     --possible_interactions_file={input.possible_interactions} \
-                    --protein_impact_file={input.protein_impact_file} \
+                    --protein_impact_file={input.protein_impact} \
                     --msigdb_dir={input.msigdb} \
                     --figs_dir={output}
         """

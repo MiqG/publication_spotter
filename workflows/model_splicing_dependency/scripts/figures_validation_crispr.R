@@ -131,7 +131,8 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
                  fill='cell_line', color=FALSE) + 
         geom_boxplot(width=0.5) +
         guides(fill='none') +
-        labs(x='Comparison', y='Spearman Correlation')
+        labs(x='Comparison', y='Spearman Correlation') +
+        stat_compare_means(method='wilcox.test')
         
     
     # distributions of pvalues of correlations with predictions
@@ -160,14 +161,16 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
         mutate(diff=fitness_score - pred_mean) %>%
         ungroup()
     
-
+    
     plts[['predictions-means_scatter']] = X %>%
         # filter(!(EVENT %in% 'HsaEX0043015')) %>%
         ggplot(aes(x=fitness_score, y=pred_mean)) +
         facet_wrap(comparison~cell_line) +
-        geom_point(size=1) +
-        geom_errorbar(aes(ymin=pred_min, ymax=pred_max), width=0.05) +
+        geom_point(aes(color=target_type), size=1) +
+        geom_errorbar(aes(ymin=pred_min, ymax=pred_max, color=target_type), 
+                      width=0.05) +
         theme_pubr(border=TRUE) +    
+        ggpubr::color_palette('jco') + 
         geom_abline(intercept = 0, slope = 1, linetype='dashed') +
         geom_text_repel(
             aes(label=event_gene),
@@ -177,7 +180,7 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
         ) +
         labs(x='True Splicing Dependency', y='Predicted Splicing Dependency')
     
-    
+
     plts[['predictions-diff_vs_std']] = X %>%
         ggscatter(x='event_std', y='diff', 
                   facet.by=c('comparison','cell_line')) +
