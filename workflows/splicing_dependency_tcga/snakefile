@@ -88,10 +88,10 @@ rule all:
         
         # combine GSEA
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES),
-        expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES),
         
-        ## plot
-        # os.path.join(RESULTS_DIR,'figures','diffspldep_sample_type'),
+        # plot
+        expand(os.path.join(RESULTS_DIR,'figures','diffspldep-{comparison}-{event_type}'), comparison=COMPARISONS, event_type=EVENT_TYPES)
         
 
 rule compute_splicing_dependency_tcga:
@@ -356,18 +356,18 @@ rule combine_gsea_results_drug_response:
         dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
         
     
-rule figures_differential_splicing_dependency_sample_type:
+rule figures_differential_analysis:
     input:
-        diff_result = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
-        annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
+        diff_result = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-{comparison}-{event_type}.tsv.gz'),
+        annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
+        gsea_result = os.path.join(RESULTS_DIR,'files','PANCAN','gsea-{comparison}-{event_type}.tsv.gz')
     output:
-        directory(os.path.join(RESULTS_DIR,'figures','diffspldep_sample_type'))
+        directory(os.path.join(RESULTS_DIR,'figures','diffspldep-{comparison}-{event_type}'))
     shell:
         """
-        Rscript scripts/figures_diffspldep_sample_type.R \
+        Rscript scripts/figures_differential_analysis.R \
                     --diff_result_file={input.diff_result} \
-                    --msigdb_dir={input.msigdb} \
-                    --protein_impact_file={input.protein_impact} \
                     --annotation_file={input.annotation} \
+                    --gsea_result_file={input.gsea_result} \
                     --figs_dir={output}
         """

@@ -24,14 +24,14 @@ ORGDB = org.Hs.eg.db
 
 # Development
 # -----------
-RAW_DIR = file.path(ROOT,'data','raw')
-PREP_DIR = file.path(ROOT,'data','prep')
-RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
-diff_psi_file = file.path(RESULTS_DIR,'files','READ','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
-diff_spldep_file = file.path(RESULTS_DIR,'files','READ','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
-annotation_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
-msigdb_dir = file.path(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
-protein_impact_file = file.path(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz')
+# RAW_DIR = file.path(ROOT,'data','raw')
+# PREP_DIR = file.path(ROOT,'data','prep')
+# RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
+# diff_psi_file = file.path(RESULTS_DIR,'files','BRCA','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
+# diff_spldep_file = file.path(RESULTS_DIR,'files','BRCA','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
+# annotation_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
+# msigdb_dir = file.path(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
+# protein_impact_file = file.path(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz')
 
 
 ##### FUNCTIONS #####
