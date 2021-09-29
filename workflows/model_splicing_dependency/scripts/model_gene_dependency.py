@@ -19,8 +19,12 @@ import gc
 from joblib import Parallel, delayed
 import multiprocessing
 from tqdm import tqdm
+from posdef import nearestPD
 
 import pymc3 as pm
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 
 """
 Development
@@ -29,7 +33,7 @@ import os
 ROOT = '~/projects/publication_splicing_dependency'
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
-psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-ALTA.tsv.gz')
+psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
 genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
 rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
 annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
@@ -41,29 +45,31 @@ def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
     genexpr = pd.read_table(genexpr_file, index_col=0)
     annotation = pd.read_table(annotation_file)
     rnai = pd.read_table(rnai_file, index_col=0)
-    
-    gene_annot = annotation[['ENSEMBL','GENE']].drop_duplicates().dropna()
-    
+
+    gene_annot = annotation[["ENSEMBL", "GENE"]].drop_duplicates().dropna()
+
     # drop undetected & uninformative events
     psi = psi.dropna(thresh=2)
-    psi = psi.loc[psi.std(axis=1)!=0]
-    
+    psi = psi.loc[psi.std(axis=1) != 0]
+
     # subset
     common_samples = (
         set(rnai.columns).intersection(psi.columns).intersection(genexpr.columns)
     )
-    
+
     common_genes = set(
-        gene_annot.loc[gene_annot['GENE'].isin(rnai.index),'ENSEMBL']
+        gene_annot.loc[gene_annot["GENE"].isin(rnai.index), "ENSEMBL"]
     ).intersection(genexpr.index)
-    
+
     common_events = set(psi.index).intersection(
         annotation.loc[annotation["ENSEMBL"].isin(common_genes), "EVENT"]
     )
 
     psi = psi.loc[common_events, common_samples]
     genexpr = genexpr.loc[common_genes, common_samples]
-    rnai = rnai.loc[set(gene_annot.set_index('ENSEMBL').loc[common_genes,'GENE']), common_samples]
+    rnai = rnai.loc[
+        set(gene_annot.set_index("ENSEMBL").loc[common_genes, "GENE"]), common_samples
+    ]
     annotation = annotation.loc[annotation["EVENT"].isin(common_events)]
 
     gc.collect()
@@ -72,45 +78,109 @@ def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
 
 
 def fit_pymcmodel(y, X):
-    
+
     with pm.Model() as model:
         pm.glm.GLM(y=y, x=X, intercept=False)
         trace = pm.sample(1000, cores=1)
-    
+
     df_trace = pm.trace_to_dataframe(trace)[X.columns]
-    
-    summary = pd.DataFrame({
-        'coefficient': df_trace.mean(axis=0),
-        'stderr': df_trace.std(axis=0),
-        'q250': df_trace.quantile(0.025, axis=0),
-        'q975': df_trace.quantile(0.975, axis=0),
-        'zscore': df_trace.mean(axis=0) / df_trace.std(axis=0),
-        'pvalue': np.nan,
-        'n_obs': len(y)
-    })
-    
+
+    summary = pd.DataFrame(
+        {
+            "coefficient": df_trace.mean(axis=0),
+            "stderr": df_trace.std(axis=0),
+            "q250": df_trace.quantile(0.025, axis=0),
+            "q975": df_trace.quantile(0.975, axis=0),
+            "zscore": df_trace.mean(axis=0) / df_trace.std(axis=0),
+            "pvalue": np.nan,
+            "n_obs": len(y),
+        }
+    )
+
     return summary
-    
-    
-def fit_olsmodel(y, X):
-    # fit linear model
-    model = sm.OLS(y, X).fit()
-    
+
+
+def fit_randomforest(y, X):
+    # split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
+
+    # fit
+    model = RandomForestRegressor(n_estimators=200, n_jobs=1, min_samples_split=0.1)
+    model.fit(X_train, y_train)
+
     # score
-    # prediction = model.predict(X)
-    # pearson_coef, pearson_pvalue = stats.pearsonr(prediction,y)
-    # spearman_coef, spearman_pvalue = stats.spearmanr(prediction,y)
+    rsquared = model.score(X_test, y_test)
+    prediction = model.predict(X_test)
+    pearson_coef, pearson_pvalue = stats.pearsonr(prediction, y_test)
+    spearman_coef, spearman_pvalue = stats.spearmanr(prediction, y_test)
+
+    summary = pd.DataFrame(
+        {
+            "coefficient": model.feature_importances_,
+            "stderr": np.nan,
+            "zscore": np.nan,
+            "pvalue": np.nan,
+            "n_obs": len(y),
+            "rsquared": rsquared,
+            "pearson_correlation": pearson_coef,
+            "pearson_pvalue": pearson_pvalue,
+            "spearman_correlation": spearman_coef,
+            "spearman_pvalue": spearman_pvalue,
+        },
+        index=X.columns,
+    )
+
+    return summary
+
+
+def fit_glsmodel(y, X, chol):
+    X_warped = (X.T @ chol.loc[X.index, X.index]).T
+    X_warped["intercept"] = chol.loc[X.index, X.index].sum(axis=1)
+    model = sm.OLS(y, X_warped).fit()
 
     # prepare output
-    summary = pd.DataFrame({
-        "coefficient": model.params, 
-        "stderr": model.bse,
-        "zscore": model.params / model.bse,
-        "pvalue": model.pvalues,
-        "n_obs": model.nobs,
-        "rsquared": model.rsquared
-    })
-    
+    summary = pd.DataFrame(
+        {
+            "coefficient": model.params,
+            "stderr": model.bse,
+            "zscore": model.params / model.bse,
+            "pvalue": model.pvalues,
+            "n_obs": model.nobs,
+            "rsquared": model.rsquared,
+        }
+    )
+
+    return summary
+
+
+def fit_olsmodel(y, X):
+    # split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
+
+    # fit linear model
+    model = sm.OLS(y, X).fit()
+
+    # score
+    prediction = model.predict(X_test)
+    pearson_coef, pearson_pvalue = stats.pearsonr(prediction, y_test)
+    spearman_coef, spearman_pvalue = stats.spearmanr(prediction, y_test)
+
+    # prepare output
+    summary = pd.DataFrame(
+        {
+            "coefficient": model.params,
+            "stderr": model.bse,
+            "zscore": model.params / model.bse,
+            "pvalue": model.pvalues,
+            "n_obs": model.nobs,
+            "rsquared": model.rsquared,
+            "pearson_correlation": pearson_coef,
+            "pearson_pvalue": pearson_pvalue,
+            "spearman_correlation": spearman_coef,
+            "spearman_pvalue": spearman_pvalue,
+        }
+    )
+
     return summary
 
 
@@ -119,100 +189,148 @@ def fit_rlmmodel(y, X):
     model = sm.RLM(y, X).fit()
 
     # prepare output
-    summary = pd.DataFrame({
-        "coefficient": model.params, 
-        "stderr": model.bse,
-        "zscore": model.params / model.bse,
-        "pvalue": model.pvalues,
-        "n_obs": model.nobs,
-        "rsquared": model.rsquared
-    })
-    
-    return summary
-    
-    
-def fit_linear_model(y, X, method):
-    if method=='OLS':
-        summary = fit_olsmodel(y,X)
-    elif method=='bayes':
-        summary = fit_pymcmodel(y,X)
-    elif method=='RLM':
-        summary = fit_statsmodel(y,X)
-        
+    summary = pd.DataFrame(
+        {
+            "coefficient": model.params,
+            "stderr": model.bse,
+            "zscore": model.params / model.bse,
+            "pvalue": model.pvalues,
+            "n_obs": model.nobs,
+            "rsquared": model.rsquared,
+        }
+    )
+
     return summary
 
-    
-def fit_model(x_psi, x_genexpr, y_rnai, method):
-    
+
+def fit_linear_model(y, X, method, chol=None):
+    methods = {
+        "OLS": fit_olsmodel,
+        "randomforest": fit_randomforest,
+        "bayes": fit_pymcmodel,
+    }
+    summary = methods[method](y, X)
+    return summary
+
+
+def fit_model(x_psi, x_genexpr, y_rnai, method, chol=None):
+
     X = pd.DataFrame([x_psi, x_genexpr]).T
     y = y_rnai
-    
+
     # dropna
     is_nan = X.isnull().any(1) | y.isnull()
     X = X.loc[~is_nan].copy()
     y = y[~is_nan].copy()
-    
+
     try:
         # standardize features
         X.values[:, :] = StandardScaler().fit_transform(X)
-        X['interaction'] = X[x_psi.name]*X[x_genexpr.name]
-        X['intercept'] = 1.0
-        
-        summary = fit_linear_model(y, X, method)
+        X["interaction"] = X[x_psi.name] * X[x_genexpr.name]
+        X["intercept"] = 1.0
+
+        summary = fit_linear_model(y, X, method, chol)
 
     except:
-        X['interaction'] = np.nan
-        X['intercept'] = np.nan
-        
-        summary = pd.DataFrame({
-            "coefficient": [np.nan]*X.shape[1], 
-            "stderr": np.nan,
-            "zscore": np.nan,
-            "pvalue": np.nan,
-            "n_obs": np.nan
+        X["interaction"] = np.nan
+        X["intercept"] = np.nan
+
+        summary = pd.DataFrame(
+            {
+                "coefficient": [np.nan] * X.shape[1],
+                "stderr": np.nan,
+                "zscore": np.nan,
+                "pvalue": np.nan,
+                "n_obs": np.nan,
+                "rsquared": np.nan,
+                "pearson_correlation": np.nan,
+                "pearson_pvalue": np.nan,
+                "spearman_correlation": np.nan,
+                "spearman_pvalue": np.nan,
             },
-            index=X.columns
+            index=X.columns,
         )
 
-        
-    summary = pd.Series({
-        'EVENT': x_psi.name,
-        'ENSEMBL': x_genexpr.name,
-        'GENE': y_rnai.name,
-        'event_coefficient': summary.loc[x_psi.name,'coefficient'],
-        'event_stderr': summary.loc[x_psi.name,'stderr'],
-        'event_zscore': summary.loc[x_psi.name,'zscore'],
-        'event_pvalue': summary.loc[x_psi.name,'pvalue'],
-        'gene_coefficient': summary.loc[x_genexpr.name,'coefficient'],
-        'gene_stderr': summary.loc[x_genexpr.name,'stderr'],
-        'gene_zscore': summary.loc[x_genexpr.name,'zscore'],
-        'gene_pvalue': summary.loc[x_genexpr.name,'pvalue'],
-        'interaction_coefficient': summary.loc['interaction','coefficient'],
-        'interaction_stderr': summary.loc['interaction','stderr'],
-        'interaction_zscore': summary.loc['interaction','zscore'],
-        'interaction_pvalue': summary.loc['interaction','pvalue'],
-        'intercept_coefficient': summary.loc['intercept','coefficient'],
-        'intercept_stderr': summary.loc['intercept','stderr'],
-        'intercept_zscore': summary.loc['intercept','zscore'],
-        'intercept_pvalue': summary.loc['intercept','pvalue'],
-        'n_obs': summary.loc[x_genexpr.name,'n_obs'],
-        'event_mean': x_psi.mean(),
-        'event_std': x_psi.std(),
-        'gene_mean': x_genexpr.mean(),
-        'gene_std': x_genexpr.std()
-    })
-    
+    summary = pd.Series(
+        {
+            "EVENT": x_psi.name,
+            "ENSEMBL": x_genexpr.name,
+            "GENE": y_rnai.name,
+            "event_coefficient": summary.loc[x_psi.name, "coefficient"],
+            "event_stderr": summary.loc[x_psi.name, "stderr"],
+            "event_zscore": summary.loc[x_psi.name, "zscore"],
+            "event_pvalue": summary.loc[x_psi.name, "pvalue"],
+            "gene_coefficient": summary.loc[x_genexpr.name, "coefficient"],
+            "gene_stderr": summary.loc[x_genexpr.name, "stderr"],
+            "gene_zscore": summary.loc[x_genexpr.name, "zscore"],
+            "gene_pvalue": summary.loc[x_genexpr.name, "pvalue"],
+            "interaction_coefficient": summary.loc["interaction", "coefficient"],
+            "interaction_stderr": summary.loc["interaction", "stderr"],
+            "interaction_zscore": summary.loc["interaction", "zscore"],
+            "interaction_pvalue": summary.loc["interaction", "pvalue"],
+            "intercept_coefficient": summary.loc["intercept", "coefficient"],
+            "intercept_stderr": summary.loc["intercept", "stderr"],
+            "intercept_zscore": summary.loc["intercept", "zscore"],
+            "intercept_pvalue": summary.loc["intercept", "pvalue"],
+            "rsquared": summary.loc[x_genexpr.name, "rsquared"],
+            "pearson_correlation": summary.loc[x_genexpr.name, "pearson_correlation"],
+            "pearson_pvalue": summary.loc[x_genexpr.name, "pearson_pvalue"],
+            "spearman_correlation": summary.loc[x_genexpr.name, "spearman_correlation"],
+            "spearman_pvalue": summary.loc[x_genexpr.name, "spearman_pvalue"],
+            "n_obs": summary.loc[x_genexpr.name, "n_obs"],
+            "event_mean": x_psi.mean(),
+            "event_std": x_psi.std(),
+            "gene_mean": x_genexpr.mean(),
+            "gene_std": x_genexpr.std(),
+        }
+    )
+
     return summary
+
+
+def get_positive_definite_sigma(rnai):
+    # compute sigma
+    sigma = rnai.cov()
+    sigma_inv = np.linalg.inv(sigma)
+    sigma_inv_pos = nearestPD(sigma_inv)
+    chol = np.linalg.cholesky(sigma_inv_pos)
+    chol = pd.DataFrame(chol, index=sigma.index, columns=sigma.columns)
+    return sigma, chol
 
 
 def fit_models(psi, genexpr, rnai, annotation, n_jobs):
     results = Parallel(n_jobs=n_jobs)(
-        delayed(fit_model)(psi.loc[event], genexpr.loc[ensembl], rnai.loc[gene], method='OLS')
+        delayed(fit_model)(
+            psi.loc[event], genexpr.loc[ensembl], rnai.loc[gene], method="OLS"
+        )
         for event, ensembl, gene in tqdm(annotation.values)
     )
     results = pd.DataFrame(results)
-    
+
     return results
+
+# sample_oi = psi.columns[1]
+# events, ensembls, genes = results_lm['EVENT'], results_lm['ENSEMBL'], results_lm['GENE']
+# x_psi = psi.loc[events,sample_oi]
+# x_genexpr = genexpr.loc[ensembls,sample_oi]
+# y_rnai = rnai.loc[genes,sample_oi]
+# idx_models_oi = (results_lm['pearson_correlation']>0.5).values
+
+# x_psi_scaled = (x_psi.values - results_lm['event_mean'])/results_lm['event_std']
+# x_genexpr_scaled = (x_genexpr.values - results_lm['gene_mean'])/results_lm['gene_std']
+# x_interaction = x_psi_scaled*x_genexpr_scaled
+# coef_intercept = results_lm['intercept_coefficient']
+# coef_event = results_lm['event_coefficient']
+# coef_genexpr = results_lm['gene_coefficient']
+# coef_interaction = results_lm['interaction_coefficient']
+
+# y_pred = coef_intercept + coef_event * x_psi_scaled  + coef_interaction * x_interaction
+
+# ax = sns.scatterplot(x=y_pred, y=y_rnai.values);
+# ax.set_xlim(-2,1)
+
+# idx_models_oi = ((results_lm['pearson_pvalue']<0.05) & (results_lm['pearson_correlation']>0)).values
+# sns.scatterplot(x=y_pred[idx_models_oi], y=y_rnai.values[idx_models_oi])
 
 
 def parse_args():
@@ -236,17 +354,17 @@ def main():
     rnai_file = args.rnai_file
     n_jobs = args.n_jobs
     output_file = args.output_file
-    
-    print('Loading data...')
+
+    print("Loading data...")
     psi, genexpr, rnai, annotation = load_data(
         psi_file, genexpr_file, rnai_file, annotation_file
     )
-    
-    print('Fitting models...')
+
+    print("Fitting models...")
     result = fit_models(psi, genexpr, rnai, annotation, n_jobs)
-    
-    print('Saving results...')
-    result.to_csv(output_file, sep='\t', compression='gzip', index=False)
+
+    print("Saving results...")
+    result.to_csv(output_file, sep="\t", compression="gzip", index=False)
 
 
 ##### SCRIPT #####
