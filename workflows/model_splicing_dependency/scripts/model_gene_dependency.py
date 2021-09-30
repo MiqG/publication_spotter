@@ -160,6 +160,10 @@ def fit_olsmodel(y, X):
     # fit linear model
     model = sm.OLS(y, X).fit()
 
+    # log-likelihood test
+    model_null = sm.OLS(y, X["intercept"]).fit()
+    lr_stat, lr_pvalue, _ = model.compare_lr_test(model_null)
+
     # score
     prediction = model.predict(X_test)
     pearson_coef, pearson_pvalue = stats.pearsonr(prediction, y_test)
@@ -178,6 +182,8 @@ def fit_olsmodel(y, X):
             "pearson_pvalue": pearson_pvalue,
             "spearman_correlation": spearman_coef,
             "spearman_pvalue": spearman_pvalue,
+            "lr_stat": lr_stat,
+            "lr_pvalue": lr_pvalue,
         }
     )
 
@@ -247,6 +253,8 @@ def fit_model(x_psi, x_genexpr, y_rnai, method, chol=None):
                 "pearson_pvalue": np.nan,
                 "spearman_correlation": np.nan,
                 "spearman_pvalue": np.nan,
+                "lr_stat": np.nan,
+                "lr_pvalue": np.nan,
             },
             index=X.columns,
         )
@@ -277,6 +285,8 @@ def fit_model(x_psi, x_genexpr, y_rnai, method, chol=None):
             "pearson_pvalue": summary.loc[x_genexpr.name, "pearson_pvalue"],
             "spearman_correlation": summary.loc[x_genexpr.name, "spearman_correlation"],
             "spearman_pvalue": summary.loc[x_genexpr.name, "spearman_pvalue"],
+            "lr_stat": summary.loc[x_genexpr.name, "lr_stat"],
+            "lr_pvalue": summary.loc[x_genexpr.name, "lr_pvalue"],
             "n_obs": summary.loc[x_genexpr.name, "n_obs"],
             "event_mean": x_psi.mean(),
             "event_std": x_psi.std(),
@@ -306,31 +316,13 @@ def fit_models(psi, genexpr, rnai, annotation, n_jobs):
         for event, ensembl, gene in tqdm(annotation.values)
     )
     results = pd.DataFrame(results)
+    results["lr_padj"] = np.nan
+    idx = ~results["lr_pvalue"].isnull()
+    results.loc[idx, "lr_padj"] = sm.stats.multipletests(
+        results.loc[idx, "lr_pvalue"], method="fdr_bh"
+    )[1]
 
     return results
-
-# sample_oi = psi.columns[1]
-# events, ensembls, genes = results_lm['EVENT'], results_lm['ENSEMBL'], results_lm['GENE']
-# x_psi = psi.loc[events,sample_oi]
-# x_genexpr = genexpr.loc[ensembls,sample_oi]
-# y_rnai = rnai.loc[genes,sample_oi]
-# idx_models_oi = (results_lm['pearson_correlation']>0.5).values
-
-# x_psi_scaled = (x_psi.values - results_lm['event_mean'])/results_lm['event_std']
-# x_genexpr_scaled = (x_genexpr.values - results_lm['gene_mean'])/results_lm['gene_std']
-# x_interaction = x_psi_scaled*x_genexpr_scaled
-# coef_intercept = results_lm['intercept_coefficient']
-# coef_event = results_lm['event_coefficient']
-# coef_genexpr = results_lm['gene_coefficient']
-# coef_interaction = results_lm['interaction_coefficient']
-
-# y_pred = coef_intercept + coef_event * x_psi_scaled  + coef_interaction * x_interaction
-
-# ax = sns.scatterplot(x=y_pred, y=y_rnai.values);
-# ax.set_xlim(-2,1)
-
-# idx_models_oi = ((results_lm['pearson_pvalue']<0.05) & (results_lm['pearson_correlation']>0)).values
-# sns.scatterplot(x=y_pred[idx_models_oi], y=y_rnai.values[idx_models_oi])
 
 
 def parse_args():
@@ -371,3 +363,35 @@ def main():
 if __name__ == "__main__":
     main()
     print("Done!")
+
+
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+from scipy import stats
+
+stats.chisqprob = lambda chisq, df: stats.chi2.sf(chisq, df)
+
+
+def lrtest(llmin, llmax):
+    lr = 2 * (llmax - llmin)
+    p = stats.chisqprob(lr, 1)  # llmax has 1 dof more than llmin
+    return lr, p
+
+
+# import example dataset
+data = sm.datasets.get_rdataset("dietox", "geepack").data
+
+# fit time only to pig weight
+md = smf.mixedlm("Weight ~ Time", data, groups=data["Pig"])
+mdf = md.fit(reml=False)
+print(mdf.summary())
+llf = mdf.llf
+
+# fit time and litter to pig weight
+mdlitter = smf.mixedlm("Weight ~ Time + Litter", data, groups=data["Pig"])
+mdflitter = mdlitter.fit(reml=False)
+print(mdflitter.summary())
+llflitter = mdflitter.llf
+
+lr, p = lrtest(llf, llflitter)
+print("LR test, p value: {:.2f}, {:.4f}".format(lr, p))

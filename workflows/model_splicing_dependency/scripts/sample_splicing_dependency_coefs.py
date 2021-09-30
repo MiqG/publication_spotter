@@ -33,7 +33,7 @@ n_jobs = 5
 ##### FUNCTIONS #####
 def load_data(models_file):
     models = pd.read_table(models_file)
-    
+
     # drop events that cannot be inferred
     idx_todrop = (
         models[
@@ -55,46 +55,66 @@ def load_data(models_file):
 
 
 def sample_single_splicing_dependency_coefs(summary, size, random_seed):
-    
+
     np.random.seed(random_seed)
 
-    coefs_event = np.random.normal(loc=summary["event_coefficient"], scale=summary["event_stderr"], size=size)
-    coefs_interaction = np.random.normal(loc=summary["interaction_coefficient"], scale=summary["interaction_stderr"], size=size)
-    coefs_intercept = np.random.normal(loc=summary["intercept_coefficient"], scale=summary["intercept_stderr"], size=size)
-    
+    coefs_event = np.random.normal(
+        loc=summary["event_coefficient"], scale=summary["event_stderr"], size=size
+    )
+    coefs_gene = np.random.normal(
+        loc=summary["gene_coefficient"], scale=summary["gene_stderr"], size=size
+    )
+    coefs_interaction = np.random.normal(
+        loc=summary["interaction_coefficient"],
+        scale=summary["interaction_stderr"],
+        size=size,
+    )
+    coefs_intercept = np.random.normal(
+        loc=summary["intercept_coefficient"],
+        scale=summary["intercept_stderr"],
+        size=size,
+    )
+
     coefs = {
-        'EVENT': summary['EVENT'],
-        'GENE': summary['GENE'],
-        'ENSEMBL': summary['ENSEMBL'],
-        'event': coefs_event,
-        'interaction': coefs_interaction,
-        'intercept': coefs_intercept
+        "EVENT": summary["EVENT"],
+        "GENE": summary["GENE"],
+        "ENSEMBL": summary["ENSEMBL"],
+        "event": coefs_event,
+        "gene": coefs_gene,
+        "interaction": coefs_interaction,
+        "intercept": coefs_intercept,
     }
-    
+
     return coefs
 
 
 def get_coefs(result, coef_oi, size):
-    index = ['EVENT','GENE','ENSEMBL']+list(range(size))
-    coefs = pd.DataFrame([pd.Series([res['EVENT'], res['GENE'], res['ENSEMBL']]+list(res[coef_oi]), index=index) for res in result])
+    index = ["EVENT", "GENE", "ENSEMBL"] + list(range(size))
+    coefs = pd.DataFrame(
+        [
+            pd.Series(
+                [res["EVENT"], res["GENE"], res["ENSEMBL"]] + list(res[coef_oi]),
+                index=index,
+            )
+            for res in result
+        ]
+    )
     return coefs
 
 
 def sample_splicing_dependency_coefs(models, size, random_seed, n_jobs):
-    
+
     result = Parallel(n_jobs=n_jobs)(
-        delayed(sample_single_splicing_dependency_coefs)(
-            row, size, random_seed
-        )
-        for index, row  in tqdm(models.iterrows())
+        delayed(sample_single_splicing_dependency_coefs)(row, size, random_seed)
+        for index, row in tqdm(models.iterrows())
     )
-    
-    
-    event = get_coefs(result, 'event', size)
-    interaction = get_coefs(result, 'interaction', size)
-    intercept = get_coefs(result, 'intercept', size)
-    
-    return event, interaction, intercept
+
+    event = get_coefs(result, "event", size)
+    gene = get_coefs(result, "gene", size)
+    interaction = get_coefs(result, "interaction", size)
+    intercept = get_coefs(result, "intercept", size)
+
+    return event, gene, interaction, intercept
 
 
 def parse_args():
@@ -104,7 +124,7 @@ def parse_args():
     parser.add_argument("--size", type=int, default=1000)
     parser.add_argument("--random_seed", type=int, default=None)
     parser.add_argument("--n_jobs", type=int, default=None)
-    
+
     args = parser.parse_args()
     return args
 
@@ -116,19 +136,22 @@ def main():
     size = args.size
     random_seed = args.random_seed
     n_jobs = args.n_jobs
-    
+
     os.mkdir(output_dir)
-    
+
     print("Loading data...")
     models = load_data(models_file)
-    
+
     print("Sampling coefficients...")
-    event, interaction, intercept = sample_splicing_dependency_coefs(models, size, random_seed, n_jobs)
+    event, gene, interaction, intercept = sample_splicing_dependency_coefs(
+        models, size, random_seed, n_jobs
+    )
 
     print("Saving results...")
-    event.to_pickle(os.path.join(output_dir,'event.pickle.gz'))
-    interaction.to_pickle(os.path.join(output_dir,'interaction.pickle.gz'))
-    intercept.to_pickle(os.path.join(output_dir,'intercept.pickle.gz'))
+    event.to_pickle(os.path.join(output_dir, "event.pickle.gz"))
+    gene.to_pickle(os.path.join(output_dir, "gene.pickle.gz"))
+    interaction.to_pickle(os.path.join(output_dir, "interaction.pickle.gz"))
+    intercept.to_pickle(os.path.join(output_dir, "intercept.pickle.gz"))
 
 
 ##### SCRIPT #####
