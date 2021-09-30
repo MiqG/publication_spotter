@@ -154,14 +154,16 @@ def fit_glsmodel(y, X, chol):
 
 
 def fit_olsmodel(y, X):
+    event, gene = X.columns[:2]
+
     # split data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
 
     # fit linear model
-    model = sm.OLS(y, X).fit()
+    model = sm.OLS(y_train, X_train).fit()
 
     # log-likelihood test
-    model_null = sm.OLS(y, X["intercept"]).fit()
+    model_null = sm.OLS(y_train, X_train[[gene,"intercept"]]).fit()
     lr_stat, lr_pvalue, _ = model.compare_lr_test(model_null)
 
     # score
