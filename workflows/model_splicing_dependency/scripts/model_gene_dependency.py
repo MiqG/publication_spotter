@@ -9,22 +9,17 @@
 # cell fitness independently of gene expression.
 #
 
-import statsmodels.api as sm
-from sklearn.preprocessing import StandardScaler
-import pandas as pd
-import numpy as np
-from scipy import stats
 import argparse
 import gc
-from joblib import Parallel, delayed
-import multiprocessing
-from tqdm import tqdm
-from posdef import nearestPD
-
-import pymc3 as pm
-
-from sklearn.ensemble import RandomForestRegressor
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+from scipy import stats
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from joblib import Parallel, delayed
+from tqdm import tqdm
+
 
 """
 Development
@@ -77,96 +72,20 @@ def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
     return psi, genexpr, rnai, annotation
 
 
-def fit_pymcmodel(y, X):
-
-    with pm.Model() as model:
-        pm.glm.GLM(y=y, x=X, intercept=False)
-        trace = pm.sample(1000, cores=1)
-
-    df_trace = pm.trace_to_dataframe(trace)[X.columns]
-
-    summary = pd.DataFrame(
-        {
-            "coefficient": df_trace.mean(axis=0),
-            "stderr": df_trace.std(axis=0),
-            "q250": df_trace.quantile(0.025, axis=0),
-            "q975": df_trace.quantile(0.975, axis=0),
-            "zscore": df_trace.mean(axis=0) / df_trace.std(axis=0),
-            "pvalue": np.nan,
-            "n_obs": len(y),
-        }
-    )
-
-    return summary
-
-
-def fit_randomforest(y, X):
-    # split data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
-
-    # fit
-    model = RandomForestRegressor(n_estimators=200, n_jobs=1, min_samples_split=0.1)
-    model.fit(X_train, y_train)
-
-    # score
-    rsquared = model.score(X_test, y_test)
-    prediction = model.predict(X_test)
-    pearson_coef, pearson_pvalue = stats.pearsonr(prediction, y_test)
-    spearman_coef, spearman_pvalue = stats.spearmanr(prediction, y_test)
-
-    summary = pd.DataFrame(
-        {
-            "coefficient": model.feature_importances_,
-            "stderr": np.nan,
-            "zscore": np.nan,
-            "pvalue": np.nan,
-            "n_obs": len(y),
-            "rsquared": rsquared,
-            "pearson_correlation": pearson_coef,
-            "pearson_pvalue": pearson_pvalue,
-            "spearman_correlation": spearman_coef,
-            "spearman_pvalue": spearman_pvalue,
-        },
-        index=X.columns,
-    )
-
-    return summary
-
-
-def fit_glsmodel(y, X, chol):
-    X_warped = (X.T @ chol.loc[X.index, X.index]).T
-    X_warped["intercept"] = chol.loc[X.index, X.index].sum(axis=1)
-    model = sm.OLS(y, X_warped).fit()
-
-    # prepare output
-    summary = pd.DataFrame(
-        {
-            "coefficient": model.params,
-            "stderr": model.bse,
-            "zscore": model.params / model.bse,
-            "pvalue": model.pvalues,
-            "n_obs": model.nobs,
-            "rsquared": model.rsquared,
-        }
-    )
-
-    return summary
-
-
 def fit_olsmodel(y, X):
     event, gene = X.columns[:2]
 
     # split data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
 
-    # fit linear model
+    # fit linear model to training data
     model = sm.OLS(y_train, X_train).fit()
 
     # log-likelihood test
-    model_null = sm.OLS(y_train, X_train[[gene,"intercept"]]).fit()
+    model_null = sm.OLS(y_train, X_train[[gene, "intercept"]]).fit()
     lr_stat, lr_pvalue, _ = model.compare_lr_test(model_null)
 
-    # score
+    # score using test data
     prediction = model.predict(X_test)
     pearson_coef, pearson_pvalue = stats.pearsonr(prediction, y_test)
     spearman_coef, spearman_pvalue = stats.spearmanr(prediction, y_test)
@@ -192,36 +111,15 @@ def fit_olsmodel(y, X):
     return summary
 
 
-def fit_rlmmodel(y, X):
-    # fit linear model
-    model = sm.RLM(y, X).fit()
-
-    # prepare output
-    summary = pd.DataFrame(
-        {
-            "coefficient": model.params,
-            "stderr": model.bse,
-            "zscore": model.params / model.bse,
-            "pvalue": model.pvalues,
-            "n_obs": model.nobs,
-            "rsquared": model.rsquared,
-        }
-    )
-
-    return summary
-
-
-def fit_linear_model(y, X, method, chol=None):
+def fit_single_model(y, X, method):
     methods = {
         "OLS": fit_olsmodel,
-        "randomforest": fit_randomforest,
-        "bayes": fit_pymcmodel,
     }
     summary = methods[method](y, X)
     return summary
 
 
-def fit_model(x_psi, x_genexpr, y_rnai, method, chol=None):
+def fit_model(x_psi, x_genexpr, y_rnai, method):
 
     X = pd.DataFrame([x_psi, x_genexpr]).T
     y = y_rnai
@@ -237,7 +135,7 @@ def fit_model(x_psi, x_genexpr, y_rnai, method, chol=None):
         X["interaction"] = X[x_psi.name] * X[x_genexpr.name]
         X["intercept"] = 1.0
 
-        summary = fit_linear_model(y, X, method, chol)
+        summary = fit_single_model(y, X, method)
 
     except:
         X["interaction"] = np.nan
@@ -300,16 +198,6 @@ def fit_model(x_psi, x_genexpr, y_rnai, method, chol=None):
     return summary
 
 
-def get_positive_definite_sigma(rnai):
-    # compute sigma
-    sigma = rnai.cov()
-    sigma_inv = np.linalg.inv(sigma)
-    sigma_inv_pos = nearestPD(sigma_inv)
-    chol = np.linalg.cholesky(sigma_inv_pos)
-    chol = pd.DataFrame(chol, index=sigma.index, columns=sigma.columns)
-    return sigma, chol
-
-
 def fit_models(psi, genexpr, rnai, annotation, n_jobs):
     results = Parallel(n_jobs=n_jobs)(
         delayed(fit_model)(
@@ -365,35 +253,3 @@ def main():
 if __name__ == "__main__":
     main()
     print("Done!")
-
-
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from scipy import stats
-
-stats.chisqprob = lambda chisq, df: stats.chi2.sf(chisq, df)
-
-
-def lrtest(llmin, llmax):
-    lr = 2 * (llmax - llmin)
-    p = stats.chisqprob(lr, 1)  # llmax has 1 dof more than llmin
-    return lr, p
-
-
-# import example dataset
-data = sm.datasets.get_rdataset("dietox", "geepack").data
-
-# fit time only to pig weight
-md = smf.mixedlm("Weight ~ Time", data, groups=data["Pig"])
-mdf = md.fit(reml=False)
-print(mdf.summary())
-llf = mdf.llf
-
-# fit time and litter to pig weight
-mdlitter = smf.mixedlm("Weight ~ Time + Litter", data, groups=data["Pig"])
-mdflitter = mdlitter.fit(reml=False)
-print(mdflitter.summary())
-llflitter = mdflitter.llf
-
-lr, p = lrtest(llf, llflitter)
-print("LR test, p value: {:.2f}, {:.4f}".format(lr, p))
