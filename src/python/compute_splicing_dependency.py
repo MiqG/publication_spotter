@@ -54,6 +54,7 @@ def load_data(
     models = pd.read_table(models_file).set_index(["EVENT", "ENSEMBL"])
     coefs = {
         "event": pd.read_pickle(os.path.join(models_coefs_dir, "event.pickle.gz")),
+        "gene": pd.read_pickle(os.path.join(models_coefs_dir, "gene.pickle.gz")),
         "interaction": pd.read_pickle(
             os.path.join(models_coefs_dir, "interaction.pickle.gz")
         ),
@@ -120,7 +121,7 @@ def load_data(
 
 
 def compute_single_splicing_dependency(
-    b_event, b_interaction, b_intercept, x_psi, x_genexpr
+    b_event, b_gene, b_interaction, b_intercept, x_psi, x_genexpr
 ):
 
     samples = x_psi.index
@@ -131,7 +132,7 @@ def compute_single_splicing_dependency(
     PROD = PSI * TPM
 
     # compute
-    y = b_intercept + b_event * PSI + b_interaction * PROD
+    y = b_intercept + b_event * PSI + b_gene * TPM + b_interaction * PROD
 
     # summarize
     mean = pd.Series(np.mean(y, axis=0), index=samples, name=event)
@@ -145,6 +146,7 @@ def compute_single_splicing_dependency(
 def compute_splicing_dependency(coefs, psi, genexpr, n_jobs):
     # unpack coefficients
     coefs_event = coefs["event"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
+    coefs_gene = coefs["gene"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
     coefs_interaction = coefs["interaction"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
     coefs_intercept = coefs["intercept"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
 
@@ -154,6 +156,7 @@ def compute_splicing_dependency(coefs, psi, genexpr, n_jobs):
     result = Parallel(n_jobs=n_jobs)(
         delayed(compute_single_splicing_dependency)(
             b_event=coefs_event.loc[(event,gene)].values.reshape(-1, 1),
+            b_gene=coefs_gene.loc[(event,gene)].values.reshape(-1,1),
             b_interaction=coefs_interaction.loc[(event,gene)].values.reshape(-1, 1),
             b_intercept=coefs_intercept.loc[(event,gene)].values.reshape(-1, 1),
             x_psi=psi.loc[event],
