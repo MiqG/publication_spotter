@@ -23,7 +23,7 @@ require(ggpubr)
 require(cowplot)
 require(scattermore)
 require(ggrepel)
-
+require(ComplexHeatmap)
 require(clusterProfiler)
 
 ROOT = here::here()
@@ -51,6 +51,15 @@ PALETTE_VARS = 'uchicago'
 # possible_interactions_file = file.path(ROOT,'support','possible_pairwise_interaction_categories.tsv')
 
 ##### FUNCTIONS #####
+get_sets = function(df, set_names, set_values){
+    sets = df[,c(set_values,set_names)] %>%
+        distinct() %>%
+        with(., split(get(set_values),get(set_names)))
+    sets = sapply(sets, unique, simplufy=FALSE)
+    return(sets)
+}
+
+
 get_genes_lists = function(models){
     df = models %>% filter(pearson_correlation>0 & pearson_pvalue<0.001) 
     cols_oi = c('event_zscore','gene_zscore',
@@ -321,10 +330,9 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         guides(color='none') + 
         labs(x='Protein Impact', y='Count')
     
-    palette = get_palette('BrBG', length(unique(prot_imp[['term']])))
     plts[['model_selection-protein_impact-freqs']] = prot_imp %>%
         ggbarplot(x='is_selected', y='freq', fill='term', color=NA,
-                  palette=get_palette('BrBG', length(unique(prot_imp[['term']])))) + 
+                  palette='BrBG') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
         labs(x='Selected Model', y='Proportion', fill='Protein Impact')
@@ -340,13 +348,12 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         guides(color='none') + 
         labs(x='Protein Impact', y='Count')
     
-    palette = get_palette('BrBG', length(unique(prot_imp[['term_clean']])))
     plts[['model_selection-protein_impact_clean-freqs']] = prot_imp %>%
         group_by(is_selected,term_clean) %>%
         summarize(n=sum(n)) %>%
         mutate(freq=n/sum(n)) %>%
         ggbarplot(x='is_selected', y='freq', fill='term_clean', color=NA,
-                  palette=palette) + 
+                  palette='BrBG') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
         labs(x='Selected Model', y='Proportion', fill='Protein Impact')
@@ -404,13 +411,13 @@ plot_interactions = function(models, protein_impact){
     
     X = models %>% 
         mutate(interaction_subcategory_clean = gsub('-1','1',interaction_subcategory)) %>%
-        mutate(is_selected = pearson_correlation>0 & lr_pvalue<THRESH_LR_PVALUE) %>%
         left_join(protein_impact, by='EVENT')
         
     plts = list()
     
     # across event types, what's the frequency of each type of psi-tpm interaction?
     plts[['interactions-counts']] = X %>% 
+        filter(is_selected) %>%
         count(event_type, interaction_category) %>%
         ggbarplot(x='interaction_category', y='n', facet.by = 'event_type', 
                   label=TRUE, fill='interaction_category', color=NA, palette='Set1') + 
@@ -420,6 +427,7 @@ plot_interactions = function(models, protein_impact){
         theme_pubr(x.text.angle = 45, border=TRUE)
     
     plts[['interactions-freqs_subcategories']] = X %>%
+        filter(is_selected) %>%
         group_by(interaction_category, interaction_subcategory_clean) %>%
         summarize(n=n()) %>%
         mutate(freq=n/sum(n)) %>%
@@ -429,30 +437,30 @@ plot_interactions = function(models, protein_impact){
         labs(x='Interaction Category', y='Proportion', fill='Interaction\nSubcategory')
     
     # Is some interaction category associated to some protein impact?
-    palette = get_palette('BrBG', length(unique(prot_imp[['term']])))
     plts[['interactions-protein_impact-freqs']] = X %>% 
+        filter(is_selected) %>%
         group_by(interaction_category,term) %>% 
         summarize(n=n()) %>% 
         drop_na() %>%
         mutate(freq= n/sum(n)) %>% 
         ggbarplot(x='interaction_category', y='freq', fill='term', 
-                  color=NA, palette=palette) +
+                  color=NA, palette='BrBG') +
         labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
         theme_pubr(x.text.angle = 45, legend = 'right')
     
-    palette = get_palette('BrBG', length(unique(prot_imp[['term_clean']])))
     plts[['interactions-protein_impact_clean-freqs']] = X %>% 
+        filter(is_selected) %>%
         group_by(interaction_category,term_clean) %>% 
         summarize(n=n()) %>% 
         drop_na() %>%
         mutate(freq= n/sum(n)) %>% 
         ggbarplot(x='interaction_category', y='freq', fill='term_clean', 
-                  color=NA, palette=palette) +
+                  color=NA, palette='BrBG') +
         labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
         theme_pubr(x.text.angle = 45, legend = 'right')
     
     # PCA of selected model coefficients
-    pca = models %>%
+    pca = X %>%
         filter(is_selected) %>%
         column_to_rownames('event_gene') %>%
         dplyr::select(matches('coefficient')) %>%
@@ -475,13 +483,102 @@ plot_interactions = function(models, protein_impact){
         ggscatter(x='V1', y='V2', color='interaction_category', palette='Set1') + 
         labs(x='UMAP1', y='UMAP2')
     
+    # is any of the interaction classes enriched in some BP term? (TODO)
+    genes_oi = get_sets(X %>% filter(is_selected), 'interaction_category', 'GENE')
+    events_oi = get_sets(X %>% filter(is_selected), 'interaction_category', 'EVENT')
+    universe = list(
+        'genes' = X %>% pull(GENE) %>% unique(),
+        'events' = X %>% pull(EVENT) %>% unique()
+    )
+    ## how repetitive are genes among interaction categories?
+    m = genes_oi %>% list_to_matrix() %>% make_comb_mat()
+    plts[['interactions-upset']] = UpSet(m, comb_order = order(comb_size(m)))
+    ## GSEA
+    enrichments = run_enrichments(genes_oi, events_oi, universe, ontologies)
+    results = get_enrichment_result(enrichments)
+    results = results[sapply(results,nrow)>0]
+    plts_enrichment = sapply(names(results), function(onto){
+        result = results[[onto]]
+        res = new("compareClusterResult", compareClusterResult = result)
+        plt = dotplot(res) + labs(title=onto, x='Interaction Category')
+        return(plt)
+    }, simplify=FALSE)
+    names(plts_enrichment) = sprintf('interactions-enrichment-%s',
+                                     names(plts_enrichment))
+    plts = c(plts,plts_enrichment)
+    
     return(plts)
 }
 
 
-plot_examples = function(models){
+plot_examples = function(models, protein_impact){
+    X = models %>%
+        filter(is_selected) %>%
+        arrange(lr_pvalue) %>%
+        mutate(index=row_number()) %>%
+        left_join(protein_impact, by='EVENT')
     
+    plts = list()
+    
+    cols_oi = c('EVENT','GENE','ENSEMBL','interaction_category',
+                'interaction_subcategory','term','event_type','lr_pvalue')
+    
+    plts[['examples-top_overall-scatter']] = X %>%
+        ggscatter(x='index', y='lr_pvalue') +
+        yscale('log10', .format=TRUE) +
+        geom_text_repel(
+            aes(label=event_gene),
+            X %>%
+            slice_min(order_by=lr_pvalue, n=25),
+            max.overlaps = 50
+        ) +
+        labs(x='Index', y='log10(LR Test p-value)', 
+             title=sprintf('No. Selected Models=%s',nrow(X)))
+    
+     plts[['examples-top_overall-table']] = X %>%
+        dplyr::select(cols_oi) %>%
+        slice_min(order_by=lr_pvalue, n=100) %>%
+        ggtexttable()
+    
+    plts[['examples-top_by_protein_impact-scatter']] = X %>%
+        ggscatter(x='index', y='lr_pvalue', facet.by = 'term_clean') +
+        yscale('log10', .format=TRUE) +
+        geom_text_repel(
+            aes(label=event_gene),
+            X %>%
+            group_by(term_clean) %>%
+            slice_min(order_by=lr_pvalue, n=5),
+            max.overlaps = 50
+        ) +
+        labs(x='Index', y='log10(LR Test p-value)', 
+             title=sprintf('No. Selected Models=%s',nrow(X)))
+    
+     plts[['examples-top_by_protein_impact-table']] = X %>%
+        group_by(term_clean) %>%
+        slice_min(order_by=lr_pvalue, n=5) %>%
+        dplyr::select(cols_oi) %>%
+        ggtexttable()
+    
+    plts[['examples-sign_events_gene-bar']] = X %>%
+        ungroup() %>%
+        count(GENE) %>%
+        count(n) %>%
+        ggbarplot(x='n', y='nn', numeric.x.axis=TRUE, 
+                  fill='orange', color=NA) +
+        labs(x='Events per Gene', y='Count') + 
+        geom_text_repel(
+            aes(x=n,y=y,label=GENE),
+            X %>%
+            ungroup() %>%
+            count(GENE) %>%
+            group_by(n) %>%
+            slice_head(n=5) %>%
+            mutate(y=100)
+        )
+    
+    return(plts)
 }
+
 
 plot_qc = function(models){
     df = models
@@ -771,6 +868,7 @@ make_plots = function(models, results_enrich, mut_freq, protein_impact){
     plts = list(
         plot_model_selection(models, rnai, spldep, mut_freq, ontologies),
         plot_interactions(models, protein_impact),
+        plot_examples(models, protein_impact),
         
         plot_qc(models),
         plot_coefs(models),
@@ -909,7 +1007,8 @@ main = function(){
     # add interaction categories to models
     models = models %>% 
         left_join(get_interaction_categories(models, possible_interactions), 
-                  by='event_gene')
+                  by='event_gene') %>%
+        mutate(is_selected = pearson_correlation>0 & lr_pvalue<THRESH_LR_PVALUE)
     
     # run enrichments
     genes_lists = get_genes_lists(models)
