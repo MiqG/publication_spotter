@@ -15,7 +15,7 @@ from autoimpute.imputations import MultipleImputer
 SAVE_PARAMS = {'sep':'\t', 'compression':'gzip', 'index':False}
 
 ##### FUNCTIONS #####
-def load_data(input_file):
+def load_data(input_file, rows_oi_file=None):
     if 'csv' in input_file:
         data = pd.read_csv(input_file, index_col=0)
     elif 'tsv' in input_file:
@@ -23,6 +23,14 @@ def load_data(input_file):
     else:
         print('Wrong input file format.')
         data = None
+        
+    # subset
+    if rows_oi_file is not None:
+        rows_oi = pd.read_table(rows_oi_file, header=None)[0].values
+
+        print("Subsetting %s rows..." % len(rows_oi))
+        data = data.loc[data.index.isin(rows_oi)].copy()
+    
     return data
 
 
@@ -57,6 +65,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', type=str)
     parser.add_argument('--output_file', type=str)
+    parser.add_argument('--rows_oi_file', type=str, default=None)
     parser.add_argument('--method', type=str)
     parser.add_argument('--method_kws', type=str,
                         help='Example: \'{"n_neighbors":10, "weights":"distance"}\'')
@@ -70,13 +79,14 @@ def main():
     args = parse_args()
     input_file = args.input_file
     output_file = args.output_file
+    rows_oi_file = args.rows_oi_file
     method = args.method
     method_kws = json.loads(args.method_kws)
     features_as_rows = args.features_as_rows
         
     # run
     print('Loading data...')
-    data = load_data(input_file)
+    data = load_data(input_file, rows_oi_file)
     
     print('Imputing data...')
     result = impute_nan(data, method, method_kws, features_as_rows)
