@@ -48,6 +48,7 @@ PALETTE_VARS = 'uchicago'
 # protein_impact_file = file.path(ROOT,'data','raw','VastDB','PROT_IMPACT-hg38-v3.tab.gz')
 # mut_freq_file = file.path(ROOT,'data','prep','mutation_freq','CCLE.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','model_selection')
+# possible_interactions_file = file.path(ROOT,'support','possible_pairwise_interaction_categories.tsv')
 
 ##### FUNCTIONS #####
 get_genes_lists = function(models){
@@ -309,8 +310,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         group_by(is_selected,term) %>% 
         summarize(n=n()) %>% 
         drop_na() %>%
-        mutate(freq=n/sum(n),
-               term_clean=gsub(' \\(.*','',term))
+        mutate(freq=n/sum(n))
     
     plts[['model_selection-protein_impact-counts']] = prot_imp %>%
         filter(is_selected) %>%
@@ -321,6 +321,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         guides(color='none') + 
         labs(x='Protein Impact', y='Count')
     
+    palette = get_palette('BrBG', length(unique(prot_imp[['term']])))
     plts[['model_selection-protein_impact-freqs']] = prot_imp %>%
         ggbarplot(x='is_selected', y='freq', fill='term', color=NA,
                   palette=get_palette('BrBG', length(unique(prot_imp[['term']])))) + 
@@ -339,12 +340,13 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         guides(color='none') + 
         labs(x='Protein Impact', y='Count')
     
+    palette = get_palette('BrBG', length(unique(prot_imp[['term_clean']])))
     plts[['model_selection-protein_impact_clean-freqs']] = prot_imp %>%
         group_by(is_selected,term_clean) %>%
         summarize(n=sum(n)) %>%
         mutate(freq=n/sum(n)) %>%
         ggbarplot(x='is_selected', y='freq', fill='term_clean', color=NA,
-                  palette=get_palette('BrBG', length(unique(prot_imp[['term_clean']])))) + 
+                  palette=palette) + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
         labs(x='Selected Model', y='Proportion', fill='Protein Impact')
@@ -375,6 +377,111 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     return(plts)
 }
 
+
+get_interaction_categories = function(models, possible_interactions){
+    # study interaction between event inclusion and gene expression
+    possible_interactions = possible_interactions %>% 
+        mutate(combined=paste0(beta_a,beta_b,beta_ab))
+    
+    ## interactions
+    zscores = models %>% 
+        column_to_rownames("event_gene") %>% 
+        dplyr::select(paste0(c('event','gene','interaction'),"_zscore"))
+    intcats = (abs(zscores) > THRESH_ZSCORE) * sign(zscores) # p-value<0.05
+    intcats[is.na(intcats)] = 0
+    intcats = intcats %>% 
+        rownames_to_column("event_gene") %>%
+        mutate(combined = paste0(event_zscore,gene_zscore,interaction_zscore)) %>%
+        left_join(possible_interactions,by='combined') %>%
+        dplyr::select(event_gene,category,combined) %>%
+        rename(interaction_category=category, interaction_subcategory=combined)
+    
+    return(intcats)
+}
+
+
+plot_interactions = function(models, protein_impact){
+    
+    X = models %>% 
+        mutate(interaction_subcategory_clean = gsub('-1','1',interaction_subcategory)) %>%
+        mutate(is_selected = pearson_correlation>0 & lr_pvalue<THRESH_LR_PVALUE) %>%
+        left_join(protein_impact, by='EVENT')
+        
+    plts = list()
+    
+    # across event types, what's the frequency of each type of psi-tpm interaction?
+    plts[['interactions-counts']] = X %>% 
+        count(event_type, interaction_category) %>%
+        ggbarplot(x='interaction_category', y='n', facet.by = 'event_type', 
+                  label=TRUE, fill='interaction_category', color=NA, palette='Set1') + 
+        guides(fill='none') + 
+        yscale('log10', .format=TRUE) + 
+        labs(x='Interaction Category', y='Counts') +
+        theme_pubr(x.text.angle = 45, border=TRUE)
+    
+    plts[['interactions-freqs_subcategories']] = X %>%
+        group_by(interaction_category, interaction_subcategory_clean) %>%
+        summarize(n=n()) %>%
+        mutate(freq=n/sum(n)) %>%
+        ggbarplot(x='interaction_category', y='freq', fill='interaction_subcategory_clean', 
+                  color=NA, palette='Set2') +
+        theme_pubr(x.text.angle = 45, legend = 'right') +
+        labs(x='Interaction Category', y='Proportion', fill='Interaction\nSubcategory')
+    
+    # Is some interaction category associated to some protein impact?
+    palette = get_palette('BrBG', length(unique(prot_imp[['term']])))
+    plts[['interactions-protein_impact-freqs']] = X %>% 
+        group_by(interaction_category,term) %>% 
+        summarize(n=n()) %>% 
+        drop_na() %>%
+        mutate(freq= n/sum(n)) %>% 
+        ggbarplot(x='interaction_category', y='freq', fill='term', 
+                  color=NA, palette=palette) +
+        labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
+        theme_pubr(x.text.angle = 45, legend = 'right')
+    
+    palette = get_palette('BrBG', length(unique(prot_imp[['term_clean']])))
+    plts[['interactions-protein_impact_clean-freqs']] = X %>% 
+        group_by(interaction_category,term_clean) %>% 
+        summarize(n=n()) %>% 
+        drop_na() %>%
+        mutate(freq= n/sum(n)) %>% 
+        ggbarplot(x='interaction_category', y='freq', fill='term_clean', 
+                  color=NA, palette=palette) +
+        labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
+        theme_pubr(x.text.angle = 45, legend = 'right')
+    
+    # PCA of selected model coefficients
+    pca = models %>%
+        filter(is_selected) %>%
+        column_to_rownames('event_gene') %>%
+        dplyr::select(matches('coefficient')) %>%
+        mutate_all(scale) %>%
+        t() %>%
+        prcomp()
+    pcs = pca[['rotation']] %>% 
+        as.data.frame() %>% 
+        rownames_to_column('event_gene') %>%
+        left_join(X, by='event_gene')
+    plts[['interactions-category-pca']] = pcs %>% 
+        ggscatter(x='PC1', y='PC2', color='interaction_category', palette='Set1') 
+    
+    umaps = pca[['rotation']] %>% umap()
+    umaps = umaps[['layout']] %>% 
+        as.data.frame() %>% 
+        rownames_to_column('event_gene') %>%
+        left_join(X, by='event_gene')
+    plts[['interactions-category-umap']] = umaps %>% 
+        ggscatter(x='V1', y='V2', color='interaction_category', palette='Set1') + 
+        labs(x='UMAP1', y='UMAP2')
+    
+    return(plts)
+}
+
+
+plot_examples = function(models){
+    
+}
 
 plot_qc = function(models){
     df = models
@@ -468,6 +575,8 @@ plot_qc = function(models){
     
     return(plts)
 }
+
+
 
 
 plot_coefs = function(models){
@@ -660,9 +769,11 @@ plot_enrichments = function(result,
 
 make_plots = function(models, results_enrich, mut_freq, protein_impact){
     plts = list(
+        plot_model_selection(models, rnai, spldep, mut_freq, ontologies),
+        plot_interactions(models, protein_impact),
+        
         plot_qc(models),
         plot_coefs(models),
-        #plot_model_selection(models, rnai, spldep, mut_freq, ontologies),
         plot_enrichments(results_enrich[['hallmarks']], 'hallmarks'),
         plot_enrichments(results_enrich[['oncogenic_signatures']], 'oncogenic_signatures'),
         plot_enrichments(results_enrich[['GO_BP']], 'GO_BP'),
@@ -788,10 +899,17 @@ main = function(){
         "GO_BP" = read.gmt(file.path(msigdb_dir,'c5.go.bp.v7.4.symbols.gmt')),
         "protein_impact" = read_tsv(protein_impact_file) %>%
                             dplyr::rename(EVENT=EventID, term=ONTO) %>%
-                            dplyr::select(term,EVENT)
+                            dplyr::select(term,EVENT) %>%
+                            mutate(term_clean=gsub(' \\(.*','',term))
     )
     spldep = read_tsv(spldep_file)
     rnai = read_tsv(rnai_file)
+    possible_interactions = read_tsv(possible_interactions_file)
+    
+    # add interaction categories to models
+    models = models %>% 
+        left_join(get_interaction_categories(models, possible_interactions), 
+                  by='event_gene')
     
     # run enrichments
     genes_lists = get_genes_lists(models)
