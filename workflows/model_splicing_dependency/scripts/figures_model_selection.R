@@ -47,7 +47,7 @@ PALETTE_VARS = 'uchicago'
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
 # protein_impact_file = file.path(ROOT,'data','raw','VastDB','PROT_IMPACT-hg38-v3.tab.gz')
 # mut_freq_file = file.path(ROOT,'data','prep','mutation_freq','CCLE.tsv.gz')
-# figs_dir = file.path(RESULTS_DIR,'figures','eda_models')
+# figs_dir = file.path(RESULTS_DIR,'figures','model_selection')
 
 ##### FUNCTIONS #####
 get_genes_lists = function(models){
@@ -132,6 +132,247 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
     }, simplify=FALSE)
     
     return(results)
+}
+
+
+plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
+    # prep data
+    rnai = rnai %>% filter(index%in%models[['GENE']]) %>% column_to_rownames('index')
+    spldep = spldep %>% filter(index%in%models[['EVENT']]) %>% column_to_rownames('index')
+    
+    plts = list()
+    
+    # as a negative control, we selected 100 uniform gene dependencies
+    rnai_stats = data.frame(
+            rnai_med = apply(rnai,1,median, na.rm=TRUE),
+            rnai_std = apply(rnai,1,sd, na.rm=TRUE),
+            n_missing = rowSums(is.na(rnai))
+        ) %>% rownames_to_column('GENE')
+    
+    uniform_genes = rnai_stats %>% 
+        slice_min(order_by = rnai_std, n=100) %>% 
+        pull(GENE)
+    
+    plts[['model_selection-deps_sorted_vs_std']] = rnai_stats %>% 
+        arrange(-rnai_std) %>% 
+        mutate(index=row_number(), 
+               is_uniform=GENE %in% uniform_genes) %>%
+        ggplot(aes(x=index, y=rnai_std, color=is_uniform)) +
+        geom_scattermore(pixels=c(1000,1000), pointsize=4) +
+        theme_pubr() +
+        ggpubr::color_palette(palette=c('black','orange')) +
+        labs(x='Index', y='Gene Std. Demeter2', color='Uniform Dependency')
+    
+    plts[['model_selection-deps_med_vs_std']] = rnai_stats %>% 
+        mutate(is_uniform=GENE %in% uniform_genes) %>%
+        ggplot(aes(x=rnai_med, y=rnai_std, color=is_uniform)) +
+        geom_scattermore(pixels=c(1000,1000), pointsize=4) +
+        theme_pubr() +
+        ggpubr::color_palette(palette=c('black','orange')) +
+        labs(x='Gene Median Demeter2', y='Gene Std. Demeter2', 
+             color='Uniform Dependency')
+    
+    # we selected the ensemble of models by their ability to rank dependencies
+    # using likelihood ratio tests' p-values as thresholds
+    plts[['model_selection-lr_pvalue']] = models %>%
+        gghistogram(x='lr_pvalue', bins=100, fill='grey', color=NA) +
+        geom_vline(xintercept=median(models[['lr_pvalue']], na.rm=TRUE),
+                   linetype='dashed') +
+        labs(x='LR Test p-value', y='Count')
+    
+    plts[['model_selection-pearson_corr']] = models %>%
+        gghistogram(x='pearson_correlation', bins=100, fill='darkred', color=NA) +
+        geom_vline(xintercept=median(models[['pearson_correlation']], na.rm=TRUE),
+                   linetype='dashed') +
+        labs(x='Pearson Correlation (Test Set)', y='Count')
+    
+    threshs = c(
+        1e-4,5e-4,
+        1e-3,5e-3,
+        1e-2,5e-2,
+        1e-1,5e-1
+    )
+    samples_oi = intersect(colnames(rnai),colnames(spldep))
+    corrs = lapply(threshs, function(thresh){
+        models_filtered = models %>% 
+            filter(pearson_correlation>0 & lr_pvalue<thresh) 
+        
+        # from each gene, pick de event-level model that generalizes the worst
+        models_selected = models_filtered %>%
+            group_by(GENE) %>%
+            slice_min(order_by=pearson_correlation, n=1)
+        
+        events = models_selected %>% pull(EVENT)
+        genes = models_selected %>% pull(GENE)
+        
+        idx = sample(1:length(samples_oi), size=250)
+        tmp = lapply(samples_oi[idx], function(sample_oi){
+            true_dep = rnai[genes,sample_oi]
+            pred_dep = spldep[events,sample_oi]
+            test = cor.test(true_dep, pred_dep, 
+                       method='spearman', use='pairwise.complete.obs')
+            df = data.frame(
+                id = sample_oi,
+                corr = test[['estimate']][['rho']],
+                pvalue = test[['p.value']],
+                thresh = thresh,
+                total_events = nrow(models_filtered),
+                total_genes = length(genes),
+                total_uniforms = sum(genes %in% uniform_genes)
+            )
+            return(df)
+        })
+        tmp = do.call(rbind,tmp)
+        return(tmp)
+    })
+    corrs = do.call(rbind,corrs)
+    
+    plts[['model_selection-pvalue_vs_spearman']] = corrs %>% 
+        ggviolin(x='thresh', y='corr', fill='orange', color=NA) + 
+        geom_boxplot(fill=NA) +
+        labs(x='Thresholds LR Test p-value', y='Spearman Correlation',
+             title='Sample Size = 250') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-pvalue_vs_n_genes']] = corrs %>%
+        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
+        distinct() %>%
+        ggbarplot(x='thresh', y='total_genes', label=TRUE) +
+        labs(x='Thresholds LR Test p-value', y='No. Genes Selected') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-pvalue_vs_n_uniforms']] = corrs %>%
+        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
+        distinct() %>%
+        ggbarplot(x='thresh', y='total_uniforms', label=TRUE) +
+        labs(x='Thresholds LR Test p-value', y='No. Uniform Dep. Genes Selected') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-pvalue_vs_n_events']] = corrs %>%
+        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
+        distinct() %>%
+        ggbarplot(x='thresh', y='total_events', label=TRUE) +
+        labs(x='Thresholds LR Test p-value', y='No. Events Selected') +
+        theme_pubr(x.text.angle=70)
+    
+    # with this set of models, we expect to see certain properties
+    THRESH_LR_PVALUE = 0.001
+    models = models %>%
+        mutate(is_selected = pearson_correlation>0 & lr_pvalue<THRESH_LR_PVALUE) %>%
+        drop_na(is_selected)
+    
+    ## selected models come from variant events
+    plts[['model_selection-selected_vs_event_std']] = models %>%
+        ggviolin(x='is_selected', y='event_std', color=NA, trim=TRUE,
+                 fill='is_selected', palette='lancet') +
+        geom_boxplot(fill=NA) +
+        stat_compare_means(method='wilcox.test') +
+        guides(color='none', fill='none') +
+        labs(x='Selected Model', y='Event Std.')
+    
+    ## selected models are in genes less prone to have deleterious mutations
+    X = models %>%
+        left_join(mut_freq, by='GENE') %>%
+        group_by(Variant_Classification,GENE,mut_freq_per_kb) %>%
+        summarize(is_selected = any(is_selected)) %>%
+        drop_na() %>%
+        ungroup()
+    
+    plts[['model_selection-mutation_gene_count']] = X %>% 
+        count(Variant_Classification, is_selected) %>%
+        ggbarplot(x='Variant_Classification', y='n', label=TRUE, palette='lancet',
+                  fill='is_selected', color=NA, position=position_dodge(0.9)) + 
+        yscale('log10', .format=TRUE) + 
+        labs(x='Mutation Effect', y='No. Genes', 
+             fill='Selected Model') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-mutation_frequency']] = X %>% 
+        ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
+                   group=interaction(Variant_Classification,is_selected))) +
+        geom_violin(aes(fill=is_selected), color=FALSE) +
+        geom_boxplot(width=0.2, outlier.size=0.5, 
+                     position=position_dodge(0.9), fill=NA) +
+        stat_compare_means(aes(group=is_selected), 
+                           method='wilcox.test', label='p.signif') +
+        yscale('log10', .format=TRUE) + 
+        fill_palette('lancet') +
+        labs(x='Mutation Effect', y='log10(Mut. Freq. per Kb)', 
+             fill='Selected Model') +
+        theme_pubr(x.text.angle=70)
+        
+    
+    # what are the exons/genes selected?
+    ## protein impact
+    prot_imp = models %>% 
+        left_join(ontologies[['protein_impact']], by='EVENT') %>% 
+        group_by(is_selected,term) %>% 
+        summarize(n=n()) %>% 
+        drop_na() %>%
+        mutate(freq=n/sum(n),
+               term_clean=gsub(' \\(.*','',term))
+    
+    plts[['model_selection-protein_impact-counts']] = prot_imp %>%
+        filter(is_selected) %>%
+        arrange(n) %>%
+        ggbarplot(x='term', y='n', label=TRUE,
+                  fill='is_selected', color=NA, palette='lancet') + 
+        theme_pubr(x.text.angle = 45, legend='right') +
+        guides(color='none') + 
+        labs(x='Protein Impact', y='Count')
+    
+    plts[['model_selection-protein_impact-freqs']] = prot_imp %>%
+        ggbarplot(x='is_selected', y='freq', fill='term', color=NA,
+                  palette=get_palette('BrBG', length(unique(prot_imp[['term']])))) + 
+        theme_pubr(x.text.angle = 45, legend='right') +
+        guides(color='none') + 
+        labs(x='Selected Model', y='Proportion', fill='Protein Impact')
+    
+    plts[['model_selection-protein_impact_clean-counts']] = prot_imp %>%
+        filter(is_selected) %>%
+        group_by(is_selected,term_clean) %>%
+        summarize(n=sum(n)) %>%
+        arrange(n) %>%
+        ggbarplot(x='term_clean', y='n', label=TRUE,
+                  fill='is_selected', color=NA, palette='lancet') + 
+        theme_pubr(x.text.angle = 45, legend='right') +
+        guides(color='none') + 
+        labs(x='Protein Impact', y='Count')
+    
+    plts[['model_selection-protein_impact_clean-freqs']] = prot_imp %>%
+        group_by(is_selected,term_clean) %>%
+        summarize(n=sum(n)) %>%
+        mutate(freq=n/sum(n)) %>%
+        ggbarplot(x='is_selected', y='freq', fill='term_clean', color=NA,
+                  palette=get_palette('BrBG', length(unique(prot_imp[['term_clean']])))) + 
+        theme_pubr(x.text.angle = 45, legend='right') +
+        guides(color='none') + 
+        labs(x='Selected Model', y='Proportion', fill='Protein Impact')
+    
+    ## GSEA
+    genes_oi = models %>% 
+            filter(is_selected) %>% 
+            pull(GENE) %>% 
+            unique()
+    events_oi = models %>% 
+            filter(is_selected) %>% 
+            pull(EVENT)
+    universe = list(
+        'genes' = models %>% pull(GENE) %>% unique(),
+        'events' = models %>% pull(EVENT) %>% unique()
+    )
+    enrichment = run_enrichment(genes_oi, events_oi, universe, ontologies)
+    enrichment[sapply(enrichment, nrow)<1] = NULL
+    plts_enrichment = sapply(enrichment, function(res){
+        plt = dotplot(res)
+        return(plt)
+    }, simplify=FALSE)
+    names(plts_enrichment) = sprintf('model_selection-enrichment-%s',
+                                     names(plts_enrichment))
+    plts = c(plts,plts_enrichment)
+    
+    
+    return(plts)
 }
 
 
@@ -417,210 +658,11 @@ plot_enrichments = function(result,
 }
 
 
-plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
-    # prep data
-    rnai = rnai %>% filter(index%in%models[['GENE']]) %>% column_to_rownames('index')
-    spldep = spldep %>% filter(index%in%models[['EVENT']]) %>% column_to_rownames('index')
-    
-    plts = list()
-    
-    # as a negative control, we selected 100 uniform gene dependencies
-    rnai_stats = data.frame(
-            rnai_med = apply(rnai,1,median, na.rm=TRUE),
-            rnai_std = apply(rnai,1,sd, na.rm=TRUE),
-            n_missing = rowSums(is.na(rnai))
-        ) %>% rownames_to_column('GENE')
-    
-    uniform_genes = rnai_stats %>% 
-        slice_min(order_by = rnai_std, n=100) %>% 
-        pull(GENE)
-    
-    plts[['model_selection-deps_sorted_vs_std']] = rnai_stats %>% 
-        arrange(-rnai_std) %>% 
-        mutate(index=row_number(), 
-               is_uniform=GENE %in% uniform_genes) %>%
-        ggplot(aes(x=index, y=rnai_std, color=is_uniform)) +
-        geom_scattermore(pixels=c(1000,1000), pointsize=4) +
-        theme_pubr() +
-        ggpubr::color_palette(palette=c('black','orange')) +
-        labs(x='Index', y='Gene Std. Demeter2', color='Uniform Dependency')
-    
-    plts[['model_selection-deps_med_vs_std']] = rnai_stats %>% 
-        mutate(is_uniform=GENE %in% uniform_genes) %>%
-        ggplot(aes(x=rnai_med, y=rnai_std, color=is_uniform)) +
-        geom_scattermore(pixels=c(1000,1000), pointsize=4) +
-        theme_pubr() +
-        ggpubr::color_palette(palette=c('black','orange')) +
-        labs(x='Gene Median Demeter2', y='Gene Std. Demeter2', 
-             color='Uniform Dependency')
-    
-    # we selected the ensemble of models by their ability to rank dependencies
-    # using likelihood ratio tests' p-values as thresholds
-    plts[['model_selection-lr_pvalue']] = models %>%
-        gghistogram(x='lr_pvalue', bins=100, fill='grey', color=NA) +
-        geom_vline(xintercept=median(models[['lr_pvalue']], na.rm=TRUE),
-                   linetype='dashed') +
-        labs(x='LR Test p-value', y='Count')
-    
-    plts[['model_selection-pearson_corr']] = models %>%
-        gghistogram(x='pearson_correlation', bins=100, fill='darkred', color=NA) +
-        geom_vline(xintercept=median(models[['pearson_correlation']], na.rm=TRUE),
-                   linetype='dashed') +
-        labs(x='LR Test p-value', y='Count')
-    
-    threshs = c(
-        1e-4,2.5e-4,5e-4,
-        1e-3,2.5e-3,5e-3,
-        1e-2,2.5e-2,5e-2,
-        1e-1,2.5e-1,5e-1
-    )
-    samples_oi = intersect(colnames(rnai),colnames(spldep))
-    corrs = lapply(threshs, function(thresh){
-        models_filtered = models %>% 
-            filter(pearson_correlation>0 & lr_pvalue<thresh) 
-        
-        # from each gene, pick de event-level model that generalizes the worst
-        models_selected = models_filtered %>%
-            group_by(GENE) %>%
-            slice_min(order_by=pearson_correlation, n=1)
-        
-        events = models_selected %>% pull(EVENT)
-        genes = models_selected %>% pull(GENE)
-        
-        idx = sample(1:length(samples_oi), size=250)
-        tmp = lapply(samples_oi[idx], function(sample_oi){
-            true_dep = rnai[genes,sample_oi]
-            pred_dep = spldep[events,sample_oi]
-            test = cor.test(true_dep, pred_dep, 
-                       method='spearman', use='pairwise.complete.obs')
-            df = data.frame(
-                id = sample_oi,
-                corr = test[['estimate']][['rho']],
-                pvalue = test[['p.value']],
-                thresh = thresh,
-                total_events = nrow(models_filtered),
-                total_genes = length(genes),
-                total_uniforms = sum(genes %in% uniform_genes)
-            )
-            return(df)
-        })
-        tmp = do.call(rbind,tmp)
-        return(tmp)
-    })
-    corrs = do.call(rbind,corrs)
-    
-    plts[['model_selection-pvalue_vs_spearman']] = corrs %>% 
-        ggviolin(x='thresh', y='corr', fill='orange', color=NA) + 
-        geom_boxplot(fill=NA) +
-        labs(x='Thresholds LR Test p-value', y='Spearman Correlation',
-             title='Sample Size = 250')
-    
-    plts[['model_selection-pvalue_vs_n_genes']] = corrs %>%
-        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
-        distinct() %>%
-        ggbarplot(x='thresh', y='total_genes', label=TRUE) +
-        labs(x='Thresholds LR Test p-value', y='No. Genes')
-    
-    plts[['model_selection-pvalue_vs_n_uniforms']] = corrs %>%
-        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
-        distinct() %>%
-        ggbarplot(x='thresh', y='total_uniforms', label=TRUE) +
-        labs(x='Thresholds LR Test p-value', y='No. Uniform Dep. Genes')
-    
-    
-    plts[['model_selection-pvalue_vs_n_events']] = corrs %>%
-        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
-        distinct() %>%
-        ggbarplot(x='thresh', y='total_events', label=TRUE) +
-        labs(x='Thresholds LR Test p-value', y='No. Events')
-    
-    # with this set of models, we expect to see certain properties
-    THRESH_LR_PVALUE = 0.001
-    models = models %>%
-        mutate(is_selected = pearson_correlation>0 & lr_pvalue<THRESH_LR_PVALUE) %>%
-        drop_na(is_selected)
-    
-    ## selected models come from variant events
-    plts[['model_selection-selected_vs_event_std']] = models %>%
-        ggviolin(x='is_selected', y='event_std', color=NA,
-                 fill='is_selected', palette='lancet') +
-        geom_boxplot(fill=NA) +
-        stat_compare_means(method='wilcox.test') +
-        guides(color='none', fill='none') +
-        labs(x='Selected Model', y='Event Std.')
-    
-    ## selected models are in genes less prone to have deleterious mutations
-    X = models %>%
-        left_join(mut_freq, by='GENE') %>%
-        group_by(Variant_Classification,GENE,mut_freq_per_kb) %>%
-        summarize(is_selected = any(is_selected)) %>%
-        drop_na() %>%
-        ungroup()
-    
-    plts[['model_selection-mutation_frequency']] = X %>% 
-        ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
-                   group=interaction(Variant_Classification,is_selected))) +
-        geom_violin(aes(fill=is_selected), color=FALSE) +
-        geom_boxplot(width=0.2, outlier.size=0.5, 
-                     position=position_dodge(0.9), fill=NA) +
-        stat_compare_means(aes(group=is_selected), 
-                           method='wilcox.test', label='p.signif') +
-        yscale('log10') + 
-        fill_palette('lancet') +
-        labs(x='Mutation Effect', y='log10(Mut. Freq. per Kb)', 
-             fill='Selected Model') +
-        theme_pubr(x.text.angle=70)
-        
-    
-    # what are the exons/genes selected?
-    ## protein impact
-    prot_imp = models %>% 
-        left_join(ontologies[['protein_impact']], by='EVENT') %>% 
-        group_by(term,is_selected) %>% 
-        summarize(n=n()) %>% 
-        drop_na() %>%
-        mutate(freq=n/sum(n))
-    
-    plts[['model_selection-protein_impact-counts']] = prot_imp %>%
-        filter(is_selected) %>%
-        arrange(n) %>%
-        ggbarplot(x='term', y='n', fill='#ED0000FF', color=NA, label=TRUE) + 
-        theme_pubr(x.text.angle = 45) +
-        guides(color='none') + 
-        labs(x='Protein Impact', y='Count')
-    
-    ## GSEA
-    genes_oi = models %>% 
-            filter(is_selected) %>% 
-            pull(GENE) %>% 
-            unique()
-    events_oi = models %>% 
-            filter(is_selected) %>% 
-            pull(EVENT)
-    universe = list(
-        'genes' = models %>% pull(GENE) %>% unique(),
-        'events' = models %>% pull(EVENT) %>% unique()
-    )
-    enrichment = run_enrichment(genes_oi, events_oi, universe, ontologies)
-    enrichment[sapply(enrichment, nrow)<1] = NULL
-    plts_enrichment = sapply(enrichment, function(res){
-        plt = dotplot(res)
-        return(plt)
-    }, simplify=FALSE)
-    names(plts_enrichment) = sprintf('model_selection-enrichment-%s',
-                                     names(plts_enrichment))
-    plts = c(plts,plts_enrichment)
-    
-    
-    return(plts)
-}
-
-
 make_plots = function(models, results_enrich, mut_freq, protein_impact){
     plts = list(
         plot_qc(models),
         plot_coefs(models),
-        #plot_model_selection(models, rnai, spldep, ontologies),
+        #plot_model_selection(models, rnai, spldep, mut_freq, ontologies),
         plot_enrichments(results_enrich[['hallmarks']], 'hallmarks'),
         plot_enrichments(results_enrich[['oncogenic_signatures']], 'oncogenic_signatures'),
         plot_enrichments(results_enrich[['GO_BP']], 'GO_BP'),
@@ -643,6 +685,22 @@ save_plt = function(plts, plt_name, extension='.pdf',
 
 
 save_plots = function(plts, figs_dir){
+    
+    # model selection
+    save_plt(plts, 'model_selection-deps_sorted_vs_std', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-deps_med_vs_std', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-lr_pvalue', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-pearson_corr', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-pvalue_vs_spearman', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_genes', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_uniforms', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_events', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-selected_vs_event_std', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-mutation_frequency', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-enrichment-GO_BP', '.pdf', figs_dir, width=9, height=8)
+    
     # QC
     save_plt(plts, 'qc-pvalues', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'qc-n_obs_vs_pvalues', '.pdf', figs_dir, width=10, height=10)
@@ -658,16 +716,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'coefs-violins', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'coefs-barplots_top', '.pdf', figs_dir, width=10, height=10)
     
-    # model selection
-    save_plt(plts, 'model_selection-pearson_corr_vs_pvalue', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-pearson_corr_vs_nobs', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-pvalue_threshs', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-n_models_vs_threshs', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-enrichment-hallmarks', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-enrichment-oncogenic_signatures', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-enrichment-GO_BP', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-protein_impact-counts','.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'model_selection-protein_impact-props', '.pdf', figs_dir, width=10, height=10)
+    
     
     
     # enrichments
