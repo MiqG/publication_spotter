@@ -39,21 +39,21 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_std-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
+        # EDA models of splicing dependencies
+        os.path.join(RESULTS_DIR,'figures','model_selection'),
+        
         # impute splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # embed splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        
-        # EDA models of splicing dependencies
-        os.path.join(RESULTS_DIR,'figures','eda_models'),
+        #expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # EDA embeddings of splicing dependencies
-        os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
+        #os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
-        os.path.join(RESULTS_DIR,'figures','validation_crispr'),
+        #os.path.join(RESULTS_DIR,'figures','validation_crispr'),
         ## EDA known genes of interest
         # os.path.join(RESULTS_DIR,'figures','validation_genes_oi'),
         
@@ -167,18 +167,24 @@ rule embed_matrices:
 rule figures_eda_models:
     input:
         models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
+        rnai = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
+        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-EX.tsv.gz'),
         msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
         protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
-        mut_freq = os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz')
+        mut_freq = os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz'),
+        possible_interactions = os.path.join(SUPPORT_DIR,'possible_pairwise_interaction_categories.tsv')
     output:
-        directory(os.path.join(RESULTS_DIR,'figures','eda_models'))
+        directory(os.path.join(RESULTS_DIR,'figures','model_selection'))
     shell:
         """
-        Rscript scripts/figures_eda_models.R \
+        Rscript scripts/figures_model_selection.R \
                     --models_file={input.models} \
                     --msigdb_dir={input.msigdb} \
                     --protein_impact_file={input.protein_impact} \
                     --mut_freq_file={input.mut_freq} \
+                    --rnai_file={input.rnai} \
+                    --spldep_file={input.spldep} \
+                    --possible_interactions_file={input.possible_interactions} \
                     --figs_dir={output}
         """
     
@@ -199,26 +205,7 @@ rule figures_embeddings:
                     --figs_dir={output}
         """
     
-    
-rule figures_interaction_analysis:
-    input:
-        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
-        possible_interactions = os.path.join(SUPPORT_DIR,'possible_pairwise_interaction_categories.tsv'),
-        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
-        msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
-    output:
-        directory(os.path.join(RESULTS_DIR,'figures','interaction_analysis'))
-    shell:
-        """
-        Rscript scripts/figures_interaction_analysis.R \
-                    --models_file={input.models} \
-                    --possible_interactions_file={input.possible_interactions} \
-                    --protein_impact_file={input.protein_impact} \
-                    --msigdb_dir={input.msigdb} \
-                    --figs_dir={output}
-        """
-        
-        
+
 rule figures_validation_crispr:
     input:
         protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),

@@ -368,11 +368,11 @@ get_interaction_categories = function(models, possible_interactions){
 }
 
 
-plot_interactions = function(models, protein_impact){
+plot_interactions = function(models, ontologies){
     
     X = models %>% 
         mutate(interaction_subcategory_clean = gsub('-1','1',interaction_subcategory)) %>%
-        left_join(protein_impact, by='EVENT')
+        left_join(ontologies[['protein_impact']], by='EVENT')
         
     plts = list()
     
@@ -546,7 +546,7 @@ plot_examples = function(models, protein_impact){
 make_plots = function(models, rnai, spldep, mut_freq, ontologies){
     plts = list(
         plot_model_selection(models, rnai, spldep, mut_freq, ontologies),
-        plot_interactions(models, protein_impact=ontologies[['protein_impact']]),
+        plot_interactions(models, ontologies),
         plot_examples(models, protein_impact=ontologies[['protein_impact']])
     )
     plts = do.call(c,plts)
@@ -627,6 +627,9 @@ main = function(){
     msigdb_dir = args$msigdb_dir
     protein_impact_file = args$protein_impact_file
     mut_freq_file = args$mut_freq_file
+    spldep_file = args$spldep_file
+    rnai_file = args$rnai_file
+    possible_interactions_file = args$possible_interactions_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
