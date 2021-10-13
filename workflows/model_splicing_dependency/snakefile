@@ -23,7 +23,7 @@ RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 
-EVENT_TYPES = ['EX','ALTA','ALTD']
+EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD']
 
 
 ##### RULES #####
@@ -42,14 +42,17 @@ rule all:
         # EDA models of splicing dependencies
         os.path.join(RESULTS_DIR,'figures','model_selection'),
         
+        # write selected models
+        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
+        
         # impute splicing dependencies
-        #expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # embed splicing dependencies
-        #expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # EDA embeddings of splicing dependencies
-        #os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
+        os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -128,9 +131,30 @@ rule compute_splicing_dependency:
         """
     
     
+rule list_selected_models:
+    input:
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
+    params:
+        thresh_lr_pvalue = 0.001
+    run:
+        import pandas as pd
+        models = pd.read_table(input.models)
+        models = models.loc[
+            (models['lr_pvalue']<params.thresh_lr_pvalue) &
+            (models['pearson_correlation']>0)
+        ].copy()
+        
+        with open(output[0], 'w') as f:
+            for event in models['EVENT'].values:
+                f.write("%s\n" % event)
+        
+    
 rule impute_splicing_dependency:
     input:
-        os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz')
+        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
+        rows_oi = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     output:
         os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz')
     params:
@@ -141,8 +165,9 @@ rule impute_splicing_dependency:
     shell:
         """
         python {params.script_dir}/impute_nan.py \
-                    --input_file={input} \
+                    --input_file={input.spldep} \
                     --output_file={output} \
+                    --rows_oi_file={input.rows_oi} \
                     --method={params.method} \
                     --method_kws={params.method_kws} \
                     --features_as_rows={params.features_as_rows}

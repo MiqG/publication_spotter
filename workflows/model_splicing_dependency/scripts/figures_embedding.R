@@ -130,13 +130,15 @@ plot_embeddings = function(embedding, metadata, pattern, figtitle){
         ggplot(aes_string(x='PC0', y='PC1')) + 
         geom_scattermore(pixels=c(1000,1000), pointsize = 2, alpha=0.8) +
         theme_pubr() +
-        labs(title = figtitle)
+        labs(title = figtitle) +
+        theme(aspect.ratio = 1)
     
     plts[['umap']] = X %>% 
         ggplot(aes_string(x='UMAP0', y='UMAP1')) + 
         geom_scattermore(pixels=c(1000,1000), pointsize = 2, alpha=0.8) +
         theme_pubr() +
-        labs(title = figtitle)
+        labs(title = figtitle) +
+        theme(aspect.ratio = 1)
     
     plts[['umap_clusters']] = X %>%
         ggplot(aes_string(x='UMAP0', y='UMAP1', color='leiden_labels')) + 
@@ -145,7 +147,8 @@ plot_embeddings = function(embedding, metadata, pattern, figtitle){
         labs(title = figtitle) +
         ggpubr::color_palette(
             palette=get_palette('jco', length(unique(X[['leiden_labels']])))
-        )
+        ) +
+        theme(aspect.ratio = 1)
     
     
     # with metadata information    
@@ -154,9 +157,10 @@ plot_embeddings = function(embedding, metadata, pattern, figtitle){
         plt = X %>%
             drop_na(col_oi) %>%
             ggplot(aes_string(x='PC0', y='PC1', color=col_oi)) + 
-            geom_scattermore(pixels = c(1000,1000), pointsize = 2, alpha=0.8) +
+            geom_scattermore(pixels = c(1000,1000), pointsize = 5, alpha=0.8) +
             theme_pubr() +
-            labs(title = figtitle)
+            labs(title = figtitle) +
+            theme(aspect.ratio = 1)
         # set palette
         if (col_oi %in% METADATA_OI_CONT){
             palette = METADATA_PALETTES[[col_oi]]
@@ -176,9 +180,10 @@ plot_embeddings = function(embedding, metadata, pattern, figtitle){
         plt = X %>%
             drop_na(col_oi) %>%
             ggplot(aes_string(x='UMAP0', y='UMAP1', color=col_oi)) + 
-            geom_scattermore(pixels = c(500,500), pointsize = 2, alpha=0.8) +
+            geom_scattermore(pixels = c(1000,1000), pointsize = 5, alpha=0.8) +
             theme_pubr() +
-            labs(title = figtitle)
+            labs(title = figtitle) +
+            theme(aspect.ratio = 1)
         # set palette
         if (col_oi %in% METADATA_OI_CONT){
             palette = METADATA_PALETTES[[col_oi]]
@@ -288,7 +293,6 @@ main = function(){
     metadata_file = args$metadata_file
     indices_file = args$indices_file
     embedded_dependency_file = args$embedded_dependency_file
-    # splicing_dependency_file = args$splicing_dependency_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
@@ -300,7 +304,6 @@ main = function(){
         left_join(indices, by='index')
     embedding = read_tsv(embedded_dependency_file) %>%
         mutate(leiden_labels=as.factor(leiden_labels))
-    # spldep = read_tsv(splicing_dependency_file)
     
     # plot
     plts = make_plots(embedding, metadata)
