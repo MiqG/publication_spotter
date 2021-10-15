@@ -277,13 +277,13 @@ save_plots = function(plts, figs_dir){
     # splicing dependencies
     plt_names = grep('splicing_dependency', names(plts), value = TRUE)
     sapply(plt_names, function(plt_name){
-        save_plt(plts, plt_name, '.pdf', figs_dir, width=5, height=5)
+        save_plt(plts, plt_name, '.pdf', figs_dir, width=8, height=8)
     })
     
     # clusters
     plt_names = grep('clusters', names(plts), value = TRUE)
     sapply(plt_names, function(plt_name){
-        save_plt(plts, plt_name, '.pdf', figs_dir, width=5, height=5)
+        save_plt(plts, plt_name, '.pdf', figs_dir, width=8, height=8)
     })
 }
 

@@ -23,9 +23,9 @@ require(ggpubr)
 require(cowplot)
 require(scattermore)
 require(ggrepel)
-require(ComplexHeatmap)
 require(clusterProfiler)
 require(umap)
+require(ComplexHeatmap)
 require(gridExtra)
 require(ggplotify)
 
@@ -288,21 +288,35 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         labs(x='Protein Impact', y='Count')
     
     plts[['model_selection-protein_impact-freqs']] = prot_imp %>%
-        group_by(is_selected,term) %>%
+        group_by(term,is_selected) %>%
         summarize(n=n()) %>%
         drop_na() %>%
         mutate(freq=n/sum(n)) %>%
-        ggbarplot(x='is_selected', y='freq', fill='term', color=NA,
-                  palette=get_palette('BrBG', k=length(unique(prot_imp[['term']])))) + 
+        filter(is_selected) %>%
+        ggbarplot(x='term', y='freq', fill='is_selected', 
+                  color=NA, palette='lancet') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
-        labs(x='Selected Model', y='Proportion', fill='Protein Impact')
+        labs(x='Selected Model', y='Proportion')
+    
+#      prot_imp %>%
+#         group_by(is_selected,term) %>%
+#         summarize(n=n()) %>%
+#         drop_na() %>%
+#         mutate(freq=n/sum(n)) %>%
+#         ggbarplot(x='is_selected', y='freq', fill='term', color=NA,
+#                   palette=get_palette('BrBG', k=length(unique(prot_imp[['term']])))) + 
+#         theme_pubr(x.text.angle = 45, legend='right') +
+#         guides(color='none') + 
+#         labs(x='Selected Model', y='Proportion', fill='Protein Impact')
+    
     
     plts[['model_selection-protein_impact_clean-counts']] = prot_imp %>%
         filter(is_selected) %>%
         group_by(is_selected,term_clean) %>%
         summarize(n=n()) %>%
         arrange(n) %>%
+        drop_na() %>%
         ggbarplot(x='term_clean', y='n', label=TRUE,
                   fill='is_selected', color=NA, palette='lancet') + 
         theme_pubr(x.text.angle = 45, legend='right') +
@@ -310,14 +324,15 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         labs(x='Protein Impact', y='Count')
     
     plts[['model_selection-protein_impact_clean-freqs']] = prot_imp %>%
-        group_by(is_selected,term_clean) %>%
+        group_by(term_clean,is_selected) %>%
         summarize(n=n()) %>%
         mutate(freq=n/sum(n)) %>%
-        ggbarplot(x='is_selected', y='freq', fill='term_clean', color=NA,
-                  palette='BrBG') + 
+        filter(is_selected) %>%
+        ggbarplot(x='term_clean', y='freq', fill='is_selected', color=NA,
+                  palette='lancet') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
-        labs(x='Selected Model', y='Proportion', fill='Protein Impact')
+        labs(x='Selected Model', y='Proportion')
     
     ## GSEA
     genes_oi = models %>% 
@@ -400,24 +415,24 @@ plot_interactions = function(models, ontologies){
     # Is some interaction category associated to some protein impact?
     plts[['interactions-protein_impact-freqs']] = X %>% 
         filter(is_selected) %>%
-        group_by(interaction_category,term) %>% 
+        group_by(term,interaction_category) %>% 
         summarize(n=n()) %>% 
         drop_na() %>%
         mutate(freq= n/sum(n)) %>% 
-        ggbarplot(x='interaction_category', y='freq', fill='term', 
-                  color=NA, palette=get_palette('BrBG',length(unique(X[['term']])))) +
-        labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
+        ggbarplot(x='term', y='freq', fill='interaction_category', 
+                  color=NA, palette='Set1') +
+        labs(x='Interaction Category', y='Proportion', fill='Interaction\nCategory') +
         theme_pubr(x.text.angle = 45, legend = 'right')
     
     plts[['interactions-protein_impact_clean-freqs']] = X %>% 
         filter(is_selected) %>%
-        group_by(interaction_category,term_clean) %>% 
+        group_by(term_clean,interaction_category) %>% 
         summarize(n=n()) %>% 
         drop_na() %>%
         mutate(freq= n/sum(n)) %>% 
-        ggbarplot(x='interaction_category', y='freq', fill='term_clean', 
-                  color=NA, palette='BrBG') +
-        labs(x='Interaction Category', y='Proportion', fill='Protein Impact') +
+        ggbarplot(x='term_clean', y='freq', fill='interaction_category', 
+                  color=NA, palette='Set1') +
+        labs(x='Interaction Category', y='Proportion', fill='Interaction\nCategory') +
         theme_pubr(x.text.angle = 45, legend = 'right')
     
     # PCA of selected model coefficients

@@ -16,8 +16,8 @@ require(ggpubr)
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
 
-MIN_OBS = 50
 RANDOM_SEED = 1234
+THRESH_LR_PVALUE = 0.001
 
 # Development
 # -----------
@@ -52,6 +52,7 @@ sample_splicing_dependencies = function(models, psi, genexpr, total, random_seed
         # sample coefficients
         intercept_coefs = rnorm(n=total, mean=pull(models[event,],intercept_coefficient), sd=pull(models[event,],intercept_stderr))
         event_coefs = rnorm(n=total, mean=pull(models[event,],event_coefficient), sd=pull(models[event,],event_stderr))
+        gene_coefs = rnorm(n=total, mean=pull(models[event,],gene_coefficient), sd=pull(models[event,],gene_stderr))
         interaction_coefs = rnorm(n=total, mean=pull(models[event,],interaction_coefficient), sd=pull(models[event,],interaction_stderr))
         
         # make predictions for each combination of coefficients
@@ -64,7 +65,7 @@ sample_splicing_dependencies = function(models, psi, genexpr, total, random_seed
             x_psi = (psi[event,sample_oi] - psi_mean)/psi_std
             x_genexpr = (genexpr[gene,sample_oi] - genexpr_mean)/genexpr_std
             x_interaction = x_psi * x_genexpr
-            y_pred = intercept_coefs + event_coefs*x_psi + interaction_coefs*x_interaction
+            y_pred = intercept_coefs + event_coefs*x_psi + gene_coefs*x_genexpr + interaction_coefs*x_interaction
             return(y_pred)
         }, simplify=FALSE)
         
@@ -124,20 +125,33 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
    
     
     plts = list()
+    # CRISPR effects on selected exons
+    plts[['crispr_selected-scatter']] = crispr_screen %>%
+        left_join(models, by='EVENT') %>%
+        mutate(log10_pvalue=-log10(pvalue)) %>%
+        filter(is_selected) %>%
+        ggscatter(x='event_gene', y='fitness_score', size='log10_pvalue',
+                  color='cell_line', position=position_dodge(0.2)) +
+        facet_wrap(~comparison, ncol=2) +
+        labs(x='Event & Gene', y='Fitness Score', 
+             color='Cell Line', size='-log10(p-value)') +
+        theme_pubr(x.text.angle = 70, border=TRUE) +
+        geom_hline(yintercept=0, linetype='dashed')
+    
     # distributions of correlations with predictions (sampling size)
     plts[['predictions-corrs_violins']] = corrs %>% 
-        filter(comparison %in% c('0d-vs-14d','0d-vs-8d')) %>% 
+        #filter(comparison %in% c('0d-vs-14d','0d-vs-8d')) %>% 
         ggviolin(x='comparison', y='rho', facet.by='cell_line', 
                  fill='cell_line', color=FALSE) + 
         geom_boxplot(width=0.5) +
         guides(fill='none') +
         labs(x='Comparison', y='Spearman Correlation') +
-        stat_compare_means(method='wilcox.test')
-        
+        stat_compare_means(method='wilcox.test') + 
+        theme_pubr(x.text.angle = 70)
     
     # distributions of pvalues of correlations with predictions
     plts[['predictions-corrs_pvalues']] = corrs %>% 
-        filter(comparison %in% c('0d-vs-14d','0d-vs-8d')) %>% 
+        # filter(comparison %in% c('0d-vs-14d','0d-vs-8d')) %>% 
         gghistogram(x='pvalue', facet.by=c('comparison','cell_line'), bins=50)
     
     # scatter of the average predictions
@@ -157,21 +171,21 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
                   pred_min=quantile(pred_fitness,0.025,na.rm=TRUE)) %>% 
         left_join(crispr_screen, by=c('EVENT','cell_line')) %>% 
         left_join(models, by='EVENT') %>%
-        filter(comparison %in% c('0d-vs-14d','0d-vs-8d')) %>%
+        # filter(comparison %in% c('0d-vs-14d','0d-vs-8d')) %>%
         mutate(diff=fitness_score - pred_mean) %>%
         ungroup()
     
     
     plts[['predictions-means_scatter']] = X %>%
-        # filter(!(EVENT %in% 'HsaEX0043015')) %>%
         ggplot(aes(x=fitness_score, y=pred_mean)) +
-        facet_wrap(comparison~cell_line) +
-        geom_point(aes(color=target_type), size=1) +
-        geom_errorbar(aes(ymin=pred_min, ymax=pred_max, color=target_type), 
+        facet_wrap(comparison~cell_line, ncol=2) +
+        geom_point(aes(color=is_selected), size=1) +
+        geom_errorbar(aes(ymin=pred_min, ymax=pred_max, color=is_selected), 
                       width=0.05) +
         theme_pubr(border=TRUE) +    
-        ggpubr::color_palette('jco') + 
-        geom_abline(intercept = 0, slope = 1, linetype='dashed') +
+        ggpubr::color_palette('jco') +
+        stat_cor(aes(color=is_selected),method='spearman') +
+        geom_abline(intercept = 0, slope = 1, linetype='dashed') + 
         geom_text_repel(
             aes(label=event_gene),
             X %>%
@@ -179,7 +193,6 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
             slice_max(order_by = abs(diff), n=3)
         ) +
         labs(x='True Splicing Dependency', y='Predicted Splicing Dependency')
-    
 
     plts[['predictions-diff_vs_std']] = X %>%
         ggscatter(x='event_std', y='diff', 
@@ -191,7 +204,6 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
             group_by(comparison,cell_line) %>%
             slice_max(order_by=abs(diff), n=3)
         )
-        
     
     # what are the events that we could map and compare?
     plts[['predictions-protein_impact']] = X %>% 
@@ -202,7 +214,6 @@ plot_crispr_validation = function(crispr_screen, spldeps, models){
         theme_pubr(x.text.angle=45, border=TRUE) +
         labs(x='Predicted Protein Impact', y='Count', fill='CRISPR Target') +
         ylim(0,50)
-    
     
     return(plts)
 }
@@ -228,11 +239,12 @@ save_plt = function(plts, plt_name, extension='.pdf',
 
 
 save_plots = function(plts, figs_dir){
+    save_plt(plts, 'crispr_selected-scatter', '.pdf', figs_dir, width=7, height=7)
     save_plt(plts, 'predictions-corrs_violins', '.pdf', figs_dir, width=10, height=6)
     save_plt(plts, 'predictions-corrs_pvalues', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'predictions-means_scatter', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'predictions-diff_vs_std', '.pdf', figs_dir, width=10, height=10)
-    save_plt(plts, 'predictions-protein_impact', '.pdf', figs_dir, width=10, height=5)
+    save_plt(plts, 'predictions-protein_impact', '.pdf', figs_dir, width=7, height=5)
 }
 
 
@@ -253,8 +265,8 @@ main = function(){
     # load
     ## Spotter
     models = read_tsv(models_file) %>%
-        filter(n_obs>MIN_OBS) %>%
         mutate(
+            is_selected = pearson_correlation>0 & lr_pvalue<THRESH_LR_PVALUE,
             event_gene = paste0(EVENT,'_',GENE),
             event_type = ifelse(grepl('EX',EVENT),'EX','ALT')
         )
@@ -270,6 +282,20 @@ main = function(){
     genexpr = read_tsv(genexpr_file) %>% 
         dplyr::rename(HeLa=SRR7946515_1, PC9=SRR7946516_1)
     
+    tmp = crispr_screen %>% 
+        left_join(models, by='EVENT') %>%
+        left_join(
+            psi %>% 
+            pivot_longer(c(HeLa,PC9), 
+                         names_to = 'cell_line', 
+                         values_to = 'psi'), by=c('EVENT','cell_line')) %>% 
+        left_join(
+            genexpr %>% 
+            dplyr::rename(ENSEMBL=ID) %>%
+            pivot_longer(c(HeLa,PC9), 
+                         names_to = 'cell_line', 
+                         values_to = 'genexpr'), by=c('ENSEMBL','cell_line')) %>%
+        mutate(genexpr=log2(genexpr+1))
     
     # filter available data
     common_events = Reduce(intersect, list(crispr_screen[['EVENT']], psi[['EVENT']], models[['EVENT']]))

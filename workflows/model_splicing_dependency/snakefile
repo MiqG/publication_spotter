@@ -189,7 +189,7 @@ rule embed_matrices:
         """
         
         
-rule figures_eda_models:
+rule figures_model_selection:
     input:
         models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
         rnai = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
