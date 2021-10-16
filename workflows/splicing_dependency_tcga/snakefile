@@ -47,17 +47,31 @@ CANCER_TYPES = [
 ]
 
 RESPONSE_CANCER_TYPES = [
-    'UCEC',
-    'PRAD',
-    'LIHC',
-    'LGG',
-    'BRCA',
-    'LUAD',
-    'HNSC',
-    'COAD',
-    'READ',
+    'BRCA', 
+    'COAD', 
+    'HNSC', 
+    'LGG', 
+    'LIHC', 
+    'LUAD', 
+    'PRAD', 
+    'READ', 
+    'UCEC', 
     'UCS'
 ]
+
+RESPONSE_TREATMENT = {
+    'BRCA': 'CYCLOPHOSPHAMIDE+DOXORUBICIN', 
+    'COAD': 'FLUOROURACIL+LEUCOVORIN+OXALIPLATIN', 
+    'HNSC': 'CISPLATIN', 
+    'LGG': 'TEMOZOLOMIDE', 
+    'LIHC': 'SORAFENIB', 
+    'LUAD': 'CARBOPLATIN+PACLITAXEL', 
+    'PRAD': 'LEUPROLIDE', 
+    'READ': 'FLUOROURACIL+LEUCOVORIN+OXALIPLATIN', 
+    'UCEC': 'CARBOPLATIN+PACLITAXEL', 
+    'UCS': 'CARBOPLATIN+PACLITAXEL'
+}
+
 DATASETS = ['psi','spldep']
 COMPARISONS = ['PrimaryTumor_vs_SolidTissueNormal','RESPONDER_vs_NONRESPONDER']
 ##### RULES #####
@@ -72,7 +86,7 @@ rule all:
         ## PSI
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
         
-        # differential drug response TCGA
+        # differential drug response TCGA (consider cancer + drug)
         ## splicing dependency
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), cancer=RESPONSE_CANCER_TYPES, event_type=EVENT_TYPES),
         ## PSI
@@ -91,7 +105,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES),
         
         # plot
-        expand(os.path.join(RESULTS_DIR,'figures','diffspldep-{comparison}-{event_type}'), comparison=COMPARISONS, event_type=EVENT_TYPES)
+        # expand(os.path.join(RESULTS_DIR,'figures','diffspldep-{comparison}-{event_type}'), comparison=COMPARISONS, event_type=EVENT_TYPES)
         
 
 rule compute_splicing_dependency_tcga:
@@ -278,8 +292,10 @@ rule combine_differential_analyses_drug_response:
             
             # add cancer type
             cancer_type = os.path.basename(os.path.dirname(psi_file))
+            treatment = RESPONSE_TREATMENT[cancer_type]
             print(cancer_type)
             df['cancer_type'] = cancer_type
+            df['treatment'] = treatment
             
             dfs.append(df)
             
