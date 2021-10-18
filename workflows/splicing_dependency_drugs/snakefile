@@ -1,0 +1,57 @@
+"""
+Author: Miquel Anglada Girotto
+Contact: miquelangladagirotto [at] gmail [dot] com
+Last Update: 2021-01-12
+
+Workflow purpose
+--------------
+Workflow to analyze putative associations between exons and cancer at single-exon level.
+
+
+Outline
+-------
+        
+"""
+
+import os
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
+MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+SRC_DIR = os.path.join(ROOT,'src')
+SUPPORT_DIR = os.path.join(ROOT,'support')
+
+EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD']
+DRUGS = []
+
+##### RULES #####
+rule all:
+    input:
+        # associations drug responses and splicing dependencies
+        expand(os.path.join(RESULTS_DIR,'models_drug_response-gdsc-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+
+    
+rule model_drug_response:
+    input:
+        spldep = os.path.join(MODELS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
+        drug_response = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
+        selected_models = os.path.join(MODELS_DIR,'files','selected_models-{event_type}.txt'),
+        annot = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'models_drug_response-gdsc-{event_type}.tsv.gz')
+    threads: 15
+    shell:
+        """
+        python scripts/model_drug_response.py \
+                    --spldep_file={input.spldep} \
+                    --drug_file={input.drug_response} \
+                    --annotation_file={input.annot} \
+                    --selected_models_file={input.selected_models} \
+                    --n_jobs={threads} \
+                    --output_file={output}
+        """
+        
+    
