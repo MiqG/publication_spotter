@@ -105,7 +105,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES),
         
         # plot
-        # expand(os.path.join(RESULTS_DIR,'figures','diffspldep-{comparison}-{event_type}'), comparison=COMPARISONS, event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'figures','differential_analysis-{event_type}'), event_type=EVENT_TYPES)
         
 
 rule compute_splicing_dependency_tcga:
@@ -198,9 +198,9 @@ rule differential_splicing_dependency_drug_response:
                     --data_file={input.spldep_mean} \
                     --metadata_file={input.metadata} \
                     --sample_col='sampleID' \
-                    --comparison_col='sample_type' \
-                    --condition_a='Primary Tumor' \
-                    --condition_b='Solid Tissue Normal' \
+                    --comparison_col='response' \
+                    --condition_a='RESPONDER' \
+                    --condition_b='NON RESPONDER' \
                     --output_file={output} \
                     --padj_method={params.padj_method} 
         """
@@ -221,9 +221,9 @@ rule differential_psi_drug_response:
                     --data_file={input.psi} \
                     --metadata_file={input.metadata} \
                     --sample_col='sampleID' \
-                    --comparison_col='sample_type' \
-                    --condition_a='Primary Tumor' \
-                    --condition_b='Solid Tissue Normal' \
+                    --comparison_col='response' \
+                    --condition_a='RESPONDER' \
+                    --condition_b='NON RESPONDER' \
                     --output_file={output} \
                     --padj_method={params.padj_method} 
         """
@@ -374,16 +374,22 @@ rule combine_gsea_results_drug_response:
     
 rule figures_differential_analysis:
     input:
-        diff_result = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-{comparison}-{event_type}.tsv.gz'),
+        diff_result_sample = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'),
+        diff_result_response = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'),
         annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-        gsea_result = os.path.join(RESULTS_DIR,'files','PANCAN','gsea-{comparison}-{event_type}.tsv.gz')
+        selected_events = os.path.join(MODELS_DIR,'files','selected_models-EX.txt'),
+        metadata = os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
+        spldep = os.path.join(RESULTS_DIR,'files','BRCA','splicing_dependency_mean-EX.tsv.gz')
     output:
-        directory(os.path.join(RESULTS_DIR,'figures','diffspldep-{comparison}-{event_type}'))
+        directory(os.path.join(RESULTS_DIR,'figures','differential_analysis-{event_type}'))
     shell:
         """
         Rscript scripts/figures_differential_analysis.R \
-                    --diff_result_file={input.diff_result} \
+                    --diff_result_sample_file={input.diff_result_sample} \
+                    --diff_result_response_file={input.diff_result_response} \
+                    --selected_events_file={input.selected_events} \
                     --annotation_file={input.annotation} \
-                    --gsea_result_file={input.gsea_result} \
+                    --spldep_file={input.spldep} \
+                    --metadata_file={input.metadata} \
                     --figs_dir={output}
         """
