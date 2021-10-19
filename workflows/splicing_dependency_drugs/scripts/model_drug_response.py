@@ -14,9 +14,11 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 from scipy import stats
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from limix.qtl import scan
 
 
 """
@@ -62,35 +64,41 @@ def load_data(spldep_file, drug_file, annotation_file, selected_models_file=None
     return spldep, drug, annotation
 
 
-def fit_olsmodel(y, X):
+def get_drug_pcs(drug):
+    drugmat = drug.pivot_table(
+        index="DRUG_NAME",
+        columns="ARXSPAN_ID",
+        values="IC50_PUBLISHED",
+        aggfunc=np.median,
+    )
+    drugmat = drugmat.apply(lambda x: x.fillna(np.median(x.dropna())), axis=1)
+    pca = PCA(1)
+    pca.fit(drugmat)
+    pcs = pd.DataFrame(
+        pca.components_.T,
+        index=drugmat.columns,
+        columns=["PC%s" % (n + 1) for n in range(pca.n_components_)],
+    )
+    return pcs
+    
+    
+def fit_limixmodel(y, X, sigma):
     event = X.columns[0]
 
-    # fit linear model to training data
-    model = sm.OLS(y, X).fit()
-
-    # log-likelihood test
-    model_null = sm.OLS(y, X[["intercept"]]).fit()
-    lr_stat, lr_pvalue, _ = model.compare_lr_test(model_null)
-
-    # score using test data
-    prediction = model.predict(X)
-    pearson_coef, pearson_pvalue = stats.pearsonr(prediction, y)
-    spearman_coef, spearman_pvalue = stats.spearmanr(prediction, y)
+    # Linear Mixed Model
+    m = X[["intercept","PC1"]]  # covariates
+    K = sigma.loc[y.index, y.index]  # kinship
+    lmm = scan(X[[event]], y, K=K, M=m, lik="normal", verbose=False)
+    model = lmm.effsizes["h2"].set_index("effect_name")
+    lr_pvalue = lmm.stats["pv20"].values[0]
 
     # prepare output
     summary = pd.DataFrame(
         {
-            "coefficient": model.params,
-            "stderr": model.bse,
-            "zscore": model.params / model.bse,
-            "pvalue": model.pvalues,
-            "n_obs": model.nobs,
-            "rsquared": model.rsquared,
-            "pearson_correlation": pearson_coef,
-            "pearson_pvalue": pearson_pvalue,
-            "spearman_correlation": spearman_coef,
-            "spearman_pvalue": spearman_pvalue,
-            "lr_stat": lr_stat,
+            "coefficient": model["effsize"],
+            "stderr": model["effsize_se"],
+            "zscore": model["effsize"] / model["effsize_se"],
+            "n_obs": len(y),
             "lr_pvalue": lr_pvalue,
         }
     )
@@ -98,17 +106,15 @@ def fit_olsmodel(y, X):
     return summary
 
 
-def fit_single_model(y, X, method):
-    methods = {
-        "OLS": fit_olsmodel,
-    }
-    summary = methods[method](y, X)
+def fit_single_model(y, X, sigma, method):
+    methods = {"limix": fit_limixmodel}
+    summary = methods[method](y, X, sigma)
     return summary
 
 
-def fit_model(y_drug, x_spldep, ensembl, gene, method):
+def fit_model(y_drug, x_spldep, x_pcs, sigma, ensembl, gene, method):
 
-    X = pd.DataFrame(x_spldep)
+    X = pd.concat([x_spldep, x_pcs['PC1']], axis=1)
     y = y_drug
 
     # dropna
@@ -121,7 +127,7 @@ def fit_model(y_drug, x_spldep, ensembl, gene, method):
         X.values[:, :] = StandardScaler().fit_transform(X)
         X["intercept"] = 1.0
 
-        summary = fit_single_model(y, X, method)
+        summary = fit_single_model(y, X, sigma, method)
 
     except:
         X["interaction"] = np.nan
@@ -132,14 +138,7 @@ def fit_model(y_drug, x_spldep, ensembl, gene, method):
                 "coefficient": [np.nan] * X.shape[1],
                 "stderr": np.nan,
                 "zscore": np.nan,
-                "pvalue": np.nan,
                 "n_obs": np.nan,
-                "rsquared": np.nan,
-                "pearson_correlation": np.nan,
-                "pearson_pvalue": np.nan,
-                "spearman_correlation": np.nan,
-                "spearman_pvalue": np.nan,
-                "lr_stat": np.nan,
                 "lr_pvalue": np.nan,
             },
             index=X.columns,
@@ -154,17 +153,9 @@ def fit_model(y_drug, x_spldep, ensembl, gene, method):
             "spldep_coefficient": summary.loc[x_spldep.name, "coefficient"],
             "spldep_stderr": summary.loc[x_spldep.name, "stderr"],
             "spldep_zscore": summary.loc[x_spldep.name, "zscore"],
-            "spldep_pvalue": summary.loc[x_spldep.name, "pvalue"],
             "intercept_coefficient": summary.loc["intercept", "coefficient"],
             "intercept_stderr": summary.loc["intercept", "stderr"],
             "intercept_zscore": summary.loc["intercept", "zscore"],
-            "intercept_pvalue": summary.loc["intercept", "pvalue"],
-            "rsquared": summary.loc[x_spldep.name, "rsquared"],
-            "pearson_correlation": summary.loc[x_spldep.name, "pearson_correlation"],
-            "pearson_pvalue": summary.loc[x_spldep.name, "pearson_pvalue"],
-            "spearman_correlation": summary.loc[x_spldep.name, "spearman_correlation"],
-            "spearman_pvalue": summary.loc[x_spldep.name, "spearman_pvalue"],
-            "lr_stat": summary.loc[x_spldep.name, "lr_stat"],
             "lr_pvalue": summary.loc[x_spldep.name, "lr_pvalue"],
             "n_obs": summary.loc[x_spldep.name, "n_obs"],
             "spldep_mean": x_spldep.mean(),
@@ -175,12 +166,13 @@ def fit_model(y_drug, x_spldep, ensembl, gene, method):
     return summary
 
 
-def fit_models(spldep, drug, annotation, n_jobs):
+def fit_models(spldep, drug, pcs, annotation, n_jobs):
+    sigma = spldep.cov()
     drugs_oi = drug["DRUG_NAME"].unique()
     results = []
     for drug_oi in drugs_oi:
         print(drug_oi)
-        
+
         # prepare drug target variable
         y_drug = drug.loc[drug["DRUG_NAME"] == drug_oi]
         y_drug = pd.Series(
@@ -192,7 +184,13 @@ def fit_models(spldep, drug, annotation, n_jobs):
         # run against all events
         res = Parallel(n_jobs=n_jobs)(
             delayed(fit_model)(
-                y_drug, spldep.loc[event, y_drug.index], ensembl, gene, method="OLS"
+                y_drug,
+                spldep.loc[event, y_drug.index],
+                pcs.loc[y_drug.index],
+                sigma,
+                ensembl,
+                gene,
+                method="limix",
             )
             for event, ensembl, gene in tqdm(annotation.values)
         )
@@ -239,8 +237,11 @@ def main():
         spldep_file, drug_file, annotation_file, selected_models_file
     )
 
+    print("Computing drug profiles PC1...")
+    pcs = get_drug_pcs(drug)
+    
     print("Fitting models...")
-    result = fit_models(spldep, drug, annotation, n_jobs)
+    result = fit_models(spldep, drug, pcs, annotation, n_jobs)
 
     print("Saving results...")
     result.to_csv(output_file, sep="\t", compression="gzip", index=False)
