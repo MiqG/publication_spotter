@@ -296,9 +296,10 @@ plot_spldeps_pt = function(diff_result, spldep, metadata){
         geom_text_repel(
             aes(label=event_gene),
             X %>%
-            filter(prop_spldep>0.22 & abs(med_spldep)>0.2) %>%
+            filter(prop_spldep>0.25 & abs(med_spldep)>0.25) %>%
             ungroup() %>%
-            arrange(event_gene)
+            arrange(event_gene),
+            max.overlaps=50
         ) +
         labs(x='Proportion of Spl. Dep.', y='median(Spl. Dep.)')
     

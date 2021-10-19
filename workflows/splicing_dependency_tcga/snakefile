@@ -79,7 +79,10 @@ rule all:
     input:
         # compute splicing dependencies TCGA
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
-
+        
+        # impute splicing dependencies TCGA
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
+        
         # differential sample type TCGA
         ## splicing dependency
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
@@ -134,6 +137,27 @@ rule compute_splicing_dependency_tcga:
                     --spldep_mean_file={output.spldep_mean} \
                     --spldep_std_file={output.spldep_std} \
                     --n_jobs={threads}
+        """
+        
+        
+rule impute_splicing_dependency:
+    input:
+        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        method = 'knn',
+        method_kws = '\'{"n_neighbors":5}\'',
+        features_as_rows = True
+    shell:
+        """
+        python {params.script_dir}/impute_nan.py \
+                    --input_file={input.spldep} \
+                    --output_file={output} \
+                    --method={params.method} \
+                    --method_kws={params.method_kws} \
+                    --features_as_rows={params.features_as_rows}
         """
         
         
@@ -371,7 +395,29 @@ rule combine_gsea_results_drug_response:
         dfs = pd.concat(dfs)  
         dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
         
-    
+
+rule model_drug_response:
+    input:
+        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'),
+        psi = os.path.join(PREP_DIR,'event_psi_imputed','{cancer}.tsv'),
+        metadata = os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz'),
+        selected_models = os.path.join(MODELS_DIR,'files','selected_models-{event_type}.txt')
+    threads: 10
+    params:
+        method='RandomForest',
+        method_kws='\'{"n_neighbors":5}\''
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz')
+    shell:
+        """
+        python {params.script_dir}/model_drug_response.py \
+                    --spldep_file={input.spldep} \
+                    --psi_file={input.psi} \
+                    --metadata_file={input.metadata} \
+                    --output_file={output}
+        """
+        
+        
 rule figures_differential_analysis:
     input:
         diff_result_sample = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'),
