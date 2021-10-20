@@ -27,6 +27,7 @@ source(file.path(ROOT,'src','R','utils.R'))
 # variables
 THRESH_FDR = 0.05
 THRESH_MEDIAN_DIFF = 5
+MIN_SAMPLES = 10
 
 # Development
 # -----------
@@ -37,7 +38,7 @@ THRESH_MEDIAN_DIFF = 5
 # diff_result_response_file = file.path(RESULTS_DIR,'files','PANCAN','mannwhitneyu-RESPONDER_vs_NONRESPONDER-EX.tsv.gz')
 # annotation_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
 # gsea_result_file = file.path(RESULTS_DIR,'files','PANCAN','gsea-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
-# figs_dir = file.path(RESULTS_DIR,'figures','differential_analysis')
+# figs_dir = file.path(RESULTS_DIR,'figures','differential_analysis-EX')
 # selected_events_file = file.path(ROOT,'results','model_splicing_dependency','files','selected_models-EX.txt')
 # spldep_file = file.path(RESULTS_DIR,'files','BRCA','splicing_dependency_mean-EX.tsv.gz')
 # spldep_luad_file = file.path(RESULTS_DIR,'files','LUAD','splicing_dependency_mean-EX.tsv.gz')
@@ -165,11 +166,33 @@ plot_top_candidates_response = function(diff_result){
 
 
 plot_top_candidates_sample_type = function(diff_result){
+    plts = list()
+
+    # how many samples do we have for each cancer and sample type?
+    X = diff_result %>% 
+        mutate(PT = `psi__condition_a-n_present` + `psi__condition_a-n_nan`,
+               STN = `psi__condition_b-n_present` + `psi__condition_b-n_nan`) %>% 
+        distinct(cancer_type,PT,STN) %>%
+        pivot_longer(c(PT,STN),names_to='sample_type',values_to='n')
+    plts[['top_samples-sample_counts_cancer']] = X %>% 
+        ggbarplot(x='cancer_type', y='n', fill='sample_type', color=NA, lab.size=3,
+                  position=position_dodge(0.7), label=TRUE, palette='lancet') + 
+        labs(x='Cancer Type', y='No. Samples') + 
+        theme_pubr(x.text.angle = 45) + 
+        geom_hline(yintercept=10, linetype='dashed')
+    
+    # ranking with differential analyses
+    cancers_oi = X %>% 
+        group_by(cancer_type) %>% 
+        summarize(to_keep=sum(n >= MIN_SAMPLES)==2) %>% 
+        filter(to_keep) %>% 
+        pull(cancer_type)
+    
     X = diff_result %>%
+        filter(cancer_type %in% cancers_oi) %>%
         mutate(sign_dpsi = sign(psi__median_diff),
                sign_spldep = sign(`spldep__condition_a-median`))
     
-    plts = list()
     plts[['top_samples-dpsi_vs_spldep-scatter']] = X %>%
         ggplot(aes(x=psi__median_diff, 
                    y=`spldep__condition_a-median`, 
@@ -196,6 +219,7 @@ plot_top_candidates_sample_type = function(diff_result){
         labs(x='Cancer Type', y='No. Significant Events')
    
     plts[['top_samples-dpsi_vs_spldep-candidates']] = X %>% 
+        filter(cancer_type %in% cancers_oi) %>%
         filter(psi__is_significant & 
                ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>%
         arrange(-`spldep__condition_a-median`) %>%
@@ -383,6 +407,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
 
 save_plots = function(plts, figs_dir){
     # top candidates sample type
+    save_plt(plts, 'top_samples-sample_counts_cancer', '.pdf', figs_dir, width=6, height=4)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-scatter', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates', '.pdf', figs_dir, width=10, height=10)
