@@ -31,7 +31,10 @@ DRUGS = []
 rule all:
     input:
         # associations drug responses and splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'models_drug_response-gdsc-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # plot models
+        os.path.join(RESULTS_DIR,'figures','model_drug_response')
 
     
 rule model_drug_response:
@@ -41,11 +44,11 @@ rule model_drug_response:
         selected_models = os.path.join(MODELS_DIR,'files','selected_models-{event_type}.txt'),
         annot = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
-        os.path.join(RESULTS_DIR,'models_drug_response-gdsc-{event_type}.tsv.gz')
+        os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-{event_type}.tsv.gz')
     threads: 15
     shell:
         """
-        python scripts/model_drug_response.py \
+        python scripts/model_drug_screens.py \
                     --spldep_file={input.spldep} \
                     --drug_file={input.drug_response} \
                     --annotation_file={input.annot} \
@@ -55,3 +58,16 @@ rule model_drug_response:
         """
         
     
+rule figures_model_drug_screens:
+    input:
+        models = os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-EX.tsv.gz'),
+        drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','model_drug_screens'))
+    shell:
+        """
+        Rscript scripts/figures_model_drug_screens.R \
+                    --models_file={input.models} \
+                    --drug_targets_file={input.drug_targets} \
+                    --figs_dir={output}
+        """

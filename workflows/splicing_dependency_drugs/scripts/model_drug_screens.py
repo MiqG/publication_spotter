@@ -176,7 +176,7 @@ def fit_models(spldep, drug, pcs, annotation, n_jobs):
         # prepare drug target variable
         y_drug = drug.loc[drug["DRUG_NAME"] == drug_oi]
         y_drug = pd.Series(
-            y_drug["IC50_PUBLISHED"].values,
+            np.log(y_drug["IC50_PUBLISHED"].values), # log-normalize
             index=y_drug["ARXSPAN_ID"].values,
             name=drug_oi,
         )
