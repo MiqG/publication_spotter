@@ -25,12 +25,12 @@ THRESH_PVALUE = 0.05
 
 # Development
 # -----------
-RAW_DIR = file.path(ROOT,'data','raw')
-PREP_DIR = file.path(ROOT,'data','prep')
-RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_drugs')
-models_file = file.path(RESULTS_DIR,'models_drug_response-gdsc-EX.tsv.gz')
-drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
-figs_dir = file.path(RESULTS_DIR,'figures','model_drug_screens')
+# RAW_DIR = file.path(ROOT,'data','raw')
+# PREP_DIR = file.path(ROOT,'data','prep')
+# RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_drugs')
+# models_file = file.path(RESULTS_DIR,'models_drug_response-gdsc-EX.tsv.gz')
+# drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+# figs_dir = file.path(RESULTS_DIR,'figures','model_drug_screens')
 
 ##### FUNCTIONS #####
 plot_associations = function(models, drug_targets){
