@@ -45,6 +45,7 @@ MIN_SAMPLES = 10
 # spldep_lgg_file = file.path(RESULTS_DIR,'files','LGG','splicing_dependency_mean-EX.tsv.gz')
 # metadata_response_file = file.path(PREP_DIR,'Moiso2021','drug_response.tsv.gz')
 # metadata_file = file.path(PREP_DIR,'metadata','PANCAN.tsv.gz')
+# psi_ccle_file = file.path(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
 
 ##### FUNCTIONS #####
 prep_diff_result = function(diff_result, annot, selected_events){
@@ -203,7 +204,7 @@ plot_top_candidates_sample_type = function(diff_result){
         facet_wrap(~cancer_type, ncol=4) +
         theme_pubr(border=TRUE) +
         guides(color="none") +
-        labs(x='Delta PSI', y='-log10(FDR)') +
+        labs(x='Delta PSI', y='median(Spl. Dep. in PT)') +
         ggpubr::color_palette(c("black","orange")) +
         geom_hline(yintercept=0, linetype='dashed') +
         geom_vline(xintercept=0, linetype='dashed')
@@ -331,6 +332,35 @@ plot_spldeps_pt = function(diff_result, spldep, metadata){
 }
 
 
+plot_ccle_vs_tcga = function(diff_result_sample_raw, psi_ccle){
+    # are there any low-varying events in cell lines that could be differentially spliced?
+    cancers_oi = c('BRCA','COAD','HNSC','KICH','KIRC','KIRP','LIHC','LUAD',
+                   'LUSC','PRAD','READ','THCA','UCEC')
+    common_events = intersect(diff_result_sample_raw[['index']], psi_ccle[['EVENT']])
+    psi = psi_ccle %>% filter(EVENT %in% common_events) %>% column_to_rownames('EVENT')
+    X = data.frame(ccle_std = apply(psi,1,sd,na.rm=TRUE)) %>% 
+        rownames_to_column('index') %>% 
+        left_join(diff_result_sample_raw, by='index') %>%
+        filter(cancer_type %in% cancers_oi) %>%
+        mutate(is_significant = psi__padj<THRESH_FDR & abs(psi__median_diff)>THRESH_MEDIAN_DIFF)
+    
+    plts = list()
+    plts[['ccle_vs_tcga-std_ccle_vs_dpsi']] = X %>%
+        ggplot(aes(x=ccle_std, y=abs(psi__median_diff))) +
+        geom_scattermore(
+            pixels = c(1000,1000), 
+            pointsize = 5,
+            color='#52b788') +
+        facet_wrap(~cancer_type, ncol=4) +
+        theme_pubr(border=TRUE) +
+        labs(x='Event Std. in CCLE', y='|Delta PSI|') +
+        geom_hline(yintercept=THRESH_MEDIAN_DIFF, linetype='dashed') +
+        geom_vline(xintercept=1, linetype='dashed') +
+        stat_cor(method='spearman', label.sep = '\n')
+    
+    return(plts)
+}
+
 # plot_enrichment = function(result, 
 #                             pattern='',
 #                             palette='Paired', 
@@ -384,10 +414,11 @@ plot_spldeps_pt = function(diff_result, spldep, metadata){
 # }
 
 
-make_plots = function(diff_result_sample, diff_result_response, spldep, metadata){
+make_plots = function(diff_result_sample, diff_result_response, spldep, metadata, diff_result_sample_raw, psi_ccle){
     plts = list(
         plot_top_candidates_sample_type(diff_result_sample),
         plot_spldeps_pt(diff_result_sample, spldep, metadata),
+        plot_ccle_vs_tcga(diff_result_sample_raw, psi_ccle),
         plot_top_candidates_response(diff_result_response)
     )
     plts = do.call(c,plts)
@@ -429,6 +460,9 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'top_response-diff_spldep_vs_psi-scatters', '.pdf', figs_dir, width=6, height=2.5)
     save_plt(plts, 'top_response-candidates', '.pdf', figs_dir, width=6, height=6)
 
+    # CCLE vs TCGA
+    save_plt(plts, 'ccle_vs_tcga-std_ccle_vs_dpsi', '.pdf', figs_dir, width=10, height=10)
+
     
     # enrichments
     ## dotplots
@@ -458,6 +492,7 @@ main = function(){
     spldep_file = args$spldep_file
     # gsea_result_file = args$gsea_result_file
     annotation_file = args$annotation_file
+    psi_ccle_file = args$psi_ccle_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
@@ -468,10 +503,11 @@ main = function(){
     annot = read_tsv(annotation_file)
 #     gsea_result = read_tsv(gsea_result_file) %>%
 #         mutate(Cluster = as.factor(cancer_type))
-    
+    psi_ccle = read_tsv(psi_ccle_file)
     selected_events = readLines(selected_events_file)
     
     # prep results differential analyses
+    diff_result_sample_raw = diff_result_sample
     diff_result_sample = prep_diff_result(diff_result_sample, annot, selected_events)
     diff_result_response = prep_diff_result(diff_result_response, annot, selected_events)
     
@@ -487,7 +523,7 @@ main = function(){
         dplyr::select(-index)
         
     # plot
-    plts = make_plots(diff_result_sample, diff_result_response, spldep, metadata)
+    plts = make_plots(diff_result_sample, diff_result_response, spldep, metadata, diff_result_sample_raw, psi_ccle)
 
     # save
     save_plots(plts, figs_dir)
