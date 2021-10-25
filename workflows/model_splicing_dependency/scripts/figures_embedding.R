@@ -128,21 +128,21 @@ plot_embeddings = function(embedding, metadata, pattern, figtitle){
     plts = list()
     plts[['pca']] = X %>% 
         ggplot(aes_string(x='PC0', y='PC1')) + 
-        geom_scattermore(pixels=c(1000,1000), pointsize = 2, alpha=0.8) +
+        geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
         theme_pubr() +
         labs(title = figtitle) +
         theme(aspect.ratio = 1)
     
     plts[['umap']] = X %>% 
         ggplot(aes_string(x='UMAP0', y='UMAP1')) + 
-        geom_scattermore(pixels=c(1000,1000), pointsize = 2, alpha=0.8) +
+        geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
         theme_pubr() +
         labs(title = figtitle) +
         theme(aspect.ratio = 1)
     
     plts[['umap_clusters']] = X %>%
         ggplot(aes_string(x='UMAP0', y='UMAP1', color='leiden_labels')) + 
-        geom_scattermore(pixels=c(1000,1000), pointsize = 2, alpha=0.8) +
+        geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
         theme_pubr() +
         labs(title = figtitle) +
         ggpubr::color_palette(

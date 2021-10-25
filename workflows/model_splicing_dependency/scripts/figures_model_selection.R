@@ -120,7 +120,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         ) %>% rownames_to_column('GENE')
     
     uniform_genes = rnai_stats %>% 
-        slice_min(order_by = rnai_std, n=100) %>% 
+        slice_min(order_by = rnai_std, n=100) %>% # selected top 100
         pull(GENE)
     
     plts[['model_selection-deps_sorted_vs_std']] = rnai_stats %>% 
@@ -140,6 +140,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         theme_pubr() +
         ggpubr::color_palette(palette=c('black','orange')) +
         labs(x='Gene Median Demeter2', y='Gene Std. Demeter2', 
+             title='Top 100',
              color='Uniform Dependency')
     
     # we selected the ensemble of models by their ability to rank dependencies
@@ -207,21 +208,21 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     plts[['model_selection-pvalue_vs_n_genes']] = corrs %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_genes', label=TRUE) +
+        ggbarplot(x='thresh', y='total_genes', label=TRUE, lab.size=2) +
         labs(x='Thresholds LR Test p-value', y='No. Genes Selected') +
         theme_pubr(x.text.angle=70)
     
     plts[['model_selection-pvalue_vs_n_uniforms']] = corrs %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_uniforms', label=TRUE) +
+        ggbarplot(x='thresh', y='total_uniforms', label=TRUE, lab.size=2) +
         labs(x='Thresholds LR Test p-value', y='No. Uniform Dep. Genes Selected') +
         theme_pubr(x.text.angle=70)
     
     plts[['model_selection-pvalue_vs_n_events']] = corrs %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_events', label=TRUE) +
+        ggbarplot(x='thresh', y='total_events', label=TRUE, lab.size=2) +
         labs(x='Thresholds LR Test p-value', y='No. Events Selected') +
         theme_pubr(x.text.angle=70)
     
@@ -234,7 +235,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     plts[['model_selection-selected_vs_event_std']] = models %>%
         ggviolin(x='is_selected', y='event_std', color=NA, trim=TRUE,
                  fill='is_selected', palette='lancet') +
-        geom_boxplot(fill=NA) +
+        geom_boxplot(fill=NA, outlier.size = 0.75) +
         stat_compare_means(method='wilcox.test') +
         guides(color='none', fill='none') +
         labs(x='Selected Model', y='Event Std.')
@@ -259,9 +260,9 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     plts[['model_selection-mutation_frequency']] = X %>% 
         ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
                    group=interaction(Variant_Classification,is_selected))) +
-        geom_violin(aes(fill=is_selected), color=FALSE) +
-        geom_boxplot(width=0.2, outlier.size=0.5, 
-                     position=position_dodge(0.9), fill=NA) +
+        # geom_violin(aes(fill=is_selected), color=FALSE, scale='width') +
+        geom_boxplot(aes(fill=is_selected), outlier.size=0.5, 
+                     position=position_dodge(0.7)) +
         stat_compare_means(aes(group=is_selected), 
                            method='wilcox.test', label='p.signif') +
         yscale('log10', .format=TRUE) + 
@@ -348,14 +349,35 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     )
     enrichment = run_enrichment(genes_oi, events_oi, universe, ontologies)
     enrichment[sapply(enrichment, nrow)<1] = NULL
-    plts_enrichment = sapply(enrichment, function(res){
-        plt = dotplot(res)
-        return(plt)
-    }, simplify=FALSE)
+    plts_enrichment = lapply(names(enrichment), function(e_name){
+        res = enrichment[[e_name]]
+        plts = list()
+        plts[['dotplot']] = dotplot(res)
+        plts[['cnetplot']] = cnetplot(res)
+        names(plts) = sprintf('%s-%s',e_name,names(plts))
+        return(plts)
+    })
+    plts_enrichment = do.call(c,plts_enrichment)
     names(plts_enrichment) = sprintf('model_selection-enrichment-%s',
                                      names(plts_enrichment))
     plts = c(plts,plts_enrichment)
     
+    # overlaps between enriched GO processes and protein impact?
+    sets = list(
+        prot_imp %>% 
+            filter(is_selected) %>% 
+            get_sets('term_clean','GENE'),
+        enrichment[['GO_BP']] %>% 
+            as.data.frame() %>% 
+            dplyr::select(Description,geneID) %>% 
+            separate_rows(geneID) %>% 
+            get_sets('Description','geneID')
+    )
+    sets = do.call(c,sets)
+    m = sets %>% list_to_matrix() %>% make_comb_mat()
+    plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = UpSet(m, comb_order = order(comb_size(m)))
+    plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = as.ggplot(grid.grabExpr(draw(plts[['model_selection-enrichment-GO_BP_vs_prot_imp']])))
+
     
     return(plts)
 }
@@ -507,8 +529,8 @@ plot_examples = function(models, protein_impact){
         geom_text_repel(
             aes(label=event_gene),
             X %>%
-            slice_min(order_by=lr_pvalue, n=25),
-            max.overlaps = 50
+            slice_min(order_by=lr_pvalue, n=15),
+            max.overlaps = 10
         ) +
         labs(x='Index', y='log10(LR Test p-value)', 
              title=sprintf('No. Selected Models=%s',nrow(X)))
@@ -587,16 +609,18 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-lr_pvalue', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pearson_corr', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pvalue_vs_spearman', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-pvalue_vs_n_genes', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-pvalue_vs_n_uniforms', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-pvalue_vs_n_events', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_genes', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_uniforms', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_events', '.pdf', figs_dir, width=5, height=2.5)
     save_plt(plts, 'model_selection-selected_vs_event_std', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-mutation_frequency', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-protein_impact_clean-counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-protein_impact_clean-freqs', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-enrichment-GO_BP', '.pdf', figs_dir, width=9, height=8)
+    save_plt(plts, 'model_selection-enrichment-GO_BP-dotplot', '.pdf', figs_dir, width=9, height=8)
+    save_plt(plts, 'model_selection-enrichment-GO_BP-cnetplot', '.pdf', figs_dir, width=9, height=8)
+    save_plt(plts, 'model_selection-enrichment-GO_BP_vs_prot_imp', '.pdf', figs_dir, width=9, height=8)
     
     # interactions
     save_plt(plts, 'interactions-counts', '.pdf', figs_dir, width=5, height=5)
@@ -607,7 +631,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'interactions-category-umap', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'interactions-category-upset', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'interactions-enrichment-oncogenic_signatures', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'interactions-enrichment-GO_BP', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'interactions-enrichment-GO_BP', '.pdf', figs_dir, width=10, height=8)
     
     # examples
     save_plt(plts, 'examples-top_overall-scatter', '.pdf', figs_dir, width=5, height=5)
@@ -663,7 +687,9 @@ main = function(){
         "protein_impact" = read_tsv(protein_impact_file) %>%
                             dplyr::rename(EVENT=EventID, term=ONTO) %>%
                             dplyr::select(term,EVENT) %>%
-                            mutate(term_clean=gsub(' \\(.*','',term))
+                            mutate(term_clean=gsub(' \\(.*','',term),
+                                   term_clean=gsub('ORF disruption upon sequence inclusion','ORF disruption',term_clean),
+                                   term_clean=gsub('ORF disruption upon sequence exclusion','ORF disruption',term_clean))
     )
     spldep = read_tsv(spldep_file)
     rnai = read_tsv(rnai_file)
