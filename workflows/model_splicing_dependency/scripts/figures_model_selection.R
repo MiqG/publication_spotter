@@ -298,7 +298,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
                   color=NA, palette='lancet') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
-        labs(x='Selected Model', y='Proportion')
+        labs(x='Protein Impact', y='Proportion')
     
 #      prot_imp %>%
 #         group_by(is_selected,term) %>%
