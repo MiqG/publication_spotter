@@ -82,7 +82,7 @@ plot_metadata = function(metadata){
             X %>%
             group_by_at(col_oi) %>%
             summarize(n=n()) %>%
-            ggbarplot(x=col_oi, y='n', label = TRUE,
+            ggbarplot(x=col_oi, y='n', label = TRUE, lab.size=3,
                       fill=col_oi, color=NA,
                       palette=palette) +
             guides(fill=FALSE) +
@@ -115,21 +115,24 @@ plot_dimreds = function(df, metadata, pattern, figtitle){
     plts = list()
     plts[['pca']] = 
     X %>% ggplot(aes_string(x='PC0', y='PC1')) + 
-        geom_scattermore(pointsize = 2, alpha=0.8) +
+        geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
         theme_pubr() +
-        labs(title = figtitle)
+        labs(title = figtitle) +
+        theme(aspect.ratio = 1)
     
     plts[['umap']] = X %>% 
         ggplot(aes_string(x='UMAP0', y='UMAP1')) + 
-        geom_scattermore(pointsize = 2, alpha=0.8) +
+        geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
         theme_pubr() +
-        labs(title = figtitle)
+        labs(title = figtitle) +
+        theme(aspect.ratio = 1)
     
     plts[['umap_clusters']] = X %>%
         ggplot(aes_string(x='UMAP0', y='UMAP1', color='leiden_labels')) + 
-        geom_scattermore(pointsize = 2, alpha=0.8) +
+        geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
         theme_pubr() +
-        labs(title = figtitle)
+        labs(title = figtitle) +
+        theme(aspect.ratio = 1)
     plts[['umap_clusters']] = set_palette(plts[['umap_clusters']], palette = 'Paired')
     
     
@@ -138,9 +141,10 @@ plot_dimreds = function(df, metadata, pattern, figtitle){
         # make plot
         plt = X %>%
             ggplot(aes_string(x='PC0', y='PC1', color=col_oi)) + 
-            geom_scattermore(pointsize = 2, alpha=0.8) +
+            geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
             theme_pubr() +
-            labs(title = figtitle)
+            labs(title = figtitle) +
+            theme(aspect.ratio = 1)
         # set palette
         if (col_oi %in% METADATA_OI_CONT){
             palette = METADATA_PALETTES[[col_oi]]
@@ -159,9 +163,10 @@ plot_dimreds = function(df, metadata, pattern, figtitle){
         # make plot
         plt = X %>%
             ggplot(aes_string(x='UMAP0', y='UMAP1', color=col_oi)) + 
-            geom_scattermore(pointsize = 2, alpha=0.8) +
+            geom_scattermore(pixels=c(1000,1000), pointsize = 5, alpha=0.8) +
             theme_pubr() +
-            labs(title = figtitle)
+            labs(title = figtitle) +
+            theme(aspect.ratio = 1)
         # set palette
         if (col_oi %in% METADATA_OI_CONT){
             palette = METADATA_PALETTES[[col_oi]]
@@ -209,7 +214,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
 save_plots = function(plts, figs_dir){
     lapply(names(plts), function(plt_oi){
         save_plt(plts, plt_oi, '.pdf', figs_dir, 
-                 width=12, height=12, dpi=350)
+                 width=10, height=10, dpi=350)
     })
 }
 
