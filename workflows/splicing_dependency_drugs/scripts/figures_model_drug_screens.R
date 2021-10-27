@@ -15,6 +15,9 @@ require(tidytext)
 require(ggpubr)
 require(cowplot)
 require(ggrepel)
+require(ComplexHeatmap)
+require(gridExtra)
+require(ggplotify)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -123,10 +126,74 @@ plot_associations = function(models, drug_targets){
 }
 
 
-plot_examples = function(models){
+plot_examples = function(models, drug_targets){
+    plts = list()
     # SRSF7 is important in LUAD treated with carboxi + paclitaxel
-    models %>% 
+    #models %>% 
     
+    # overlaps between targets of MASITINIB, PAZOPANIB, PONATINIB
+    drugs_oi = c('MASITINIB','PAZOPANIB','PONATINIB')
+    m = drug_targets %>% 
+        filter(DRUG_NAME %in% drugs_oi) %>% 
+        group_by(DRUG_NAME) %>%
+        with(.,split(TARGET,DRUG_NAME)) %>% 
+        list_to_matrix() %>% 
+        make_comb_mat()
+    plts[['examples-common_targets-upset']] = UpSet(
+        m, comb_order = order(comb_size(m))
+    ) %>%
+        draw() %>%
+        grid.grabExpr() %>%
+        as.ggplot()
+    
+    # associations with HsaEX0034998_KRAS
+    event_oi = 'HsaEX0034998_KRAS'
+    ptls[['examples-kras']] = models %>% 
+        filter(event_gene==event_oi & lr_padj<THRESH_FDR) %>%
+        slice_max(abs(spldep_coefficient), n=15) %>%
+        arrange(spldep_coefficient) %>%
+        ggbarplot(x='drug_name', y='spldep_coefficient', 
+                  fill='orange', color=NA) + 
+        labs(x='Drug Name', y='Effect Size', title=event_oi) +
+        coord_flip()
+    
+    drugs_oi = c('TOZASERTIB','BI-2536')
+    ptls[['examples-kras_top_drugs']] = models %>% 
+        filter(drug_name%in%drugs_oi & lr_padj<THRESH_FDR) %>%
+        group_by(drug_name) %>%
+        slice_max(abs(spldep_coefficient), n=15) %>%
+        mutate(event_gene=reorder_within(event_gene, spldep_coefficient, drug_name)) %>%
+        ggbarplot(x='event_gene', y='spldep_coefficient', 
+                  fill='#2a9d8f', color=NA)+ 
+        facet_wrap(~drug_name, scales='free_y', ncol=2) +
+        scale_x_reordered() + 
+        labs(x='Event & Gene', y='Effect Size', title='Top 15') +
+        coord_flip()
+    
+    # associations with events in TCGA
+    events_oi = c(
+        'HsaEX0034998_KRAS',
+        'HsaEX1036699_SFPQ',
+        'HsaEX0050350_PRPF3',
+        'HsaEX0060707_SNRNP70',
+        'HsaEX0072698_ZFR',
+        'HsaEX0044199_NUF2',
+        'HsaEX0060960_SON',
+        'HsaEX0037668_MAP4K4'
+    )
+    models %>% 
+        filter(event_gene%in%events_oi & lr_padj<THRESH_FDR) %>%
+        group_by(event_gene) %>%
+        slice_max(abs(spldep_coefficient), n=15) %>%
+        mutate(drug_name=reorder_within(drug_name, spldep_coefficient, event_gene)) %>%
+        ggbarplot(x='drug_name', y='spldep_coefficient',
+                  fill='orange', color=NA) + 
+        facet_wrap(~event_gene, scales='free_y', ncol=2) +
+        scale_x_reordered() + 
+        labs(x='Drug Name', y='Effect Size', title='Top 15') +
+        coord_flip()
+    
+    return(plts)
 }
 
 
