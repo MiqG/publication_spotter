@@ -28,8 +28,8 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 psi_file = os.path.join(PREP_DIR,'event_psi','LUAD.tsv')
 genexpr_file = os.path.join(PREP_DIR,'gene_counts','LUAD.tsv')
-models_file = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
-models_coefs_dir = os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-EX')
+models_file = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX','model_summaries.tsv.gz')
+models_coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX')
 gene_lengths_file = os.path.join(ROOT,'data','raw','VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
 normalize_counts = True
 """
@@ -53,13 +53,13 @@ def load_data(
     # read
     models = pd.read_table(models_file).set_index(["EVENT", "ENSEMBL"])
     coefs = {
-        "event": pd.read_pickle(os.path.join(models_coefs_dir, "event.pickle.gz")),
-        "gene": pd.read_pickle(os.path.join(models_coefs_dir, "gene.pickle.gz")),
+        "event": pd.read_pickle(os.path.join(models_coefs_dir, "coefs_event.pickle.gz")),
+        "gene": pd.read_pickle(os.path.join(models_coefs_dir, "coefs_gene.pickle.gz")),
         "interaction": pd.read_pickle(
-            os.path.join(models_coefs_dir, "interaction.pickle.gz")
+            os.path.join(models_coefs_dir, "coefs_interaction.pickle.gz")
         ),
         "intercept": pd.read_pickle(
-            os.path.join(models_coefs_dir, "intercept.pickle.gz")
+            os.path.join(models_coefs_dir, "coefs_intercept.pickle.gz")
         ),
     }
     psi = pd.read_table(psi_file, index_col=0)
@@ -136,9 +136,10 @@ def compute_single_splicing_dependency(
 
     # summarize
     mean = pd.Series(np.mean(y, axis=0), index=samples, name=event)
+    median = pd.Series(np.median(y, axis=0), index=samples, name=event)
     std = pd.Series(np.std(y, axis=0), index=samples, name=event)
 
-    summary = {"mean": mean, "std": std}
+    summary = {"mean": mean, "median": median, "std": std}
 
     return summary
 
@@ -165,9 +166,10 @@ def compute_splicing_dependency(coefs, psi, genexpr, n_jobs):
         for event, gene in tqdm(event_gene[["EVENT", "ENSEMBL"]].values)
     )
     spldep_mean = pd.DataFrame([r["mean"] for r in result])
+    spldep_median = pd.DataFrame([r["median"] for r in result])
     spldep_std = pd.DataFrame([r["std"] for r in result])
 
-    return spldep_mean, spldep_std
+    return spldep_mean, spldep_median, spldep_std
 
 
 def parse_args():
@@ -178,6 +180,7 @@ def parse_args():
     parser.add_argument("--models_coefs_dir", type=str)
     parser.add_argument("--normalize_counts", type=bool, default=False)
     parser.add_argument("--spldep_mean_file", type=str)
+    parser.add_argument("--spldep_median_file", type=str)
     parser.add_argument("--spldep_std_file", type=str)
     parser.add_argument("--gene_lengths_file", type=str)
     parser.add_argument("--n_jobs", type=int)
@@ -195,6 +198,7 @@ def main():
     normalize_counts = args.normalize_counts
     gene_lengths_file = args.gene_lengths_file
     spldep_mean_file = args.spldep_mean_file
+    spldep_median_file = args.spldep_median_file
     spldep_std_file = args.spldep_std_file
     n_jobs = args.n_jobs
 
@@ -204,10 +208,11 @@ def main():
     )
 
     print("Computing splicing dependencies...")
-    spldep_mean, spldep_std = compute_splicing_dependency(coefs, psi, genexpr, n_jobs)
+    spldep_mean, spldep_median, spldep_std = compute_splicing_dependency(coefs, psi, genexpr, n_jobs)
 
     print("Saving results...")
     spldep_mean.reset_index().to_csv(spldep_mean_file, **SAVE_PARAMS)
+    spldep_median.reset_index().to_csv(spldep_median_file, **SAVE_PARAMS)
     spldep_std.reset_index().to_csv(spldep_std_file, **SAVE_PARAMS)
 
 
