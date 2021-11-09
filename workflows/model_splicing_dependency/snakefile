@@ -69,22 +69,22 @@ rule all:
         
 rule model_gene_dependency:
     input:
-        psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
+        splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
         genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-        rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
-        annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+        gene_dependency_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
+        mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'))
-    threads: 15
+    threads: 16
     params:
-        n_iterations = 500
+        n_iterations = 100
     shell:
         """
         python scripts/model_gene_dependency.py \
-                    --psi_file={input.psi_file} \
+                    --splicing_file={input.splicing_file} \
                     --genexpr_file={input.genexpr_file} \
-                    --annotation_file={input.annotation_file} \
-                    --rnai_file={input.rnai_file} \
+                    --mapping_file={input.mapping_file} \
+                    --gene_dependency_file={input.gene_dependency_file} \
                     --output_dir={output} \
                     --n_iterations={params.n_iterations} \
                     --n_jobs={threads}
@@ -113,9 +113,9 @@ rule model_gene_dependency:
 
 rule compute_splicing_dependency:
     input:
+        os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'),
         psi = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
         genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-        models_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'),
         models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}/model_summaries.tsv.gz'),
         models_coefs = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:

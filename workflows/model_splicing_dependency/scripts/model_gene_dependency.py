@@ -5,7 +5,7 @@
 #
 # Script purpose
 # --------------
-# Create a linear model to compute the association between exon PSI and
+# Create a linear model to compute the association between exon splicing and
 # cell fitness independently of gene expression.
 #
 
@@ -16,16 +16,21 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 from scipy import stats
+from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from glimix_core.lmm import LMM
+from numpy_sugar.linalg import economic_qs
 
 
 # variables
+METHOD = "OLS"
 RANDOM_SEED = 1234
 TEST_SIZE = 0.15
 SAVE_PARAMS = {"sep":"\t", "compression":"gzip", "index":False}
+N_ITERATIONS = 100
 
 """
 Development
@@ -33,50 +38,61 @@ Development
 ROOT = '~/projects/publication_splicing_dependency'
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
-psi_file = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
+splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz')
 genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
-rnai_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
-annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+gene_dependency_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
+mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 n_jobs=10
-n_iterations=500
+n_iterations=2
 """
 
 ##### FUNCTIONS #####
-def load_data(psi_file, genexpr_file, rnai_file, annotation_file):
-    psi = pd.read_table(psi_file, index_col=0)
+def load_data(splicing_file, genexpr_file, gene_dependency_file, mapping_file):
+    splicing = pd.read_table(splicing_file, index_col=0)
     genexpr = pd.read_table(genexpr_file, index_col=0)
-    annotation = pd.read_table(annotation_file)
-    rnai = pd.read_table(rnai_file, index_col=0)
+    mapping = pd.read_table(mapping_file)
+    gene_dependency = pd.read_table(gene_dependency_file, index_col=0)
 
-    gene_annot = annotation[["ENSEMBL", "GENE"]].drop_duplicates().dropna()
+    gene_annot = mapping[["ENSEMBL", "GENE"]].drop_duplicates().dropna()
 
     # drop undetected & uninformative events
-    psi = psi.dropna(thresh=2)
-    psi = psi.loc[psi.std(axis=1) != 0]
+    splicing = splicing.dropna(thresh=2)
+    splicing = splicing.loc[splicing.std(axis=1) != 0]
 
     # subset
     common_samples = (
-        set(rnai.columns).intersection(psi.columns).intersection(genexpr.columns)
+        set(gene_dependency.columns).intersection(splicing.columns).intersection(genexpr.columns)
     )
 
     common_genes = set(
-        gene_annot.loc[gene_annot["GENE"].isin(rnai.index), "ENSEMBL"]
+        gene_annot.loc[gene_annot["GENE"].isin(gene_dependency.index), "ENSEMBL"]
     ).intersection(genexpr.index)
 
-    common_events = set(psi.index).intersection(
-        annotation.loc[annotation["ENSEMBL"].isin(common_genes), "EVENT"]
+    common_events = set(splicing.index).intersection(
+        mapping.loc[mapping["ENSEMBL"].isin(common_genes), "EVENT"]
     )
 
-    psi = psi.loc[common_events, common_samples]
+    splicing = splicing.loc[common_events, common_samples]
     genexpr = genexpr.loc[common_genes, common_samples]
-    rnai = rnai.loc[
+    gene_dependency = gene_dependency.loc[
         set(gene_annot.set_index("ENSEMBL").loc[common_genes, "GENE"]), common_samples
     ]
-    annotation = annotation.loc[annotation["EVENT"].isin(common_events)]
-
+    mapping = mapping.loc[mapping["EVENT"].isin(common_events)]
+    
     gc.collect()
-
-    return psi, genexpr, rnai, annotation
+    
+    # standardize splicing and gene expression
+    splicing_mean = splicing.mean(axis=1).values.reshape(-1, 1)
+    splicing_std = splicing.std(axis=1).values.reshape(-1, 1)
+    splicing = (splicing - splicing_mean) / splicing_std
+    
+    genexpr_mean = genexpr.mean(axis=1).values.reshape(-1, 1)
+    genexpr_std = genexpr.std(axis=1).values.reshape(-1, 1)
+    genexpr = (genexpr - genexpr_mean) / genexpr_std
+    
+    gc.collect()
+    
+    return splicing, genexpr, gene_dependency, mapping
 
 
 def get_summary_stats(df, col_oi):
@@ -90,7 +106,130 @@ def get_summary_stats(df, col_oi):
     return summary_stats
 
 
-def fit_olsmodel(y, X, n_iterations):
+def get_model_lr_info(model):
+    llf = model.lml()
+    rank = np.linalg.matrix_rank(model.X)
+    df_resid = model.nsamples - rank
+    return llf, df_resid
+    
+    
+def compare_lr_test(model_null, model_alt):
+    llf_null, df_null = get_model_lr_info(model_null)
+    llf_alt, df_alt = get_model_lr_info(model_alt)
+    
+    lrdf = (df_null - df_alt)
+    lrstat = -2*(llf_null - llf_alt)
+    lr_pvalue = stats.chi2.sf(lrstat, lrdf)
+    
+    return lrstat, lr_pvalue, lrdf
+    
+    
+def fit_limixmodel(y, X, sigma, n_iterations=N_ITERATIONS):
+    event, gene = X.columns[:2]
+
+    summaries = []
+    for i in range(n_iterations):
+        # split data
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=TEST_SIZE)
+        
+        # fit linear models with population structure
+        if sigma is not None:
+            QS = economic_qs(sigma.loc[y_train.index, y_train.index])
+        else:
+            QS = None
+        model = LMM(y_train, X_train, QS)
+        model.fit(verbose=False)       
+        
+        # get rsquared
+        pred_train = np.dot(X_train, model.beta)
+        rsquared = metrics.r2_score(y_train, pred_train)
+        
+        # likelihood ratio test
+        model_null = LMM(y_train, X_train[[gene,"intercept"]], QS)
+        model_null.fit(verbose=False)
+        lr_stat, lr_pvalue, lr_df = compare_lr_test(model_null, model)
+        
+        # score using test data
+        pred_test = np.dot(X_test, model.beta)
+        pearson_coef, pearson_pvalue = stats.pearsonr(pred_test, y_test)
+        spearman_coef, spearman_pvalue = stats.spearmanr(pred_test, y_test)
+        
+        # prepare output
+        ## get info
+        params = pd.Series(model.beta, index=X_train.columns)
+        scanner = model.get_fast_scanner()
+        bse = pd.Series(scanner.null_beta_se, index=X_train.columns)
+        zscores = pd.Series(params / bse, index=X_train.columns)
+        pvalues = pd.Series(stats.norm.sf(np.abs(zscores)) * 2, index=X_train.columns)
+        
+        ## make summary
+        summary_it = {
+            "iteration": i,
+            "event_coefficient": params[event],
+            "event_stderr": bse[event],
+            "event_zscore": zscores[event],
+            "event_pvalue": pvalues[event],
+            "gene_coefficient": params[gene],
+            "gene_stderr": bse[gene],
+            "gene_zscore": zscores[gene],
+            "gene_pvalue": pvalues[gene],
+            "interaction_coefficient": params["interaction"],
+            "interaction_stderr": bse["interaction"],
+            "interaction_zscore": zscores["interaction"],
+            "interaction_pvalue": pvalues["interaction"],
+            "intercept_coefficient": params["intercept"],
+            "intercept_stderr": bse["intercept"],
+            "intercept_zscore": zscores["intercept"],
+            "intercept_pvalue": pvalues["intercept"],
+            "n_obs": model.nsamples,
+            "rsquared": rsquared,
+            "pearson_correlation": pearson_coef,
+            "pearson_pvalue": pearson_pvalue,
+            "spearman_correlation": spearman_coef,
+            "spearman_pvalue": spearman_pvalue,
+            "lr_stat": lr_stat,
+            "lr_pvalue": lr_pvalue,
+            "lr_df": lr_df,
+        }
+        summaries.append(summary_it)
+        
+    summaries = pd.DataFrame(summaries)
+
+    # compute average likelihood-ratio test
+    avg_lr_stat = np.mean(summaries["lr_stat"])
+    avg_lr_df = np.round(summaries["lr_df"].mean())
+    lr_pvalue = stats.chi2.sf(avg_lr_stat, avg_lr_df)
+
+    # prepare output
+    ## summary
+    summary = {"EVENT": event, "ENSEMBL": gene, "GENE": y.name, "n_obs": model.nsamples}
+    summary.update(get_summary_stats(summaries, "event_coefficient"))
+    summary.update(get_summary_stats(summaries, "gene_coefficient"))
+    summary.update(get_summary_stats(summaries, "interaction_coefficient"))
+    summary.update(get_summary_stats(summaries, "intercept_coefficient"))
+    summary.update(get_summary_stats(summaries, "rsquared"))
+    summary.update(get_summary_stats(summaries, "pearson_correlation"))
+    summary.update(get_summary_stats(summaries, "spearman_correlation"))
+    summary.update(get_summary_stats(summaries, "lr_stat"))
+    summary.update(
+        {"lr_df": lr_df, "lr_pvalue": lr_pvalue,}
+    )
+    summary = pd.Series(summary)
+    ## empirical distributions of coefficients
+    coefs = {
+        "EVENT": summary["EVENT"],
+        "GENE": summary["GENE"],
+        "ENSEMBL": summary["ENSEMBL"],
+        "event": summaries["event_coefficient"].values,
+        "gene": summaries["gene_coefficient"].values,
+        "interaction": summaries["interaction_coefficient"].values,
+        "intercept": summaries["intercept_coefficient"].values,
+    }
+
+    return summary, coefs
+
+
+def fit_olsmodel(y, X, sigma=None, n_iterations=N_ITERATIONS):
     # np.random.seed(RANDOM_SEED) Doesn't work
     
     event, gene = X.columns[:2]
@@ -148,7 +287,8 @@ def fit_olsmodel(y, X, n_iterations):
 
     # compute average likelihood-ratio test
     avg_lr_stat = np.mean(summaries["lr_stat"])
-    lr_pvalue = stats.chi2.sf(avg_lr_stat, lr_df)
+    avg_lr_df = np.round(summaries["lr_df"].mean())
+    lr_pvalue = stats.chi2.sf(avg_lr_stat, avg_lr_df)
 
     # prepare output
     ## summary
@@ -179,18 +319,19 @@ def fit_olsmodel(y, X, n_iterations):
     return summary, coefs
 
 
-def fit_single_model(y, X, n_iterations, method):
+def fit_single_model(y, X, sigma=None, n_iterations=N_ITERATIONS, method=METHOD):
     methods = {
         "OLS": fit_olsmodel,
+        "limix": fit_limixmodel
     }
-    summary, coefs = methods[method](y, X, n_iterations)
+    summary, coefs = methods[method](y, X, sigma, n_iterations)
     return summary, coefs
 
 
-def fit_model(x_psi, x_genexpr, y_rnai, n_iterations, method):
+def fit_model(x_splicing, x_genexpr, y_gene_dependency, sigma=None, n_iterations=N_ITERATIONS, method=METHOD):
 
-    X = pd.DataFrame([x_psi, x_genexpr]).T
-    y = y_rnai
+    X = pd.DataFrame([x_splicing, x_genexpr]).T
+    y = y_gene_dependency
 
     # dropna
     is_nan = X.isnull().any(1) | y.isnull()
@@ -198,12 +339,11 @@ def fit_model(x_psi, x_genexpr, y_rnai, n_iterations, method):
     y = y[~is_nan].copy()
 
     try:
-        # standardize features
-        X.values[:, :] = StandardScaler().fit_transform(X)
-        X["interaction"] = X[x_psi.name] * X[x_genexpr.name]
+        # add interaction and intercept
+        X["interaction"] = X[x_splicing.name] * X[x_genexpr.name]
         X["intercept"] = 1.0
 
-        summary, coefs = fit_single_model(y, X, n_iterations, method)
+        summary, coefs = fit_single_model(y, X, sigma, n_iterations, method)
 
     except:
         X["interaction"] = np.nan
@@ -261,9 +401,9 @@ def fit_model(x_psi, x_genexpr, y_rnai, n_iterations, method):
                 "lr_pvalue",
             ],
         )
-        summary["EVENT"] = x_psi.name
+        summary["EVENT"] = x_splicing.name
         summary["ENSEMBL"] = x_genexpr.name
-        summary["GENE"] = y_rnai.name
+        summary["GENE"] = y_gene_dependency.name
 
         # create empty empirical coefficients
         coefs = {
@@ -277,8 +417,8 @@ def fit_model(x_psi, x_genexpr, y_rnai, n_iterations, method):
         }
 
     # add some more info to the summary
-    summary["event_mean"] = x_psi.mean()
-    summary["event_std"] = x_psi.std()
+    summary["event_mean"] = x_splicing.mean()
+    summary["event_std"] = x_splicing.std()
     summary["gene_mean"] = x_genexpr.mean()
     summary["gene_std"] = x_genexpr.std()
 
@@ -293,18 +433,25 @@ def get_coefs(res, coef_oi, size):
     return coefs
 
 
-def fit_models(psi, genexpr, rnai, annotation, n_iterations, n_jobs):
+def fit_models(splicing, genexpr, gene_dependency, mapping, n_iterations=N_ITERATIONS, method=METHOD, n_jobs=None):
+    # compute covariance matrix using splicing and TPMs
+    print('Computing covariance matrix first...')
+    # sigma = pd.concat([splicing,genexpr]).cov()
+    sigma = None
+    
+    # fit models
     results = Parallel(n_jobs=n_jobs)(
         delayed(fit_model)(
-            psi.loc[event],
+            splicing.loc[event],
             genexpr.loc[ensembl],
-            rnai.loc[gene],
-            n_iterations,
-            method="OLS",
+            gene_dependency.loc[gene],
+            sigma = sigma,
+            n_iterations = n_iterations,
+            method = method
         )
-        for event, ensembl, gene in tqdm(annotation.values)
+        for event, ensembl, gene in tqdm(mapping.values[:100])
     )
-
+    
     # split results
     summaries = []
     coefs_event = []
@@ -330,16 +477,20 @@ def fit_models(psi, genexpr, rnai, annotation, n_iterations, n_jobs):
     summaries.loc[idx, "lr_padj"] = sm.stats.multipletests(
         summaries.loc[idx, "lr_pvalue"], method="fdr_bh"
     )[1]
-
+    
+    # add more info
+    summaries["n_iterations"] = n_iterations
+    summaries["method"] = method
+    
     return summaries, coefs_event, coefs_gene, coefs_interaction, coefs_intercept
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--psi_file", type=str)
+    parser.add_argument("--splicing_file", type=str)
     parser.add_argument("--genexpr_file", type=str)
-    parser.add_argument("--annotation_file", type=str)
-    parser.add_argument("--rnai_file", type=str)
+    parser.add_argument("--mapping_file", type=str)
+    parser.add_argument("--gene_dependency_file", type=str)
     parser.add_argument("--n_iterations", type=int)
     parser.add_argument("--n_jobs", type=int)
     parser.add_argument("--output_dir", type=str)
@@ -350,10 +501,10 @@ def parse_args():
 
 def main():
     args = parse_args()
-    psi_file = args.psi_file
+    splicing_file = args.splicing_file
     genexpr_file = args.genexpr_file
-    annotation_file = args.annotation_file
-    rnai_file = args.rnai_file
+    mapping_file = args.mapping_file
+    gene_dependency_file = args.gene_dependency_file
     n_iterations = args.n_iterations
     n_jobs = args.n_jobs
     output_dir = args.output_dir
@@ -361,13 +512,13 @@ def main():
     os.mkdir(output_dir)
     
     print("Loading data...")
-    psi, genexpr, rnai, annotation = load_data(
-        psi_file, genexpr_file, rnai_file, annotation_file
+    splicing, genexpr, gene_dependency, mapping = load_data(
+        splicing_file, genexpr_file, gene_dependency_file, mapping_file
     )
 
     print("Fitting models...")
     summaries, coefs_event, coefs_gene, coefs_interaction, coefs_intercept = fit_models(
-        psi, genexpr, rnai, annotation, n_iterations, n_jobs
+        splicing, genexpr, gene_dependency, mapping, n_iterations, n_jobs
     )
 
     print("Saving results...")
