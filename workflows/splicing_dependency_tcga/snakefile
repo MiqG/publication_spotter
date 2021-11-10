@@ -74,6 +74,8 @@ RESPONSE_TREATMENT = {
 
 DATASETS = ['psi','spldep']
 COMPARISONS = ['PrimaryTumor_vs_SolidTissueNormal','RESPONDER_vs_NONRESPONDER']
+PADJ_METHOD = 'fdr_bh'
+
 ##### RULES #####
 rule all:
     input:
@@ -108,9 +110,12 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','gsea-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz'), dataset=DATASETS, event_type=EVENT_TYPES),
         
         # plot
-        expand(os.path.join(RESULTS_DIR,'figures','differential_analysis-{event_type}'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'figures','differential_analysis-{event_type}'), event_type=EVENT_TYPES),
         
+        # survival analyses
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','survival_analysis-coxph-{event_type}.tsv.gz'),cancer=CANCER_TYPES, event_type=EVENT_TYPES)
 
+        
 rule compute_splicing_dependency_tcga:
     input:
         psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
@@ -120,6 +125,7 @@ rule compute_splicing_dependency_tcga:
         gene_lengths = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
     output:
         spldep_mean = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'),
+        spldep_median = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_median-{event_type}.tsv.gz'),
         spldep_std = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_std-{event_type}.tsv.gz')
     threads: 15
     params:
@@ -169,7 +175,7 @@ rule differential_splicing_dependency_sample_type:
         os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
     params:
         script_dir=os.path.join(SRC_DIR,'python'),
-        padj_method = 'fdr_bh'
+        padj_method = PADJ_METHOD
     shell:
         """
         python {params.script_dir}/MannWhitneyU.py \
@@ -192,7 +198,7 @@ rule differential_psi_sample_type:
         os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
     params:
         script_dir=os.path.join(SRC_DIR,'python'),
-        padj_method = 'fdr_bh'
+        padj_method = PADJ_METHOD
     shell:
         """
         python {params.script_dir}/MannWhitneyU.py \
@@ -215,7 +221,7 @@ rule differential_splicing_dependency_drug_response:
         os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-RESPONDER_vs_NONRESPONDER-{event_type}.tsv.gz')
     params:
         script_dir=os.path.join(SRC_DIR,'python'),
-        padj_method = 'fdr_bh'
+        padj_method = PADJ_METHOD
     shell:
         """
         python {params.script_dir}/MannWhitneyU.py \
@@ -238,7 +244,7 @@ rule differential_psi_drug_response:
         os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-RESPONDER_vs_NONRESPONDER.tsv.gz')
     params:
         script_dir=os.path.join(SRC_DIR,'python'),
-        padj_method = 'fdr_bh'
+        padj_method = PADJ_METHOD
     shell:
         """
         python {params.script_dir}/MannWhitneyU.py \
@@ -440,4 +446,33 @@ rule figures_differential_analysis:
                     --metadata_file={input.metadata} \
                     --psi_ccle_file={input.psi_ccle} \
                     --figs_dir={output}
+        """
+        
+        
+rule survival_analysis_coxph:
+    input:
+        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','survival_analysis-coxph-{event_type}.tsv.gz')
+    params:
+        script_dir = os.path.join(SRC_DIR,'python'),
+        sample_col = "sampleID",
+        time_col = "PFI.time",
+        event_col = "PFI",
+        subset_col = "sample_type",
+        subset_values = "'Primary Tumor'",
+        padj_method = PADJ_METHOD
+    shell:
+        """
+        python {params.script_dir}/CoxPH.py \
+                                    --data_file={input.spldep} \
+                                    --metadata_file={input.metadata} \
+                                    --sample_col={params.sample_col} \
+                                    --time_col={params.time_col} \
+                                    --event_col={params.event_col} \
+                                    --subset_col={params.subset_col} \
+                                    --subset_values={params.subset_values} \
+                                    --padj_method={params.padj_method} \
+                                    --output_file={output}
         """
