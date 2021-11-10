@@ -39,7 +39,7 @@ rule all:
         # expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-{event_type}'), event_type=EVENT_TYPES),
         
         # compute splicing dependencies (mean, median, std)
-        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','model_selection'),
@@ -55,6 +55,9 @@ rule all:
         
         # EDA embeddings of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
+        
+        # Associations
+        expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -265,12 +268,24 @@ rule figures_validation_crispr:
         """
         
         
-rule figures_validation_genes_oi:
+rule correlate_transcriptome_indices_ccle:
     input:
+        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
+        indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
     output:
-        os.path.join(RESULTS_DIR,'figures','validation_genes_oi')
+        os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz')
+    params:
+        script_dir = os.path.join(SRC_DIR,'python'),
+        sample_col = 'index',
+        cor_method = 'spearman',
+        padj_method = 'fdr_bh'
     shell:
         """
-        Rscript scripts/figures_validation_genes_oi.R \
-                    --
+        python {params.script_dir}/correlation_exon_transcriptome_indices.py \
+                        --omic_file={input.spldep} \
+                        --sample_properties_file={input.indices} \
+                        --sample_col={params.sample_col} \
+                        --cor_method={params.cor_method} \
+                        --padj_method={params.padj_method} \
+                        --output_file={output}
         """
