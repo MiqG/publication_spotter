@@ -53,7 +53,9 @@ def load_data(
     # read
     models = pd.read_table(models_file).set_index(["EVENT", "ENSEMBL"])
     coefs = {
-        "event": pd.read_pickle(os.path.join(models_coefs_dir, "coefs_event.pickle.gz")),
+        "event": pd.read_pickle(
+            os.path.join(models_coefs_dir, "coefs_event.pickle.gz")
+        ),
         "gene": pd.read_pickle(os.path.join(models_coefs_dir, "coefs_gene.pickle.gz")),
         "interaction": pd.read_pickle(
             os.path.join(models_coefs_dir, "coefs_interaction.pickle.gz")
@@ -148,18 +150,22 @@ def compute_splicing_dependency(coefs, psi, genexpr, n_jobs):
     # unpack coefficients
     coefs_event = coefs["event"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
     coefs_gene = coefs["gene"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
-    coefs_interaction = coefs["interaction"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
-    coefs_intercept = coefs["intercept"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
+    coefs_interaction = (
+        coefs["interaction"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
+    )
+    coefs_intercept = (
+        coefs["intercept"].drop(columns=["GENE"]).set_index(["EVENT", "ENSEMBL"])
+    )
 
     # predict splicing dependency for each combination of parameters
     event_gene = coefs_event.index.to_frame()
 
     result = Parallel(n_jobs=n_jobs)(
         delayed(compute_single_splicing_dependency)(
-            b_event=coefs_event.loc[(event,gene)].values.reshape(-1, 1),
-            b_gene=coefs_gene.loc[(event,gene)].values.reshape(-1,1),
-            b_interaction=coefs_interaction.loc[(event,gene)].values.reshape(-1, 1),
-            b_intercept=coefs_intercept.loc[(event,gene)].values.reshape(-1, 1),
+            b_event=coefs_event.loc[(event, gene)].values.reshape(-1, 1),
+            b_gene=coefs_gene.loc[(event, gene)].values.reshape(-1, 1),
+            b_interaction=coefs_interaction.loc[(event, gene)].values.reshape(-1, 1),
+            b_intercept=coefs_intercept.loc[(event, gene)].values.reshape(-1, 1),
             x_psi=psi.loc[event],
             x_genexpr=genexpr.loc[gene],
         )
@@ -204,11 +210,18 @@ def main():
 
     print("Loading data...")
     coefs, psi, genexpr = load_data(
-        models_file, models_coefs_dir, psi_file, genexpr_file, normalize_counts, gene_lengths_file
+        models_file,
+        models_coefs_dir,
+        psi_file,
+        genexpr_file,
+        normalize_counts,
+        gene_lengths_file,
     )
 
     print("Computing splicing dependencies...")
-    spldep_mean, spldep_median, spldep_std = compute_splicing_dependency(coefs, psi, genexpr, n_jobs)
+    spldep_mean, spldep_median, spldep_std = compute_splicing_dependency(
+        coefs, psi, genexpr, n_jobs
+    )
 
     print("Saving results...")
     spldep_mean.reset_index().to_csv(spldep_mean_file, **SAVE_PARAMS)
