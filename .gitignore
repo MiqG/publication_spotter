@@ -1,4 +1,4 @@
 *ipynb_checkpoints*
 *snakemake*
 .done
-**/*.cpython-38..pyc
+*.pyc
