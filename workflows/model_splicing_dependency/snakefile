@@ -23,9 +23,8 @@ RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
-EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD']
+EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD','INT']
 
-print(TS_DIR)
 ##### RULES #####
 rule all:
     input:
@@ -74,10 +73,13 @@ rule model_gene_dependency:
         mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'))
-    threads: 10
+    threads: 16
+    resources:
+        runtime = 604800, # seconds = 168h = 7 days
+        memory = 30
     params:
         script_dir = TS_DIR,
-        n_iterations = 2
+        n_iterations = 500
     shell:
         """
         python {params.script_dir}/target_spotter spldep_fit \
@@ -98,7 +100,10 @@ rule compute_splicing_dependency:
         coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:
         directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'))
-    threads: 10
+    threads: 16
+    resources:
+        runtime = 86400, # seconds = 24h = 1 day
+        memory = 30
     params:
         script_dir = TS_DIR
     shell:
