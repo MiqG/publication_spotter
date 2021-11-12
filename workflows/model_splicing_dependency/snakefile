@@ -22,10 +22,10 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
-
+TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD']
 
-
+print(TS_DIR)
 ##### RULES #####
 rule all:
     input:
@@ -35,11 +35,8 @@ rule all:
         # fit gene dependencies
         # expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-        # sample coefficients of splicing dependencies
-        # expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-{event_type}'), event_type=EVENT_TYPES),
-        
         # compute splicing dependencies (mean, median, std)
-        # expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','model_selection'),
@@ -57,7 +54,7 @@ rule all:
         # os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
         
         # Associations
-        expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -69,7 +66,6 @@ rule all:
         # os.path.join(RESULTS_DIR,'figures','interaction_analysis')
         
         
-        
 rule model_gene_dependency:
     input:
         splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
@@ -78,66 +74,43 @@ rule model_gene_dependency:
         mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'))
-    threads: 16
+    threads: 10
     params:
-        n_iterations = 100
+        script_dir = TS_DIR,
+        n_iterations = 2
     shell:
         """
-        python scripts/model_gene_dependency.py \
+        python {params.script_dir}/target_spotter spldep_fit \
+                    --gene_dependency_file={input.gene_dependency_file} \
                     --splicing_file={input.splicing_file} \
                     --genexpr_file={input.genexpr_file} \
                     --mapping_file={input.mapping_file} \
-                    --gene_dependency_file={input.gene_dependency_file} \
                     --output_dir={output} \
                     --n_iterations={params.n_iterations} \
                     --n_jobs={threads}
         """
         
         
-# rule sample_splicing_dependency_coefs:
-#     input:
-#         os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz')
-#     output:
-#         directory(os.path.join(RESULTS_DIR,'files','splicing_dependency_coefs-{event_type}'))
-#     threads: 15
-#     params:
-#         seed = 1234,
-#         size = 1000
-#     shell:
-#         """
-#         python scripts/sample_splicing_dependency_coefs.py \
-#                     --models_file={input} \
-#                     --output_dir={output} \
-#                     --size={params.size} \
-#                     --random_seed={params.seed} \
-#                     --n_jobs={threads}
-#         """
-        
-
 rule compute_splicing_dependency:
     input:
-        os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'),
         psi = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
         genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}/model_summaries.tsv.gz'),
-        models_coefs = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
+        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:
-        spldep_mean = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
-        spldep_median = os.path.join(RESULTS_DIR,'files','splicing_dependency_median-{event_type}.tsv.gz'),
-        spldep_std = os.path.join(RESULTS_DIR,'files','splicing_dependency_std-{event_type}.tsv.gz')
-    threads: 15
+        directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'))
+    threads: 10
     params:
-        script_dir=os.path.join(SRC_DIR,'python')
+        script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/compute_splicing_dependency.py \
-                    --psi_file={input.psi} \
+        python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
-                    --models_file={input.models} \
-                    --models_coefs_dir={input.models_coefs} \
-                    --spldep_mean_file={output.spldep_mean} \
-                    --spldep_median_file={output.spldep_median} \
-                    --spldep_std_file={output.spldep_std} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_interaction_file={input.coefs_dir}/coefs_interaction.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
                     --n_jobs={threads}
         """
     
