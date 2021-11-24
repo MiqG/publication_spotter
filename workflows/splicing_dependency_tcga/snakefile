@@ -11,8 +11,7 @@ Workflow to analyze putative associations between exons and cancer at single-exo
 Outline
 -------
 - infer splicing dependency
-- differential splicing dependency
-- differential splicing
+- differential PSI tumor vs normal by cancer type
 
 """
 
@@ -25,6 +24,7 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_tcga')
 SRC_DIR = os.path.join(ROOT,'src')
 MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 
 EVENT_TYPES = ['EX'] # ['EX','ALTA','ALTD']
 CANCER_TYPES = [
@@ -80,14 +80,14 @@ PADJ_METHOD = 'fdr_bh'
 rule all:
     input:
         # compute splicing dependencies TCGA
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
         
         # impute splicing dependencies TCGA
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
         
         # differential sample type TCGA
         ## splicing dependency
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-spldep-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
         ## PSI
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
         
@@ -116,39 +116,65 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','survival_analysis-coxph-{event_type}.tsv.gz'),cancer=CANCER_TYPES, event_type=EVENT_TYPES)
 
         
+# rule compute_splicing_dependency_tcga:
+#     input:
+#         psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
+#         genexpr = os.path.join(PREP_DIR,'gene_counts','{cancer}.tsv'),
+#         models = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'),
+#         models_coefs = os.path.join(MODELS_DIR,'files','splicing_dependency_coefs-{event_type}'),
+#         gene_lengths = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
+#     output:
+#         spldep_mean = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'),
+#         spldep_median = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_median-{event_type}.tsv.gz'),
+#         spldep_std = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_std-{event_type}.tsv.gz')
+#     threads: 15
+#     params:
+#         script_dir=os.path.join(SRC_DIR,'python'),
+#         normalize_counts = True
+#     shell:
+#         """
+#         python {params.script_dir}/compute_splicing_dependency.py \
+#                     --psi_file={input.psi} \
+#                     --genexpr_file={input.genexpr} \
+#                     --models_file={input.models} \
+#                     --models_coefs_dir={input.models_coefs} \
+#                     --normalize_counts={params.normalize_counts} \
+#                     --gene_lengths_file={input.gene_lengths} \
+#                     --spldep_mean_file={output.spldep_mean} \
+#                     --spldep_std_file={output.spldep_std} \
+#                     --n_jobs={threads}
+#         """
+        
+        
 rule compute_splicing_dependency_tcga:
     input:
         psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
         genexpr = os.path.join(PREP_DIR,'gene_counts','{cancer}.tsv'),
-        models = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'),
-        models_coefs = os.path.join(MODELS_DIR,'files','splicing_dependency_coefs-{event_type}'),
-        gene_lengths = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
+        coefs_dir = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}')
     output:
-        spldep_mean = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz'),
-        spldep_median = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_median-{event_type}.tsv.gz'),
-        spldep_std = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_std-{event_type}.tsv.gz')
+        directory(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'))
     threads: 15
     params:
-        script_dir=os.path.join(SRC_DIR,'python'),
+        script_dir = TS_DIR,
         normalize_counts = True
     shell:
         """
-        python {params.script_dir}/compute_splicing_dependency.py \
-                    --psi_file={input.psi} \
+        python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
-                    --models_file={input.models} \
-                    --models_coefs_dir={input.models_coefs} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_interaction_file={input.coefs_dir}/coefs_interaction.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
                     --normalize_counts={params.normalize_counts} \
-                    --gene_lengths_file={input.gene_lengths} \
-                    --spldep_mean_file={output.spldep_mean} \
-                    --spldep_std_file={output.spldep_std} \
                     --n_jobs={threads}
         """
         
         
 rule impute_splicing_dependency:
     input:
-        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency_mean-{event_type}.tsv.gz')
+        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}','mean.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz')
     params:
