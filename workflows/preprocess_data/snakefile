@@ -45,13 +45,27 @@ DEPMAP_RAW = {
     #'genexpr_tpm': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
 }
 
+# get treatment file paths
+TREATMENT_FILES = {}
+for c in CANCER_TYPES:
+    clinical_dir = os.path.join(RAW_DIR,'GDC','TCGA-%s','harmonized','Clinical','Clinical_Supplement') % c
+    for d in os.listdir(clinical_dir):
+        f = os.listdir(os.path.join(clinical_dir,d))[0]
+        if 'drug' in f:
+            treatment_file = os.path.join(clinical_dir,d,f)
+            TREATMENT_FILES[c]=treatment_file
+            
 ##### RULES #####
 rule all:
     input:
         # mutation frequency on exons
         os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv'),
         os.path.join(PREP_DIR,'event_snv','CCLE-EX.tsv.gz'),
-        os.path.join(PREP_DIR,'event_mut_freq','CCLE-EX.tsv.gz')
+        os.path.join(PREP_DIR,'event_mut_freq','CCLE-EX.tsv.gz'),
+        
+        # preprocess TCGA
+        ## harmonize names drug treatments
+        expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES)
 #         # preprocess CCLE
 #         ## metadata
 #         os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
@@ -374,3 +388,17 @@ rule prepare_moiso2021:
                         --output_file={output}
             """
             
+
+rule harmonize_drug_treatments:
+    input:
+        treatments = lambda wildcards: TREATMENT_FILES[wildcards.cancer],
+        correction = os.path.join(RAW_DIR,'articles','Spainhour2017','DrugCorrection.csv')
+    output:
+        os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz')
+    shell:
+        """
+        python scripts/preprocess_tcga_treatments.py \
+                    --treatments_file={input.treatments} \
+                    --drug_correction_file={input.correction} \
+                    --output_file={output}
+        """
