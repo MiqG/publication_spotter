@@ -31,9 +31,6 @@ rule all:
         # fit gene dependencies and get empirical distributions of coefficients
         expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES),
         
-        # fit gene dependencies
-        # expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        
         # compute splicing dependencies (mean, median, std)
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
@@ -41,19 +38,19 @@ rule all:
         # os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # write selected models
-        # expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies
-        # expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # embed splicing dependencies
-        # expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # EDA embeddings of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
         
         # Associations
-        # expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -73,7 +70,7 @@ rule model_gene_dependency:
         mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'))
-    threads: 16
+    threads: 20
     resources:
         runtime = 604800, # seconds = 168h = 7 days
         memory = 30
@@ -100,7 +97,7 @@ rule compute_splicing_dependency:
         coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:
         directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'))
-    threads: 16
+    threads: 20
     resources:
         runtime = 86400, # seconds = 24h = 1 day
         memory = 30
@@ -122,7 +119,7 @@ rule compute_splicing_dependency:
     
 rule list_selected_models:
     input:
-        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}.tsv.gz')
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}','model_summaries.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     params:
@@ -132,7 +129,7 @@ rule list_selected_models:
         models = pd.read_table(input.models)
         models = models.loc[
             (models['lr_pvalue']<params.thresh_lr_pvalue) &
-            (models['pearson_correlation']>0)
+            (models['pearson_correlation_mean']>0)
         ].copy()
         
         with open(output[0], 'w') as f:
@@ -142,7 +139,7 @@ rule list_selected_models:
     
 rule impute_splicing_dependency:
     input:
-        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
+        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz'),
         rows_oi = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     output:
         os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz')
@@ -180,9 +177,9 @@ rule embed_matrices:
         
 rule figures_model_selection:
     input:
-        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz'),
+        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX','model_summaries.tsv.gz'),
         rnai = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
-        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-EX.tsv.gz'),
+        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-EX','mean.tsv.gz'),
         msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
         protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
         mut_freq = os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz'),
@@ -248,7 +245,7 @@ rule figures_validation_crispr:
         
 rule correlate_transcriptome_indices_ccle:
     input:
-        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
+        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz'),
         indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz')

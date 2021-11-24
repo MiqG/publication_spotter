@@ -41,9 +41,10 @@ THRESH_LR_PVALUE = 0.001
 # -----------
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RESULTS_DIR = file.path(ROOT,'results','model_splicing_dependency')
-# models_file = file.path(RESULTS_DIR,'files','models_gene_dependency-EX.tsv.gz')
+# models_file = file.path(RESULTS_DIR,'files','models_gene_dependency-EX','model_summaries.tsv.gz')
+# ccle_stats_file = file.path(PREP_DIR,'stats','CCLE.tsv.gz')
 # rnai_file = file.path(PREP_DIR,'demeter2','CCLE.tsv.gz')
-# spldep_file = file.path(RESULTS_DIR,'files','splicing_dependency_mean-EX.tsv.gz')
+# spldep_file = file.path(RESULTS_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
 # protein_impact_file = file.path(ROOT,'data','raw','VastDB','PROT_IMPACT-hg38-v3.tab.gz')
 # mut_freq_file = file.path(ROOT,'data','prep','mutation_freq','CCLE.tsv.gz')
@@ -152,10 +153,10 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         labs(x='LR Test p-value', y='Count')
     
     plts[['model_selection-pearson_corr']] = models %>%
-        gghistogram(x='pearson_correlation', bins=100, fill='darkred', color=NA) +
-        geom_vline(xintercept=median(models[['pearson_correlation']], na.rm=TRUE),
+        gghistogram(x='pearson_correlation_mean', bins=100, fill='darkred', color=NA) +
+        geom_vline(xintercept=median(models[['pearson_correlation_mean']], na.rm=TRUE),
                    linetype='dashed') +
-        labs(x='Pearson Correlation (Test Set)', y='Count')
+        labs(x='Pearson Correlation Mean (Test Set)', y='Count')
     
     threshs = c(
         1e-4,5e-4,
@@ -166,12 +167,12 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     samples_oi = intersect(colnames(rnai),colnames(spldep))
     corrs = lapply(threshs, function(thresh){
         models_filtered = models %>% 
-            filter(pearson_correlation>0 & lr_pvalue<thresh) 
+            filter(pearson_correlation_mean>0 & lr_pvalue<thresh) 
         
         # from each gene, pick de event-level model that generalizes the worst
         models_selected = models_filtered %>%
             group_by(GENE) %>%
-            slice_min(order_by=pearson_correlation, n=1)
+            slice_min(order_by=pearson_correlation_mean, n=1)
         
         events = models_selected %>% pull(EVENT)
         genes = models_selected %>% pull(GENE)
@@ -208,21 +209,21 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     plts[['model_selection-pvalue_vs_n_genes']] = corrs %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_genes', label=TRUE, lab.size=2) +
+        ggbarplot(x='thresh', y='total_genes', label=TRUE, lab.size=3) +
         labs(x='Thresholds LR Test p-value', y='No. Genes Selected') +
         theme_pubr(x.text.angle=70)
     
     plts[['model_selection-pvalue_vs_n_uniforms']] = corrs %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_uniforms', label=TRUE, lab.size=2) +
+        ggbarplot(x='thresh', y='total_uniforms', label=TRUE, lab.size=3) +
         labs(x='Thresholds LR Test p-value', y='No. Uniform Dep. Genes Selected') +
         theme_pubr(x.text.angle=70)
     
     plts[['model_selection-pvalue_vs_n_events']] = corrs %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_events', label=TRUE, lab.size=2) +
+        ggbarplot(x='thresh', y='total_events', label=TRUE, lab.size=3) +
         labs(x='Thresholds LR Test p-value', y='No. Events Selected') +
         theme_pubr(x.text.angle=70)
     
@@ -360,23 +361,23 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     plts_enrichment = do.call(c,plts_enrichment)
     names(plts_enrichment) = sprintf('model_selection-enrichment-%s',
                                      names(plts_enrichment))
-    plts = c(plts,plts_enrichment)
+    plts = c(plts, plts_enrichment)
     
     # overlaps between enriched GO processes and protein impact?
-    sets = list(
-        prot_imp %>% 
-            filter(is_selected) %>% 
-            get_sets('term_clean','GENE'),
-        enrichment[['GO_BP']] %>% 
-            as.data.frame() %>% 
-            dplyr::select(Description,geneID) %>% 
-            separate_rows(geneID) %>% 
-            get_sets('Description','geneID')
-    )
-    sets = do.call(c,sets)
-    m = sets %>% list_to_matrix() %>% make_comb_mat()
-    plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = UpSet(m, comb_order = order(comb_size(m)))
-    plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = as.ggplot(grid.grabExpr(draw(plts[['model_selection-enrichment-GO_BP_vs_prot_imp']])))
+#     sets = list(
+#         prot_imp %>% 
+#             filter(is_selected) %>% 
+#             get_sets('term_clean','GENE'),
+#         enrichment[['GO_BP']] %>% 
+#             as.data.frame() %>% 
+#             dplyr::select(Description,geneID) %>% 
+#             separate_rows(geneID) %>% 
+#             get_sets('Description','geneID')
+#     )
+#     sets = do.call(c,sets)
+#     m = sets %>% list_to_matrix() %>% make_comb_mat()
+#     plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = UpSet(m, comb_order = order(comb_size(m)))
+#     plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = as.ggplot(grid.grabExpr(draw(plts[['model_selection-enrichment-GO_BP_vs_prot_imp']])))
 
     
     return(plts)
@@ -663,6 +664,7 @@ save_figdata = function(figdata, dir){
 main = function(){
     args = getParsedArgs()
     models_file = args$models_file
+    ccle_stats_file = args$ccle_stats_file
     msigdb_dir = args$msigdb_dir
     protein_impact_file = args$protein_impact_file
     mut_freq_file = args$mut_freq_file
@@ -676,7 +678,12 @@ main = function(){
     # load
     models = read_tsv(models_file) %>% 
         mutate(event_gene = paste0(EVENT,'_',GENE),
-               event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
+               event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)),
+               event_zscore = event_coefficient_mean / event_coefficient_std,
+               gene_zscore = gene_coefficient_mean / gene_coefficient_std,
+               interaction_zscore = interaction_coefficient_mean / interaction_coefficient_std,
+               intercept_zscore = intercept_coefficient_mean / intercept_coefficient_std)
+    ccle_stats = read_tsv(ccle_stats_file)
     mut_freq = read_tsv(mut_freq_file) %>% 
         dplyr::rename(GENE=Hugo_Symbol) %>% 
         mutate(log_rel_entropy=log2(max_rel_entropy))
@@ -699,7 +706,10 @@ main = function(){
     models = models %>% 
         left_join(get_interaction_categories(models, possible_interactions), 
                   by='event_gene') %>%
-        mutate(is_selected = pearson_correlation>0 & lr_pvalue<THRESH_LR_PVALUE)
+        mutate(is_selected = pearson_correlation_mean>0 & lr_pvalue<THRESH_LR_PVALUE) %>%
+        dplyr::select(-c(event_mean,event_std,gene_mean,gene_std)) %>% 
+        left_join(ccle_stats, by=c("EVENT","ENSEMBL","GENE"))
+        
     
     plts = make_plots(models, rnai, spldep, mut_freq, ontologies)
 
