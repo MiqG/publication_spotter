@@ -98,6 +98,10 @@ rule all:
         # Moiso 2021
         os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz'),
         
+        # split GDSC platforms
+        os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
+        os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz'),
+        
         # preprocess TCGA
         ## harmonize names drug treatments
         expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES)
@@ -400,3 +404,22 @@ rule harmonize_drug_treatments:
                     --drug_correction_file={input.correction} \
                     --output_file={output}
         """
+        
+        
+rule preprocess_gdsc:
+    input:
+        os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv')
+    output:
+        gdsc1 = os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
+        gdsc2 = os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz')
+    run:
+        import pandas as pd
+        drug_response = pd.read_csv(input[0])
+        # GDSC1
+        idx = drug_response["DATASET"] == "GDSC1"
+        drug_response.loc[idx].to_csv(output.gdsc1, sep='\t', index=False, compression="gzip")
+        # GDSC2
+        idx = drug_response["DATASET"] == "GDSC2"
+        drug_response.loc[idx].to_csv(output.gdsc2, sep='\t', index=False, compression="gzip")
+        
+    
