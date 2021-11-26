@@ -39,7 +39,7 @@ annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 ##### FUNCTIONS #####
 def load_data(spldep_file, drug_file, annotation_file, selected_models_file=None):
     spldep = pd.read_table(spldep_file, index_col=0)
-    drug = pd.read_csv(drug_file)
+    drug = pd.read_table(drug_file)
     annotation = pd.read_table(annotation_file)
 
     # drop undetected & uninformative features
@@ -242,7 +242,7 @@ def fit_models(spldep, drug, pcs, annotation, n_jobs):
     sigma = spldep.cov()
     drugs_oi = drug["DRUG_ID"].unique()
     results = []
-    for drug_oi in drugs_oi[:2]:
+    for drug_oi in drugs_oi:
         print(drug_oi)
 
         # prepare drug target variable
@@ -264,7 +264,7 @@ def fit_models(spldep, drug, pcs, annotation, n_jobs):
                 gene,
                 method="limix",
             )
-            for event, ensembl, gene in tqdm(annotation.values[:100])
+            for event, ensembl, gene in tqdm(annotation.values)
         )
         res = pd.DataFrame(res)
 
