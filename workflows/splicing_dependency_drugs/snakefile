@@ -25,22 +25,26 @@ SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 
 EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD']
-DRUGS = []
+DRUG_SCREENS = ['GDSC1','GDSC2']
 
 ##### RULES #####
 rule all:
     input:
         # associations drug responses and splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}.tsv.gz'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS)
+        
+        # embed association coefficients
+        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}-coefs_mat.tsv.gz'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS)
+        expand(os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{drug_screen}-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # plot models
-        os.path.join(RESULTS_DIR,'figures','model_drug_response')
+        # os.path.join(RESULTS_DIR,'figures','model_drug_screens')
 
     
 rule model_drug_response:
     input:
         spldep = os.path.join(MODELS_DIR,'files','splicing_dependency_mean-{event_type}.tsv.gz'),
-        drug_response = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
+        drug_response = os.path.join(PREP_DIR,'drug_screens','{drug_screen}.tsv.gz'),
         selected_models = os.path.join(MODELS_DIR,'files','selected_models-{event_type}.txt'),
         annot = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
@@ -57,7 +61,35 @@ rule model_drug_response:
                     --output_file={output}
         """
         
-    
+        
+rule pivot_drug_associations:
+    input:  
+        os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-{event_type}-coefs_mat.tsv.gz')
+    run:
+        import pandas as pd
+        df = pd.read_table(input[0])
+        df = df.pivot_table(values='spldep_coefficient', index='EVENT', columns='drug_name') #DRUG_ID
+        df = df.fillna(0)
+        df.reset_index().to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+
+rule embed_drug_associations:
+    input:
+        os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-{event_type}-coefs_mat.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python')
+    shell:
+        """
+        python {params.script_dir}/embed_and_cluster.py \
+                    --matrix_file={input} \
+                    --output_file={output} 
+        """
+
+        
 rule figures_model_drug_screens:
     input:
         models = os.path.join(RESULTS_DIR,'files','models_drug_response-gdsc-EX.tsv.gz'),
@@ -71,3 +103,6 @@ rule figures_model_drug_screens:
                     --drug_targets_file={input.drug_targets} \
                     --figs_dir={output}
         """
+        
+
+        
