@@ -15,15 +15,17 @@ require(tidytext)
 require(ggpubr)
 require(cowplot)
 require(ggrepel)
+require(extrafont)
+require(cluster)
 require(ComplexHeatmap)
-require(gridExtra)
 require(ggplotify)
+require(gridExtra)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
 
 # variables
-THRESH_FDR = 0.05
+THRESH_FDR = 0.1
 THRESH_PVALUE = 0.05
 
 # Development
@@ -31,14 +33,24 @@ THRESH_PVALUE = 0.05
 # RAW_DIR = file.path(ROOT,'data','raw')
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_drugs')
-# models_file = file.path(RESULTS_DIR,'files','models_drug_response-gdsc-EX.tsv.gz')
+# models_file = file.path(RESULTS_DIR,'files','model_summaries_drug_response-EX.tsv.gz')
 # drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
 # figs_dir = file.path(RESULTS_DIR,'figures','model_drug_screens')
+# embedding_file = file.path(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz')
 
 ##### FUNCTIONS #####
-plot_associations = function(models, drug_targets){
+get_sets = function(df, set_names, set_values){
+    sets = df[,c(set_values,set_names)] %>%
+        distinct() %>%
+        with(., split(get(set_values),get(set_names)))
+    sets = sapply(sets, unique, simplufy=FALSE)
+    return(sets)
+}
+
+plot_associations = function(models, drug_targets, embedding){
     top_n = 25
-    X = models
+    X = models %>% 
+        left_join(drug_targets[,c("DRUG_ID","DRUG_NAME")], by="DRUG_ID")
     
     plts = list()
     
@@ -58,18 +70,18 @@ plot_associations = function(models, drug_targets){
     # how many drugs and events are significantly associated?
     plts[['associations-drug_counts']] = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
-        count(drug_name) %>% 
+        count(DRUG_NAME) %>% 
         arrange(n) %>% 
-        ggbarplot(x='drug_name', y='n', fill='#2a9d8f', color=NA) + 
-        labs(x='Drug', y='No. Significant Associations')
+        ggbarplot(x='DRUG_NAME', y='n', fill='#2a9d8f', color=NA) + 
+        labs(x='Drug', y='N. Significant Associations')
     
     plts[['associations-top_drug_counts']] = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
-        count(drug_name) %>% 
+        count(DRUG_NAME) %>% 
         arrange(n) %>% 
         tail(top_n) %>%
-        ggbarplot(x='drug_name', y='n', fill='#2a9d8f', color=NA) + 
-        labs(x='Drug', y='No. Significant Associations', 
+        ggbarplot(x='DRUG_NAME', y='n', fill='#2a9d8f', color=NA) + 
+        labs(x='Drug', y='N. Significant Associations', 
              title=sprintf('Top %s', top_n)) +
         coord_flip()
     
@@ -78,7 +90,7 @@ plot_associations = function(models, drug_targets){
         count(event_gene) %>% 
         arrange(n) %>% 
         ggbarplot(x='event_gene', y='n', fill='orange', color=NA) + 
-        labs(x='Event & Gene', y='No. Significant Associations')
+        labs(x='Event & Gene', y='N. Significant Associations')
     
     plts[['associations-top_spldep_counts']] = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
@@ -86,7 +98,7 @@ plot_associations = function(models, drug_targets){
         arrange(n) %>% 
         tail(top_n) %>%
         ggbarplot(x='event_gene', y='n', fill='orange', color=NA) + 
-        labs(x='Event & Gene', y='No. Significant Associations', 
+        labs(x='Event & Gene', y='N. Significant Associations', 
              title=sprintf('Top %s', top_n)) +
         coord_flip()
     
@@ -94,33 +106,108 @@ plot_associations = function(models, drug_targets){
     # dependency of an event of a gene that it targets?
     found_targets = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
-        mutate(drug_name=gsub("(.*),.*", "\\1",drug_name)) %>% 
-        left_join(drug_targets, by=c('GENE'='TARGET','drug_name'='DRUG_NAME')) %>%
+        left_join(drug_targets, by=c("DRUG_ID","DRUG_NAME","GENE"="TARGET")) %>%
         drop_na(TARGET_PATHWAY) %>%
         mutate(is_target=TRUE)
-    drugs_oi = found_targets %>% pull(drug_name) %>% unique()
+    drugs_oi = found_targets %>% pull(DRUG_NAME) %>% unique()
     events_oi = found_targets %>% pull(EVENT) %>% unique()
     
     plts[['associations-top_found_targets']] = X %>% 
-        filter(lr_padj<THRESH_FDR & drug_name%in%drugs_oi) %>% 
-        group_by(drug_name) %>% 
+        filter(lr_padj<THRESH_FDR & DRUG_NAME%in%drugs_oi) %>% 
+        group_by(DRUG_NAME) %>% 
         slice_max(order_by=abs(spldep_coefficient), n=15) %>% 
-        left_join(distinct(found_targets[,c('drug_name','GENE','is_target')]), 
-                  by=c('drug_name','GENE')) %>% 
-        left_join(distinct(found_targets[,c('drug_name','TARGET_PATHWAY')]), 
-                  by=c('drug_name')) %>% 
+        left_join(distinct(found_targets[,c('DRUG_NAME','GENE','is_target')]), 
+                  by=c('DRUG_NAME','GENE')) %>% 
+        left_join(distinct(found_targets[,c('DRUG_NAME','TARGET_PATHWAY')]), 
+                  by=c('DRUG_NAME')) %>% 
         mutate(is_target=replace_na(is_target,FALSE), 
                log10_pvalue=-log10(lr_pvalue), 
-               drug_name_clean=sprintf('%s | %s',drug_name,TARGET_PATHWAY), 
-               event_gene=reorder_within(event_gene, spldep_coefficient, drug_name)) %>% 
+               drug_name_clean=sprintf('%s | %s',DRUG_NAME,TARGET_PATHWAY), 
+               event_gene=reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>% 
         ggbarplot(x='event_gene', y='spldep_coefficient', fill='is_target', 
                   palette='lancet', color=NA) + 
-        facet_wrap(~drug_name_clean, scales='free_y', ncol=2) + 
-        scale_x_reordered() + 
+        facet_wrap(~drug_name_clean, scales='free') + 
+        scale_x_reordered() +     
         labs(x='Event & Gene', y='Effect Size', fill='Is Drug Target', 
              title='Top 15 Significant Effect Sizes') + 
         coord_flip() +
         theme_pubr(border=TRUE)
+    
+    X = X %>% 
+        filter(lr_padj<THRESH_FDR & DRUG_NAME%in%drugs_oi) %>%
+        distinct(DRUG_NAME,EVENT,event_gene,spldep_coefficient) %>%
+        group_by(DRUG_NAME) %>%
+        arrange(-abs(spldep_coefficient)) %>%
+        mutate(ranking=row_number() / n()) %>%
+        filter(EVENT %in% events_oi)
+    
+    plts[['associations-target_ranking']] = X %>%
+        gghistogram(x="ranking", fill="darkgrey", color=NA) +
+        labs(x='Ranking Ratio', y='Count', 
+             title=sprintf('n = %s', nrow(X)))
+    
+    # are association profiles informative of drug mechanism of action?
+    plts[['associations-target_pathway-counts']] = drug_targets %>% 
+        distinct(DRUG_ID,TARGET_PATHWAY) %>%
+        count(TARGET_PATHWAY) %>%
+        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        ggbarplot(x='TARGET_PATHWAY', y="n",
+                  fill="TARGET_PATHWAY", color=NA, 
+                  palette=get_palette("jco", 21)) +
+        labs(x='Target Pathway', y='Count') +
+        coord_flip() +
+        theme_pubr(legend="none")
+    
+    plts[['associations-target_pathway-umap']] = embedding %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
+                  by=c("index"="DRUG_ID")) %>%
+        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        ggscatter(x="UMAP0", y="UMAP1", color="TARGET_PATHWAY", 
+                  palette=get_palette("jco", 21)) +
+        theme(aspect.ratio=1)
+    
+    ## check silhouettes
+    X = embedding %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
+                  by=c("index"="DRUG_ID")) %>%
+        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        mutate(lab = as.numeric(as.factor(TARGET_PATHWAY)))
+        
+    
+    dis = X %>%
+        column_to_rownames("index") %>%
+        dplyr::select(starts_with("UMAP")) %>%
+        dist() %>%
+        as.matrix()
+    
+    sil = silhouette(X %>% pull(lab), dis^2)
+    
+    plts[['associations-target_pathway-silhouettes']] = X %>% 
+        left_join(as.data.frame(sil[,]), by=c("lab"="cluster")) %>% 
+        dplyr::select(sil_width, TARGET_PATHWAY) %>% 
+        arrange(TARGET_PATHWAY) %>%
+        ggboxplot(x="TARGET_PATHWAY", y="sil_width", fill="TARGET_PATHWAY", 
+                  outlier.size=0.5, palette=get_palette("jco", 21)) + 
+        guides(fill="none") +
+        labs(x='Target Pathway', y='Silhouette Score') +
+        coord_flip()
+    
+    # in some cases, there seems to be an association between dependency profiles
+    # and drug mechanism of action / target pathway, but in others not.
+    # Does this have something to do with the number of specific splicing events
+    # whose dependency is associated with drugs of a certain target pathway?
+#     X = models %>% 
+#         left_join(drug_targets, by="DRUG_ID")
+    
+#     events_oi = X %>% 
+#         filter(lr_padj < THRESH_FDR) %>% 
+#         distinct(EVENT,TARGET_PATHWAY) %>% 
+#         filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>% 
+#         get_sets('TARGET_PATHWAY', 'EVENT')
+#     m = events_oi %>% list_to_matrix() %>% make_comb_mat()
+#     UpSet(m, comb_order = order(comb_size(m)))
+#     as.ggplot(grid.grabExpr(draw()))
+    
     
     return(plts)
 }
@@ -197,9 +284,33 @@ plot_examples = function(models, drug_targets){
 }
 
 
-make_plots = function(models, drug_targets){
+plot_drugs_common_targets = function(models, drug_targets){
+    require(proxy)
+    X = drug_targets %>% distinct(DRUG_NAME,TARGET) %>% mutate(is_target=1) %>% pivot_wider(id_cols=TARGET, names_from=DRUG_NAME, values_from=is_target, values_fill=FALSE)
+    sim = simil(X[,-1], method='Jaccard', by_rows=FALSE) %>% as.matrix()
+    
+    ind = which(upper.tri(sim, diag=FALSE), arr.ind=TRUE)
+    sim = data.frame(
+        col = dimnames(sim)[[2]][ind[,2]],
+        row = dimnames(sim)[[1]][ind[,1]],
+        jaccard = sim[ind]
+    )
+    sim %>% filter(jaccard==1)
+    
+    drugs_oi = c('AZD6482','TGX-221') # actually TGX221
+    models %>% 
+        mutate(drug_name=gsub("(.*),.*", "\\1",drug_name)) %>% 
+        filter(drug_name %in% drugs_oi) %>% #& lr_padj<THRESH_FDR) %>% 
+        pivot_wider(id_cols=event_gene, names_from=drug_name, values_from=spldep_coefficient) %>%
+        ggscatter(x='TGX-221', y='AZD6482') +
+        geom_abline(slope=1, intercept=0, linetype='dashed') +
+        stat_cor()
+        count(drug_name)
+}
+
+make_plots = function(models, drug_targets, embedding){
     plts = list(
-        plot_associations(models, drug_targets)
+        plot_associations(models, drug_targets, embedding)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -207,12 +318,16 @@ make_plots = function(models, drug_targets){
 
 
 save_plt = function(plts, plt_name, extension='.pdf', 
-                      directory='', dpi=350, 
-                      width = par("din")[1], height = par("din")[2]){
-        filename = file.path(directory,paste0(plt_name,extension))
-        save_plot(filename, 
-                  plts[[plt_name]], 
-                  base_width=width, base_height=height, dpi=dpi)
+                    directory='', dpi=350, 
+                    width = par("din")[1], height = par("din")[2]){
+    plt = plts[[plt_name]]
+    plt = ggpar(plt, font.title=11, font.subtitle=10, font.caption=10, 
+                font.x=10, font.y=10, font.legend=10,
+                font.tickslab=8, font.family='Arial')
+    filename = file.path(directory,paste0(plt_name,extension))
+    save_plot(filename, 
+              plt, 
+              base_width=width, base_height=height, dpi=dpi)
 }
 
 
@@ -223,8 +338,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'associations-top_drug_counts', '.pdf', figs_dir, width=8, height=5)
     save_plt(plts, 'associations-spldep_counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-top_spldep_counts', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'associations-top_found_targets', '.pdf', figs_dir, width=10, height=10)
-
+    save_plt(plts, 'associations-top_found_targets', '.pdf', figs_dir, width=20, height=20)
+    save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'associations-target_pathway-umap', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'associations-target_pathway-silhouettes', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'associations-target_ranking', '.pdf', figs_dir, width=5, height=5)
 }
 
 
@@ -249,6 +367,7 @@ main = function(){
     args = getParsedArgs()
     models_file = args$models_file
     drug_targets_file = args$drug_targets_file
+    embedding_file = args$embedding_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
@@ -259,12 +378,13 @@ main = function(){
                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
     drug_targets = read_csv(drug_targets_file) %>% 
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
-        dplyr::select(DRUG_NAME,TARGET,TARGET_PATHWAY) %>%
+        dplyr::select(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY) %>%
         separate_rows(TARGET) %>%
         distinct()
+    embedding = read_tsv(embedding_file)
     
     # make plots
-    plts = make_plots(models, drug_targets)
+    plts = make_plots(models, drug_targets, embedding)
 
     # make figdata
     # figdata = make_figdata(results_enrich)
