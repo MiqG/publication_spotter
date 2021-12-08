@@ -24,10 +24,11 @@ require(cowplot)
 require(scattermore)
 require(ggrepel)
 require(clusterProfiler)
-require(umap)
 require(ComplexHeatmap)
-require(gridExtra)
 require(ggplotify)
+require(grid)
+require(umap)
+require(extrafont)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -35,7 +36,9 @@ source(file.path(ROOT,'src','R','utils.R'))
 # variables
 THRESH_ZSCORE = 1.96
 THRESH_PVALUE = 0.05
-THRESH_LR_PVALUE = 0.001
+THRESH_LR_PVALUE = 0.0025
+THRESH_CORR = 0.2
+SIZE_CTL = 150
 
 # Development
 # -----------
@@ -47,9 +50,11 @@ THRESH_LR_PVALUE = 0.001
 # spldep_file = file.path(RESULTS_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
 # protein_impact_file = file.path(ROOT,'data','raw','VastDB','PROT_IMPACT-hg38-v3.tab.gz')
-# mut_freq_file = file.path(ROOT,'data','prep','mutation_freq','CCLE.tsv.gz')
+# gene_mut_freq_file = file.path(ROOT,'data','prep','gene_mutation_freq','CCLE.tsv.gz')
+# event_mut_freq_file = file.path(ROOT,'data','prep','event_mutation_freq','CCLE-EX.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','model_selection')
 # possible_interactions_file = file.path(ROOT,'support','possible_pairwise_interaction_categories.tsv')
+# cancer_events_file = file.path(ROOT,'support','cancer_events.tsv')
 
 ##### FUNCTIONS #####
 get_sets = function(df, set_names, set_values){
@@ -106,7 +111,7 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
 }
 
 
-plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
+plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_freq, ontologies, cancer_events){
     # prep data
     rnai = rnai %>% filter(index%in%models[['GENE']]) %>% column_to_rownames('index')
     spldep = spldep %>% filter(index%in%models[['EVENT']]) %>% column_to_rownames('index')
@@ -120,29 +125,69 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
             n_missing = rowSums(is.na(rnai))
         ) %>% rownames_to_column('GENE')
     
-    uniform_genes = rnai_stats %>% 
-        slice_min(order_by = rnai_std, n=100) %>% # selected top 100
+    ctl_neg = rnai_stats %>% 
+        slice_min(order_by = rnai_std, n=SIZE_CTL) %>% # selected top 100
         pull(GENE)
     
-    plts[['model_selection-deps_sorted_vs_std']] = rnai_stats %>% 
+    plts[['model_selection-deps_sorted_vs_std_ctl_neg']] = rnai_stats %>% 
         arrange(-rnai_std) %>% 
         mutate(index=row_number(), 
-               is_uniform=GENE %in% uniform_genes) %>%
-        ggplot(aes(x=index, y=rnai_std, color=is_uniform)) +
-        geom_scattermore(pixels=c(1000,1000), pointsize=4) +
+               is_ctl=GENE %in% ctl_neg) %>%
+        ggscatter(x="index", y="rnai_std", color="is_ctl", 
+                  size="is_ctl", palette=c('grey','brown')) +
         theme_pubr() +
-        ggpubr::color_palette(palette=c('black','orange')) +
-        labs(x='Index', y='Gene Std. Demeter2', color='Uniform Dependency')
+        labs(x='Index', y='Gene Std. Demeter2', 
+             title=sprintf("Total Control Genes = %s", length(ctl_neg)),
+             color="In Negative Control", size="In Negative Control")
     
-    plts[['model_selection-deps_med_vs_std']] = rnai_stats %>% 
-        mutate(is_uniform=GENE %in% uniform_genes) %>%
-        ggplot(aes(x=rnai_med, y=rnai_std, color=is_uniform)) +
-        geom_scattermore(pixels=c(1000,1000), pointsize=4) +
+    plts[['model_selection-deps_med_vs_std_ctl_neg']] = rnai_stats %>% 
+        mutate(is_ctl=GENE %in% ctl_neg) %>%
+        ggscatter(x="rnai_med", y="rnai_std", 
+                  color="is_ctl", palette=c('grey','brown')) +
         theme_pubr() +
-        ggpubr::color_palette(palette=c('black','orange')) +
         labs(x='Gene Median Demeter2', y='Gene Std. Demeter2', 
-             title='Top 100',
-             color='Uniform Dependency')
+             title=sprintf("Total Control Genes = %s", length(ctl_neg)),
+             color='In Negative Control')
+    
+    # as a positive control, we got ~300 exons whose modulation affects cell
+    # proliferation. Of course, we need them to belong to genes that vary to
+    # be likely to have an effect across cancers. So we took the top 100.
+    ctl_pos_genes = cancer_events %>% pull(GENE) %>% unique()
+    plts[['model_selection-deps_sorted_vs_std_ctl_pos']] = rnai_stats %>% 
+        arrange(-rnai_std) %>% 
+        mutate(index=row_number(), 
+               is_ctl=GENE %in% ctl_pos_genes) %>%
+        ggscatter(x="index", y="rnai_std", color="is_ctl", 
+                  size="is_ctl", palette=c('grey','darkgreen')) +
+        theme_pubr() +
+        labs(x='Index', y='Gene Std. Demeter2', 
+             color='In Positive Control', size='In Positive Control', 
+             title=sprintf("Total Control Genes = %s", length(ctl_pos_genes)))
+    
+    plts[['model_selection-deps_med_vs_std_ctl_pos']] = rnai_stats %>% 
+        mutate(is_ctl=GENE %in% ctl_pos_genes) %>%
+        ggscatter(x="rnai_med", y="rnai_std",
+                  color="is_ctl", palette=c('grey','darkgreen')) +
+        theme_pubr() +
+        labs(x='Gene Median Demeter2', y='Gene Std. Demeter2', 
+             title=sprintf("Total Control Genes = %s", length(ctl_pos_genes)),
+             color='In Positive Control')
+    
+    ctl_pos = rnai_stats %>% 
+        filter(GENE %in% ctl_pos_genes) %>% 
+        filter(!(GENE %in% ctl_neg)) %>% # do not include negative controls
+        slice_max(order_by=rnai_std, n=SIZE_CTL) %>% 
+        left_join(cancer_events, by="GENE") %>%
+        pull(EVENT) %>%
+        unique()
+    
+    plts[['model_selection-lr_pvalue_ctl_pos']] = models %>%
+        mutate(is_ctl_pos = EVENT %in% ctl_pos) %>%
+        ggviolin(x="is_ctl_pos", y="lr_pvalue", trim = TRUE, 
+                 fill='is_ctl_pos', color=NA, palette='npg') + 
+        geom_boxplot(width=0.2, fill=NA) +
+        stat_compare_means(method="wilcox.test") +
+        labs(x='Is Positive Control', y='LR Test p-value')
     
     # we selected the ensemble of models by their ability to rank dependencies
     # using likelihood ratio tests' p-values as thresholds
@@ -158,16 +203,23 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
                    linetype='dashed') +
         labs(x='Pearson Correlation Mean (Test Set)', y='Count')
     
+    # find the threshold for the p-value
     threshs = c(
-        1e-4,5e-4,
-        1e-3,5e-3,
-        1e-2,5e-2,
-        1e-1,5e-1
+        1e-4,2.5e-4,5e-4,
+        1e-3,2.5e-3,5e-3,
+        1e-2,2.5e-2,5e-2,
+        1e-1,2.5e-1,5e-1,
+        1
     )
     samples_oi = intersect(colnames(rnai),colnames(spldep))
-    corrs = lapply(threshs, function(thresh){
-        models_filtered = models %>% 
-            filter(pearson_correlation_mean>0 & lr_pvalue<thresh) 
+    eval_pvalue = lapply(threshs, function(thresh){
+        models_possible = models %>%
+            filter(pearson_correlation_mean>0)
+        ctl_neg_corrected = ctl_neg[ctl_neg %in% (models_possible %>% pull(GENE))]
+        ctl_pos_corrected = ctl_pos[ctl_pos %in% (models_possible %>% pull(EVENT))]
+        
+        models_filtered = models_possible %>% 
+            filter(lr_pvalue<thresh) 
         
         # from each gene, pick de event-level model that generalizes the worst
         models_selected = models_filtered %>%
@@ -190,52 +242,123 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
                 thresh = thresh,
                 total_events = nrow(models_filtered),
                 total_genes = length(genes),
-                total_uniforms = sum(genes %in% uniform_genes)
+                total_ctl_neg = sum(genes %in% ctl_neg_corrected),
+                total_ctl_pos = sum(models_filtered %>% pull(EVENT) %in% ctl_pos_corrected)
             )
+            df[['tpr']] = df[['total_ctl_pos']] / length(ctl_pos_corrected)
+            df[['fpr']] = df[['total_ctl_neg']] / length(ctl_neg_corrected)
             return(df)
         })
         tmp = do.call(rbind,tmp)
         return(tmp)
     })
-    corrs = do.call(rbind,corrs)
+    eval_pvalue = do.call(rbind,eval_pvalue)
     
-    plts[['model_selection-pvalue_vs_spearman']] = corrs %>% 
+    plts[['model_selection-pvalue_vs_n_genes']] = eval_pvalue %>%
+        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
+        distinct() %>%
+        ggbarplot(x='thresh', y='total_genes', label=TRUE, lab.size=3, 
+                  fill='darkblue', color=NA) +
+        labs(x='Thresholds LR Test p-value', y='No. Genes Selected') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-pvalue_vs_n_events']] = eval_pvalue %>%
+        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
+        distinct() %>%
+        ggbarplot(x='thresh', y='total_events', label=TRUE, lab.size=3, 
+                  fill='lightblue', color=NA) +
+        labs(x='Thresholds LR Test p-value', y='No. Events Selected') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-pvalue_vs_ctl_neg']] = eval_pvalue %>%
+        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
+        distinct() %>%
+        ggbarplot(x='thresh', y='total_ctl_neg', label=TRUE, lab.size=3, 
+                  fill='brown', color=NA) +
+        labs(x='Thresholds LR Test p-value', y='No. Neg. Ctl. Genes Selected') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-pvalue_vs_ctl_pos']] = eval_pvalue %>%
+        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
+        distinct() %>%
+        ggbarplot(x='thresh', y='total_ctl_pos', label=TRUE, lab.size=3, 
+                  fill='darkgreen', color=NA) +
+        labs(x='Thresholds LR Test p-value', y='No. Positive Control Exons Selected') +
+        theme_pubr(x.text.angle=70)
+    
+    # tpr vs fpr vs median correlation
+    plts[['model_selection-roc_curve']] = eval_pvalue %>% 
+        dplyr::select(-one_of(c('id','pvalue'))) %>% 
+        group_by(thresh,fpr,tpr) %>% 
+        summarize(med_corr=median(corr)) %>% 
+        ggline(x='fpr', y='tpr', linetype='dashed', numeric.x.axis = TRUE, 
+               label="thresh", repel = TRUE) + 
+        geom_abline(intercept=0, slope=1, linetype='dashed') + 
+        labs(x='FPR', y='TPR', size='median(Spearman Corr.)') + 
+        xlim(0,1) + ylim(0,1)
+    
+    
+    # find the threshold for the mean pearson correlation
+    threshs = seq(0,0.4,0.05)
+    samples_oi = intersect(colnames(rnai),colnames(spldep))
+    eval_corr = lapply(threshs, function(thresh){
+        models_possible = models %>%
+            filter(lr_pvalue < THRESH_LR_PVALUE)
+        ctl_neg_corrected = ctl_neg[ctl_neg %in% (models_possible %>% pull(GENE))]
+        ctl_pos_corrected = ctl_pos[ctl_pos %in% (models_possible %>% pull(EVENT))]
+        
+        models_filtered = models_possible %>% 
+            filter(pearson_correlation_mean > thresh) 
+        
+        # from each gene, pick de event-level model that generalizes the worst
+        models_selected = models_filtered %>%
+            group_by(GENE) %>%
+            slice_min(order_by=pearson_correlation_mean, n=1)
+        
+        events = models_selected %>% pull(EVENT)
+        genes = models_selected %>% pull(GENE)
+        
+        idx = sample(1:length(samples_oi), size=250)
+        tmp = lapply(samples_oi[idx], function(sample_oi){
+            true_dep = rnai[genes,sample_oi]
+            pred_dep = spldep[events,sample_oi]
+            test = cor.test(true_dep, pred_dep, 
+                       method='spearman', use='pairwise.complete.obs')
+            df = data.frame(
+                id = sample_oi,
+                corr = test[['estimate']][['rho']],
+                pvalue = test[['p.value']],
+                thresh = thresh,
+                total_events = nrow(models_filtered),
+                total_genes = length(genes),
+                total_ctl_neg = sum(genes %in% ctl_neg_corrected),
+                total_ctl_pos = sum(models_filtered %>% pull(EVENT) %in% ctl_pos_corrected)
+            )
+            df[['tpr']] = df[['total_ctl_pos']] / length(ctl_pos_corrected)
+            df[['fpr']] = df[['total_ctl_neg']] / length(ctl_neg_corrected)
+            return(df)
+        })
+        tmp = do.call(rbind,tmp)
+        return(tmp)
+    })
+    eval_corr = do.call(rbind, eval_corr)
+    
+    plts[['model_selection-pearson_corr_vs_spearman']] = eval_corr %>% 
         ggviolin(x='thresh', y='corr', fill='orange', color=NA) + 
         geom_boxplot(fill=NA) +
         labs(x='Thresholds LR Test p-value', y='Spearman Correlation',
              title='Sample Size = 250') +
-        theme_pubr(x.text.angle=70)
-    
-    plts[['model_selection-pvalue_vs_n_genes']] = corrs %>%
-        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
-        distinct() %>%
-        ggbarplot(x='thresh', y='total_genes', label=TRUE, lab.size=3) +
-        labs(x='Thresholds LR Test p-value', y='No. Genes Selected') +
-        theme_pubr(x.text.angle=70)
-    
-    plts[['model_selection-pvalue_vs_n_uniforms']] = corrs %>%
-        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
-        distinct() %>%
-        ggbarplot(x='thresh', y='total_uniforms', label=TRUE, lab.size=3) +
-        labs(x='Thresholds LR Test p-value', y='No. Uniform Dep. Genes Selected') +
-        theme_pubr(x.text.angle=70)
-    
-    plts[['model_selection-pvalue_vs_n_events']] = corrs %>%
-        dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
-        distinct() %>%
-        ggbarplot(x='thresh', y='total_events', label=TRUE, lab.size=3) +
-        labs(x='Thresholds LR Test p-value', y='No. Events Selected') +
-        theme_pubr(x.text.angle=70)
+        theme_pubr(x.text.angle=70) +
+        ylim(0,1)
     
     # with this set of models, we expect to see certain properties
-    THRESH_LR_PVALUE = 0.001
     models = models %>%
         drop_na(is_selected)
     
     ## selected models come from variant events
     plts[['model_selection-selected_vs_event_std']] = models %>%
         ggviolin(x='is_selected', y='event_std', color=NA, trim=TRUE,
-                 fill='is_selected', palette='lancet') +
+                 fill='is_selected', palette='npg') +
         geom_boxplot(fill=NA, outlier.size = 0.75) +
         stat_compare_means(method='wilcox.test') +
         guides(color='none', fill='none') +
@@ -243,7 +366,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     
     ## selected models are in genes less prone to have deleterious mutations
     X = models %>%
-        left_join(mut_freq, by='GENE') %>%
+        left_join(gene_mut_freq, by='GENE') %>%
         group_by(Variant_Classification,GENE,mut_freq_per_kb) %>%
         summarize(is_selected = any(is_selected)) %>%
         drop_na() %>%
@@ -251,14 +374,14 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
     
     plts[['model_selection-mutation_gene_count']] = X %>% 
         count(Variant_Classification, is_selected) %>%
-        ggbarplot(x='Variant_Classification', y='n', label=TRUE, palette='lancet',
+        ggbarplot(x='Variant_Classification', y='n', label=TRUE, palette='npg',
                   fill='is_selected', color=NA, position=position_dodge(0.9)) + 
         yscale('log10', .format=TRUE) + 
         labs(x='Mutation Effect', y='No. Genes', 
              fill='Selected Model') +
         theme_pubr(x.text.angle=70)
     
-    plts[['model_selection-mutation_frequency']] = X %>% 
+    plts[['model_selection-mutation_gene_frequency']] = X %>% 
         ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
                    group=interaction(Variant_Classification,is_selected))) +
         # geom_violin(aes(fill=is_selected), color=FALSE, scale='width') +
@@ -267,9 +390,33 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         stat_compare_means(aes(group=is_selected), 
                            method='wilcox.test', label='p.signif') +
         yscale('log10', .format=TRUE) + 
-        fill_palette('lancet') +
+        fill_palette('npg') +
         labs(x='Mutation Effect', y='log10(Mut. Freq. per Kb)', 
              fill='Selected Model') +
+        theme_pubr(x.text.angle=70)
+    
+    # how often do selected exons get hit when the gene is mutated?
+    X = models %>%
+        left_join(event_mut_freq, by='EVENT') %>%
+        group_by(Variant_Classification,EVENT,ratio) %>%
+        summarize(is_selected = any(is_selected)) %>%
+        drop_na() %>%
+        ungroup()
+    
+    plts[['model_selection-mutation_event_count']] = X %>% 
+        count(Variant_Classification, is_selected) %>%
+        ggbarplot(x='Variant_Classification', y='n', label=TRUE, palette='npg',
+                  fill='is_selected', color=NA, position=position_dodge(0.9)) + 
+        yscale('log10', .format=TRUE) + 
+        labs(x='Mutation Effect', y='No. Genes', 
+             fill='Selected Model') +
+        theme_pubr(x.text.angle=70)
+    
+    plts[['model_selection-mutation_event_frequency']] = X %>% 
+        filter(is_selected) %>%
+        ggviolin(x="Variant_Classification", y="ratio", fill="orange", 
+                  add="jitter", add.params=list(size=0.1), trim=TRUE) +
+        labs(x='Mutation Effect', y='Mut. Ratio per Gene') +
         theme_pubr(x.text.angle=70)
         
     
@@ -284,7 +431,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         summarize(n=n()) %>% 
         arrange(n) %>%
         ggbarplot(x='term', y='n', label=TRUE,
-                  fill='is_selected', color=NA, palette='lancet') + 
+                  fill='is_selected', color=NA, palette='npg') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
         labs(x='Protein Impact', y='Count')
@@ -296,7 +443,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         mutate(freq=n/sum(n)) %>%
         filter(is_selected) %>%
         ggbarplot(x='term', y='freq', fill='is_selected', 
-                  color=NA, palette='lancet') + 
+                  color=NA, palette='npg') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
         labs(x='Protein Impact', y='Proportion')
@@ -320,7 +467,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         arrange(n) %>%
         drop_na() %>%
         ggbarplot(x='term_clean', y='n', label=TRUE,
-                  fill='is_selected', color=NA, palette='lancet') + 
+                  fill='is_selected', color=NA, palette='npg') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
         labs(x='Protein Impact', y='Count')
@@ -331,7 +478,7 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
         mutate(freq=n/sum(n)) %>%
         filter(is_selected) %>%
         ggbarplot(x='term_clean', y='freq', fill='is_selected', color=NA,
-                  palette='lancet') + 
+                  palette='npg') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
         labs(x='Selected Model', y='Proportion')
@@ -378,8 +525,6 @@ plot_model_selection = function(models, rnai, spldep, mut_freq, ontologies){
 #     m = sets %>% list_to_matrix() %>% make_comb_mat()
 #     plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = UpSet(m, comb_order = order(comb_size(m)))
 #     plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = as.ggplot(grid.grabExpr(draw(plts[['model_selection-enrichment-GO_BP_vs_prot_imp']])))
-
-    
     return(plts)
 }
 
@@ -580,12 +725,53 @@ plot_examples = function(models, protein_impact){
     return(plts)
 }
 
+plot_tumorigenesis = function(models, spldep){
+    # there are exons with different behaviors dependencing 
+    # on the splicing dependency:
+    # - oncoexons: SplDep<0
+    # - tumor suppressor exons: SplDep>0
+    # - double agent exons: SplDep ambiguous
+    
+    X = spldep %>% 
+        filter(index%in%(models %>% filter(is_selected) %>% pull(EVENT))) %>% 
+        column_to_rownames('index')
+    spldep_stats = data.frame(
+            med = apply(X,1,median, na.rm=TRUE),
+            std = apply(X,1,sd, na.rm=TRUE),
+            min = apply(X,1,min, na.rm=TRUE),
+            max = apply(X,1,max, na.rm=TRUE),
+            q95 = apply(X,1,quantile, na.rm=TRUE, probs=0.95),
+            q05 = apply(X,1,quantile, na.rm=TRUE, probs=0.05),
+            range = abs(apply(X,1,max, na.rm=TRUE)) - abs(apply(X,1,min, na.rm=TRUE)),
+            n_missing = rowSums(is.na(X))
+        ) %>% rownames_to_column('EVENT') %>%
+        left_join(models[c('EVENT','event_gene')], by='EVENT')
+    
+    plts = list()
 
-make_plots = function(models, rnai, spldep, mut_freq, ontologies){
+    plts[['tumorigenesis-scatter']] = spldep_stats %>% 
+        ggscatter(x="q05", y="q95") + 
+        geom_hline(yintercept=0, linetype='dashed') + 
+        geom_vline(xintercept=0, linetype='dashed') +
+        labs(x='0.05 Quantile', y='0.95 Quantile') +
+        geom_text_repel(aes(label=event_gene), 
+                        spldep_stats %>% slice_max(order_by = q05*q95, n=5)) +
+        geom_text_repel(aes(label=event_gene),
+                        spldep_stats %>% filter(q95>1)) +
+        geom_text_repel(aes(label=event_gene),
+                        spldep_stats %>% filter(q95>0 & q05<(-0.9)))
+    
+    return(plts)
+}
+
+make_plots = function(models, rnai, spldep, gene_mut_freq, 
+                      event_mut_freq, ontologies, cancer_events){
     plts = list(
-        plot_model_selection(models, rnai, spldep, mut_freq, ontologies),
+        plot_model_selection(models, rnai, spldep, gene_mut_freq, 
+                             event_mut_freq, ontologies, cancer_events),
         plot_interactions(models, ontologies),
-        plot_examples(models, protein_impact=ontologies[['protein_impact']])
+        plot_examples(models, protein_impact=ontologies[['protein_impact']]),
+        plot_tumorigenesis(models, spldep)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -593,35 +779,48 @@ make_plots = function(models, rnai, spldep, mut_freq, ontologies){
 
 
 save_plt = function(plts, plt_name, extension='.pdf', 
-                      directory='', dpi=350, 
-                      width = par("din")[1], height = par("din")[2]){
-        filename = file.path(directory,paste0(plt_name,extension))
-        save_plot(filename, 
-                  plts[[plt_name]], 
-                  base_width=width, base_height=height, dpi=dpi)
+                    directory='', dpi=350, format=TRUE,
+                    width = par("din")[1], height = par("din")[2]){
+    plt = plts[[plt_name]]
+    if (format){
+        plt = ggpar(plt, font.title=11, font.subtitle=10, font.caption=10, 
+                    font.x=10, font.y=10, font.legend=10,
+                    font.tickslab=8, font.family='Arial')    
+    }
+    filename = file.path(directory,paste0(plt_name,extension))
+    save_plot(filename, 
+              plt, 
+              base_width=width, base_height=height, dpi=dpi)
 }
 
 
 save_plots = function(plts, figs_dir){
     
     # model selection
-    save_plt(plts, 'model_selection-deps_sorted_vs_std', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-deps_med_vs_std', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-deps_sorted_vs_std_ctl_neg', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-deps_med_vs_std_ctl_neg', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-deps_sorted_vs_std_ctl_pos', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-deps_med_vs_std_ctl_pos', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-lr_pvalue', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-lr_pvalue_ctl_pos', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pearson_corr', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-pvalue_vs_spearman', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pvalue_vs_n_genes', '.pdf', figs_dir, width=5, height=2.5)
-    save_plt(plts, 'model_selection-pvalue_vs_n_uniforms', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-pvalue_vs_ctl_neg', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-pvalue_vs_ctl_pos', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-roc_curve', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pvalue_vs_n_events', '.pdf', figs_dir, width=5, height=2.5)
     save_plt(plts, 'model_selection-selected_vs_event_std', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-mutation_frequency', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-mutation_gene_count', '.pdf', figs_dir, width=8, height=4)
+    save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=4)
+    save_plt(plts, 'model_selection-mutation_gene_frequency', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-mutation_event_frequency', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-protein_impact_clean-counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-protein_impact_clean-freqs', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-enrichment-GO_BP-dotplot', '.pdf', figs_dir, width=9, height=8)
     save_plt(plts, 'model_selection-enrichment-GO_BP-cnetplot', '.pdf', figs_dir, width=9, height=8)
-    save_plt(plts, 'model_selection-enrichment-GO_BP_vs_prot_imp', '.pdf', figs_dir, width=9, height=8)
+    # save_plt(plts, 'model_selection-enrichment-GO_BP_vs_prot_imp', '.pdf', figs_dir, width=9, height=8)
     
     # interactions
     save_plt(plts, 'interactions-counts', '.pdf', figs_dir, width=5, height=5)
@@ -630,8 +829,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'interactions-protein_impact_clean-freqs', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'interactions-category-pca', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'interactions-category-umap', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'interactions-category-upset', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'interactions-enrichment-oncogenic_signatures', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'interactions-category-upset', '.pdf', figs_dir, width=5, height=5, format=FALSE)
+    # save_plt(plts, 'interactions-enrichment-oncogenic_signatures', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'interactions-enrichment-GO_BP', '.pdf', figs_dir, width=10, height=8)
     
     # examples
@@ -640,6 +839,9 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'examples-top_by_protein_impact-scatter', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'examples-top_by_protein_impact-table', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'examples-sign_events_gene-bar', '.pdf', figs_dir, width=5, height=5)
+    
+    # tumorigenesis
+    save_plt(plts, 'tumorigenesis-scatter', '.pdf', figs_dir, width=5, height=5)
 }
 
 
@@ -667,10 +869,12 @@ main = function(){
     ccle_stats_file = args$ccle_stats_file
     msigdb_dir = args$msigdb_dir
     protein_impact_file = args$protein_impact_file
-    mut_freq_file = args$mut_freq_file
+    gene_mut_freq_file = args$gene_mut_freq_file
+    event_mut_freq_file = args$event_mut_freq_file
     spldep_file = args$spldep_file
     rnai_file = args$rnai_file
     possible_interactions_file = args$possible_interactions_file
+    cancer_events_file = args$cancer_events_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
@@ -684,9 +888,10 @@ main = function(){
                interaction_zscore = interaction_coefficient_mean / interaction_coefficient_std,
                intercept_zscore = intercept_coefficient_mean / intercept_coefficient_std)
     ccle_stats = read_tsv(ccle_stats_file)
-    mut_freq = read_tsv(mut_freq_file) %>% 
+    gene_mut_freq = read_tsv(gene_mut_freq_file) %>% 
         dplyr::rename(GENE=Hugo_Symbol) %>% 
         mutate(log_rel_entropy=log2(max_rel_entropy))
+    event_mut_freq = read_tsv(event_mut_freq_file)
     ontologies = list(
         "hallmarks" = read.gmt(file.path(msigdb_dir,'h.all.v7.4.symbols.gmt')),
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,'c6.all.v7.4.symbols.gmt')),
@@ -701,17 +906,18 @@ main = function(){
     spldep = read_tsv(spldep_file)
     rnai = read_tsv(rnai_file)
     possible_interactions = read_tsv(possible_interactions_file)
+    cancer_events = read_tsv(cancer_events_file)
     
     # add interaction categories to models
     models = models %>% 
         left_join(get_interaction_categories(models, possible_interactions), 
                   by='event_gene') %>%
-        mutate(is_selected = pearson_correlation_mean>0 & lr_pvalue<THRESH_LR_PVALUE) %>%
+        mutate(is_selected = pearson_correlation_mean>THRESH_CORR & lr_pvalue<THRESH_LR_PVALUE) %>%
         dplyr::select(-c(event_mean,event_std,gene_mean,gene_std)) %>% 
         left_join(ccle_stats, by=c("EVENT","ENSEMBL","GENE"))
         
     
-    plts = make_plots(models, rnai, spldep, mut_freq, ontologies)
+    plts = make_plots(models, rnai, spldep, gene_mut_freq, event_mut_freq, ontologies, cancer_events)
 
     # make figdata
     # figdata = make_figdata(results_enrich)

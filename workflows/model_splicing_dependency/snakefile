@@ -23,7 +23,7 @@ RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
-EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD','INT']
+EVENT_TYPES = ['EX','ALTA','ALTD','INT']
 
 ##### RULES #####
 rule all:
@@ -35,22 +35,22 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
-        # os.path.join(RESULTS_DIR,'figures','model_selection'),
+        os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # write selected models
-        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=['EX']),
         
-        # impute splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # impute splicing dependencies with selected models
+        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
         
-        # embed splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # embed splicing dependencies with selected models
+        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
         
         # EDA embeddings of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
         
         # Associations
-        expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -123,13 +123,14 @@ rule list_selected_models:
     output:
         os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     params:
-        thresh_lr_pvalue = 0.001
+        thresh_lr_pvalue = 0.0025,
+        thresh_corr = 0.2
     run:
         import pandas as pd
         models = pd.read_table(input.models)
         models = models.loc[
             (models['lr_pvalue']<params.thresh_lr_pvalue) &
-            (models['pearson_correlation_mean']>0)
+            (models['pearson_correlation_mean']>params.thresh_corr)
         ].copy()
         
         with open(output[0], 'w') as f:
@@ -182,17 +183,23 @@ rule figures_model_selection:
         spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-EX','mean.tsv.gz'),
         msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
         protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
-        mut_freq = os.path.join(PREP_DIR,'mutation_freq','CCLE.tsv.gz'),
-        possible_interactions = os.path.join(SUPPORT_DIR,'possible_pairwise_interaction_categories.tsv')
+        gene_mut_freq = os.path.join(PREP_DIR,'gene_mutation_freq','CCLE.tsv.gz'),
+        event_mut_freq = os.path.join(PREP_DIR,'event_mutation_freq','CCLE-EX.tsv.gz'),
+        possible_interactions = os.path.join(SUPPORT_DIR,'possible_pairwise_interaction_categories.tsv'),
+        cancer_events = os.path.join(SUPPORT_DIR,'cancer_events.tsv'),
+        ccle_stats = os.path.join(PREP_DIR,'stats','CCLE.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_selection'))
     shell:
         """
         Rscript scripts/figures_model_selection.R \
                     --models_file={input.models} \
+                    --ccle_stats_file={input.ccle_stats} \
                     --msigdb_dir={input.msigdb} \
                     --protein_impact_file={input.protein_impact} \
-                    --mut_freq_file={input.mut_freq} \
+                    --gene_mut_freq_file={input.gene_mut_freq} \
+                    --event_mut_freq_file={input.event_mut_freq} \
+                    --cancer_events_file={input.cancer_events} \
                     --rnai_file={input.rnai} \
                     --spldep_file={input.spldep} \
                     --possible_interactions_file={input.possible_interactions} \

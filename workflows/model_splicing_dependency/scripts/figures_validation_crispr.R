@@ -33,8 +33,6 @@ THRESH_LR_PVALUE = 0.001
 # total=100
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr')
 
-
-
 ##### FUNCTIONS #####
 sample_splicing_dependencies = function(models, psi, genexpr, total, random_seed=NULL){
     set.seed(random_seed)
