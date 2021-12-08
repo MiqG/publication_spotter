@@ -413,10 +413,13 @@ rule combine_drug_treatments:
     output:
         os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
     run:
+        import os
         import pandas as pd
         dfs = []
         for f in input.treatments:
             df = pd.read_table(f)
+            cancer_type = os.path.basename(f).replace('.tsv.gz','')
+            df['cancer_type'] = cancer_type
             dfs.append(df)
             del df
         dfs = pd.concat(dfs)
