@@ -1,0 +1,278 @@
+EVENT	ENSEMBL	GENE	length	source_authors	source_year	source_doi	description	protein_imact	comments
+HsaEX0034998	ENSG00000133703	KRAS	124	Chen	2021	https://doi.org/10.1038/s41467-021-24498-7	exon 4	ORF disruption upon sequence inclusion (Alt. Stop)	
+HsaEX0023042	ENSG00000157554	ERG	218	Ling	2020	https://doi.org/10.1038/s41416-020-0951-2	exon 4	ORF disruption upon sequence exclusion	skipping exon 4 reduces cell proliferation, migration and apoptosis in VCaP, MG63, xenografts, patient-derived prostate tissue ex vivo
+HsaEX0023045	ENSG00000157554	ERG	72	Hagen	2014	https://doi.org/10.1309/AJCPH88QHXARISUP	exon 7b	Alternative protein isoforms (Ref)	adds, in-frame, 24 amino-acids to the transcriptional transactivation domain
+HsaEX0039398	ENSG00000099875	MKNK2	226	Mogilevsky	2018	https://doi.org/10.1093/nar/gky921	exon 14b	3' UTR	Mnk2a is downregulated in several types of cancer and acts as a tumor suppressor by activation of the p38
+HsaEX0044216	ENSG00000133961	NUMB	144	Bechara	2013	https://doi.org/10.1016/j.molcel.2013.11.010	exon 9	Alternative protein isoforms (No Ref)	
+HsaEX0038237	ENSG00000143384	MCL1	248	Jeng-Jer	2009	https://doi.org/10.1038/jid.2009.83	exon 2	ORF disruption upon sequence exclusion	
+HsaEX0022934	ENSG00000141736	ERBB2	48	Alajati	2010	https://doi.org/10.1158/0008-5472.can-12-3186	exon 16	Alternative protein isoforms (Ref)	
+HsaEX0037223	ENSG00000110514	MADD	60	LeFave	2011	https://doi.org/10.1038/emboj.2011.259	exon 16	Alternative protein isoforms (No Ref)	
+HsaEX0040366	ENSG00000164078	MST1R	147	LeFave	2011	https://doi.org/10.1038/emboj.2011.259	exon 11	Alternative protein isoforms (Ref)	
+HsaEX0030292	ENSG00000169045	HNRNPH1	138	LeFave	2011	https://doi.org/10.1038/emboj.2011.259	exon 4	5' UTR	
+HsaEX0047869	ENSG00000067225	PKM	167	Goldberg	2012	https://doi.org/10.1084/jem.20111487	exon 10	ORF disruption upon sequence exclusion	
+HsaEX0064494	ENSG00000164362	TERT	96	Wong	2013	https://doi.org/10.1016/j.celrep.2013.03.011	exon 7	Alternative protein isoforms (Ref)	
+HsaEX0064495	ENSG00000164362	TERT	86	Wong	2013	https://doi.org/10.1016/j.celrep.2013.03.011	exon 8	ORF disruption upon sequence exclusion	
+HsaEX0066781	ENSG00000136527	TRA2		Leclair	2020	https://doi.org/10.1016/j.molcel.2020.10.019	exon 2	ORF disruption upon sequence inclusion	
+HsaEX0050358		PRPF38B	47	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0055789		RSBN1	118	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0050350		PRPF3	96	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0029467		HDGF	70	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0010150		SZRD1	50	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0005593		ARHGEF10L	150	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0019665		DHX9	137	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0005810		ARID4B	123	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0067322		TRNAU1AP	148	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057681		SRSF4	149	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0029365		HDAC1	53	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0069654		USP24	29	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0039267		MIER1	77	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. ATG (>10 exons))	CRISPR screen
+HsaEX0026562		FUBP1	63	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0010293		C1orf52	127	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0040138		MRPL43	127	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref, Alt. Stop)	CRISPR screen
+HsaEX0044000		NT5C2	61	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0060482		SMNDC1	190	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0014519		CELF2	83	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX6087505		CELF2	135	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref)	CRISPR screen
+HsaEX6087502		CELF2	42	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0064944		TIAL1	59	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0064946		TIAL1	66	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0025679		FGFR2	94	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX6087866		ARHGAP21	82	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0022712		EPC1	117	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0058428		SIRT1	125	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref, Alt. ATG)	CRISPR screen
+HsaEX0030299		HNRNPH3	140	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX6088669		CCAR1	107	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0069692		USP28	77	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0047162		PHLDB1	58	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0040022		MPPED2	98	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0025282		FBXO3	81	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0008997		C11orf49	139	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0009002		C11orf49	182	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0026132		FNBP4	103	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0017070		CPSF7	66	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0063283		SYT7	125	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0005371		ARFIP2	74	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0052737		RBM4B	222	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		3' UTR	CRISPR screen
+HsaEX0073070		ZNF143	73	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0055832		RSRC2	17	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057185		SENP1	131	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref, Alt. Stop)	CRISPR screen
+HsaEX0016019		CNOT2	58	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0016014		CNOT2	65	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0072478		ZDHHC17	99	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0004268		ANKRD10	109	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0041462		NAA16	118	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0043426		NOVA1	102	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0038105		MBIP	216	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0050364		PRPF39	100	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0035087		KTN1	87	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref)	CRISPR screen
+HsaEX6071433		KTN1	91	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0035084		KTN1	84	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref)	CRISPR screen
+HsaEX6071428		KTN1	76	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0035083		KTN1	56	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0061802		SRSF5	337	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0009577		C15orf41	65	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0017819		CTDSPL2	87	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0008287		BNIP2	59	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0054268		RORA	82	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0020862		DPP8	87	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0015047		CHD2	113	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0061785		SRRM2	95	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0061789		SRRM2	348	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0015360		CHTF8	60	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0074408		ZNF821	126	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0070018		USP7	175	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0071632		WSB1	176	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0025946		FLOT2	91	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0073176		ZNF207	83	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		3' UTR	CRISPR screen
+HsaEX0074690		ZZEF1	108	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0020366		DNAJC7	100	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0043508		NPEPPS	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0036999		LUC7L3	66	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0038154		MBTD1	117	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0055625		RPS6KB1	129	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0055634		RPS6KB1	75	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0055635		RPS6KB1	253	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0061800		SRSF2	104	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		3' UTR	CRISPR screen
+HsaEX0058461		SIRT7	87	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0058459		SIRT7	82	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0023155		ESCO1	64	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0073857		ZNF521	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0073854		ZNF521	43	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0064847		THOC1	42	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0014528		CELF4	85	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		3' UTR	CRISPR screen
+HsaEX0047318		PIAS2	170	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0004292		ANKRD12	131	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0031555		ILF3	61	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0011920		CACNA1A	170	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0018925		DDX39A	58	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0003401		AKAP8L	74	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0058823		SLC20A1	59	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0047804		PKP4	97	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0059783		SLC4A10	137	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0068982		UBR3	132	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0026815		GAD1	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0058977		SLC25A12	104	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0040757		MTX2	204	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0040758		MTX2	125	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057572		SF3B1	56	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0051290		PUM2	125	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6018275		IKZF2	69	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6018274		IKZF2	84	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0018001		CUL3	95	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0003063		AGBL5	47	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref, Alt. Stop)	CRISPR screen
+HsaEX6012415		AGBL5	113	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0008141		BIRC6	173	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057688		SRSF7	69	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0060009		SLC8A1	107	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0050651		PSME4	61	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0070663		VPS54	101	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0064940		TIA1	66	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0063694		TASP1	119	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0051074		PTPRA	95	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6077938		RBM39	55	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0052714		RBM39	73	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0015094		CHD6	104	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057686		SRSF6	13	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0072054		YWHAB	86	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0028163		GPCPD1	174	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0060960		SON	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0032620		ITSN1	83	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0065778		TMEM39A	181	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0034965		KPNA1	123	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0020294		DNAJC13	126	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0013667		CCNL1	202	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0013664		CCNL1	73	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0066781		TRA2B	276	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0068921		UBP1	134	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6054919		UBP1	95	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0043065		NKTR	28	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0019585		DHX30	29	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0032001		IP6K2	106	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0005839		ARIH2	46	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0043018		NISCH	71	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0043015		NISCH	83	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX6057145		ROBO2	16	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057497		SETD5	41	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6085918		NDST4	112	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0028618		GRIA2	41	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6083695		TAPT1	115	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0025353		FBXO8	119	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0027914		GNPDA2	64	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0052232		RAP1GDS1	73	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0018957		DDX46	49	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0008425		BRD8	177	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		3' UTR	CRISPR screen
+HsaEX0008432		BRD8	57	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0024507		FAM53C	81	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. ATG (>10 exons))	CRISPR screen
+HsaEX0043806		NRG2	59	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0064140		TCERG1	34	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0018220		CYFIP2	75	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0046423		PDLIM7	17	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0002543		ADAMTS6	137	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0070280		VCAN	106	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0014037		CDK19	62	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0058705		SLC16A10	32	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0053129		REV3L	127	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0040871		MYB	56	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0007929		BCLAF1	61	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0063196		SYNGAP1	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6046906		SRSF3	456	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6047597		OPN5	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX6047598		OPN5	171	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref)	CRISPR screen
+HsaEX0060706		SNRNP48	8	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0061797		SRRT	320	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0026285		FOXP2	77	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0062055		ST7	136	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0066779		TRA2A	79	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0049754		PPP3CC	114	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0049663		PPP2R2A	71	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0040338		MSRA	75	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0027035		GARNL3	77	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0019206		DENND4C	72	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0060266		SMARCA2	35	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0072370		ZCCHC6	121	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0071569		WNK2	192	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref)	CRISPR screen
+HsaEX6061918		WNK2	215	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0038490		MECP2	124	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. ATG (>10 exons))	CRISPR screen
+HsaEX0060475		SMG7	92	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. ATG (>10 exons))	CRISPR screen
+HsaEX0023588		EYA3	68	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057640		SRSF11	117	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0021378		DZIP1	166	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0001925		ACIN1	62	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. ATG (>10 exons))	CRISPR screen
+HsaEX0052665		RBM25	105	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0017815		CTDSPL2	211	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0073337		ZNF280D	111	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0046945		PHF12	55	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6023608		LUC7L3	82	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0043292		NOL4	41	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0006440		ATAD2B	63	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0064942		TIA1	119	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX6026543		HMGXB4	79	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref, Alt. Stop)	CRISPR screen
+HsaEX0000492		ABCC5	72	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0022015		EIF4A2	111	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057454		SETD2	81	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057482		SETD5	113	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0018222		CYFIP2	48	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0015707		CLK4	41	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0050106		PRKAG2	64	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0020002		DMTF1	73	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6068678		C12orf42	92	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0069607		USP15	146	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0021375		DZIP1	100	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0043872		NRXN3	90	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0066584		TP53BP1	145	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0042682		NFAT5	62	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0060707		SNRNP70	60	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0068570		U2AF2	60	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0050372		PRPF40A	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0026818		GAD1	112	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0017169		CREB1	63	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0022756		EPHA4	68	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0006242		ASCC2	124	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0018958		DDX46	117	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0061761		SRPK2	64	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. ATG (>10 exons))	CRISPR screen
+HsaEX0030281		HNRNPA2B1	136	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		3' UTR	CRISPR screen
+HsaEX0052637		RBM18	94	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0005589		ARHGEF10L	73	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0035877		LIN7A	77	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0005378		ARGLU1	58	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0038102		MBIP	147	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0057576		SF3B3	29	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0028164		GPCPD1	49	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0038117		MBNL1	64	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref, Alt. Stop)	CRISPR screen
+HsaEX0056204		SAP30L	44	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0072632		ZFHX4	76	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref, Alt. Stop)	CRISPR screen
+HsaEX0053760		RLF	89	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX1045799		CAMTA1	119	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0014523		CELF2	80	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0064947		TIAL1	68	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0029339		HCFC2	44	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0060913		SNX6	40	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0043068		NKX2-1	145	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0020877		DPP9	132	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX1045921		FAM53C	205	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0024331		FAM193B	56	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0053135		REV3L	128	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0032642		IVNS1ABP	141	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX6087506		CELF2	197	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence exclusion	CRISPR screen
+HsaEX0029795		HERC4	102	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0047174		PHLDB1	129	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0017209		CREBZF	113	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		3' UTR	CRISPR screen
+HsaEX0004267		ANKRD10	132	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0060602		SNAP23	33	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (No Ref)	CRISPR screen
+HsaEX0005829		ARIH1	68	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		5' UTR	CRISPR screen
+HsaEX0015125		CHD9	58	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0038074		MBD2	124	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0013685		CCNT2	87	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0063575		TANK	117	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0027682		GLS	172	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0023925		FAM126B	56	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0031268		IKZF2	77	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0018875		DDX17	231	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0008400		BRD1	311	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0043017		NISCH	159	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		In the CDS, with uncertain impact	CRISPR screen
+HsaEX0064137		TCERG1	79	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0015709		CLK4	59	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0043034		NKAIN2	89	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		Alternative protein isoforms (Ref, Alt. Stop)	CRISPR screen
+HsaEX0007928		BCLAF1	124	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0052716		RBM41	94	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
+HsaEX0056271		SAT1	110	Thomas	2020	https://doi.org/10.1038/s41588-019-0555-z		ORF disruption upon sequence inclusion	CRISPR screen
