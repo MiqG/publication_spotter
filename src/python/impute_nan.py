@@ -9,7 +9,6 @@ import numpy as np
 
 # imputation methods
 from sklearn.impute import KNNImputer
-from autoimpute.imputations import MultipleImputer
 
 # variables
 SAVE_PARAMS = {'sep':'\t', 'compression':'gzip', 'index':False}
@@ -37,8 +36,6 @@ def load_data(input_file, rows_oi_file=None):
 def get_imputation_method(method, method_kws):
     if method == 'knn':
         imputation_method = KNNImputer(**method_kws)
-    elif method == 'pmm':
-        imputation_method = MultipleImputer(strategy=method,**method_kws)
     return imputation_method
 
 
