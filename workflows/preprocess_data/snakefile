@@ -104,7 +104,8 @@ rule all:
         
         # preprocess TCGA
         ## harmonize names drug treatments
-        expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES)
+        expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
+        os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
         
         
 rule prepare_metadata_ccle:
@@ -406,6 +407,22 @@ rule harmonize_drug_treatments:
         """
         
         
+rule combine_drug_treatments:
+    input:
+        treatments = [os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz').format(cancer=cancer) for cancer in CANCER_TYPES]
+    output:
+        os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
+    run:
+        import pandas as pd
+        dfs = []
+        for f in input.treatments:
+            df = pd.read_table(f)
+            dfs.append(df)
+            del df
+        dfs = pd.concat(dfs)
+        dfs.to_csv(output[0], sep='\t', index=False, compression="gzip")
+        
+
 rule preprocess_gdsc:
     input:
         os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv')
