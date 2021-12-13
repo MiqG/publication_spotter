@@ -117,7 +117,9 @@ rule figures_model_drug_screens:
     input:
         models = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-EX.tsv.gz'),
         drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
-        embedding = os.path.join(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz')
+        embedding = os.path.join(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz'),
+        estimated_response = os.path.join(),
+        drug_screen = os.path.join()
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_drug_screens'))
     shell:
@@ -126,6 +128,8 @@ rule figures_model_drug_screens:
                     --models_file={input.models} \
                     --drug_targets_file={input.drug_targets} \
                     --embedding_file={input.embedding} \
+                    --estimated_response_file={input.estimated_response} \
+                    --drug_screen_file={input.drug_screen} \
                     --figs_dir={output}
         """
         

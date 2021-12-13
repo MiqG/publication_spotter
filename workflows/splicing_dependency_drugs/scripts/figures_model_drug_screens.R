@@ -27,6 +27,7 @@ source(file.path(ROOT,'src','R','utils.R'))
 # variables
 THRESH_FDR = 0.1
 THRESH_PVALUE = 0.05
+RANDOM_SEED = 1234
 
 # Development
 # -----------
@@ -37,6 +38,8 @@ THRESH_PVALUE = 0.05
 # drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
 # figs_dir = file.path(RESULTS_DIR,'figures','model_drug_screens')
 # embedding_file = file.path(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz')
+# estimated_response_file = file.path(RESULTS_DIR, 'files', 'estimated_drug_response-GDSC1-EX', 'estimated_drug_response_by_drug.tsv.gz')
+# drug_screen_file = file.path(PREP_DIR,'drug_screens','GDSC1.tsv.gz')
 
 ##### FUNCTIONS #####
 get_sets = function(df, set_names, set_values){
@@ -133,18 +136,52 @@ plot_associations = function(models, drug_targets, embedding){
         coord_flip() +
         theme_pubr(border=TRUE)
     
-    X = X %>% 
+    # do significantly associated events in gene targets rank to the top of
+    # the association effect size?
+    ranking_real = X %>% 
         filter(lr_padj<THRESH_FDR & DRUG_NAME%in%drugs_oi) %>%
         distinct(DRUG_NAME,EVENT,event_gene,spldep_coefficient) %>%
         group_by(DRUG_NAME) %>%
         arrange(-abs(spldep_coefficient)) %>%
-        mutate(ranking=row_number() / n()) %>%
-        filter(EVENT %in% events_oi)
+        mutate(ranking = row_number() / n()) %>%
+        filter(EVENT %in% events_oi) %>%
+        ungroup() %>%
+        arrange(-ranking) %>%
+        mutate(ranking_type="real", 
+               ranking_cdf = cumsum(ranking) / sum(ranking),
+               index = row_number())
     
-    plts[['associations-target_ranking']] = X %>%
-        gghistogram(x="ranking", fill="darkgrey", color=NA) +
-        labs(x='Ranking Ratio', y='Count', 
-             title=sprintf('n = %s', nrow(X)))
+    set.seed(RANDOM_SEED)
+    ranking_random = X %>% 
+        filter(lr_padj<THRESH_FDR & DRUG_NAME%in%drugs_oi) %>%
+        distinct(DRUG_NAME,EVENT,event_gene,spldep_coefficient) %>%
+        group_by(DRUG_NAME) %>%
+        arrange(-abs(spldep_coefficient)) %>%
+        mutate(EVENT = sample(EVENT)) %>% # randomize
+        mutate(ranking = row_number() / n()) %>%
+        filter(EVENT %in% events_oi) %>%
+        ungroup() %>%
+        arrange(-ranking) %>%
+        mutate(ranking_type="random", 
+               ranking_cdf = cumsum(ranking) / sum(ranking),
+               index = row_number())
+    
+    ranking = rbind(ranking_real, ranking_random)
+    
+    plts[['associations-target_ranking-cdf']] = ranking %>%
+        ggscatter(x="index", y="ranking_cdf", 
+                  color="ranking_type", palette=c("grey","darkred")) +
+        labs(x='Index', y='Ranking CDF', color='Ranking Type',
+             title=sprintf('n = %s', nrow(ranking_real)))
+    
+    plts[['associations-target_ranking-vio']] = ranking %>%
+        ggviolin(x="ranking_type", y="ranking", color=NA, 
+                 fill="ranking_type", palette=c("darkred","grey"), trim=TRUE) +
+        geom_boxplot(width=0.1) + 
+        stat_compare_means(method="wilcox.test") +
+        guides(fill="none") +
+        labs(x='Ranking Type', y='Ranking Ratio', 
+             title=sprintf('n = %s', nrow(ranking_real)))
     
     # are association profiles informative of drug mechanism of action?
     plts[['associations-target_pathway-counts']] = drug_targets %>% 
@@ -182,14 +219,23 @@ plot_associations = function(models, drug_targets, embedding){
     
     sil = silhouette(X %>% pull(lab), dis^2)
     
-    plts[['associations-target_pathway-silhouettes']] = X %>% 
+    ## Are silhouettes good only when there is a significant association 
+    ## with event(s) in the gene target(s)?
+    pathways_w_events = drug_targets %>% 
+        mutate(is_found = as.factor(TARGET %in% (found_targets %>% pull(GENE)))) %>%
+        count(TARGET_PATHWAY, is_found, .drop=FALSE) %>%
+        filter(is_found=="TRUE") %>%
+        mutate(label = sprintf("%s (%s)", TARGET_PATHWAY, n))
+    
+    plts[['associations-target_pathway-silhouettes']] = X %>%
         left_join(as.data.frame(sil[,]), by=c("lab"="cluster")) %>% 
-        dplyr::select(sil_width, TARGET_PATHWAY) %>% 
+        left_join(pathways_w_events, by=c("TARGET_PATHWAY")) %>%
         arrange(TARGET_PATHWAY) %>%
-        ggboxplot(x="TARGET_PATHWAY", y="sil_width", fill="TARGET_PATHWAY", 
+        dplyr::select(sil_width, label, TARGET_PATHWAY) %>% 
+        ggboxplot(x="label", y="sil_width", fill="TARGET_PATHWAY", 
                   outlier.size=0.5, palette=get_palette("jco", 21)) + 
         guides(fill="none") +
-        labs(x='Target Pathway', y='Silhouette Score') +
+        labs(x='Target Pathway (N. Targets)', y='Silhouette Score') +
         coord_flip()
     
     # in some cases, there seems to be an association between dependency profiles
@@ -207,6 +253,61 @@ plot_associations = function(models, drug_targets, embedding){
 #     m = events_oi %>% list_to_matrix() %>% make_comb_mat()
 #     UpSet(m, comb_order = order(comb_size(m)))
 #     as.ggplot(grid.grabExpr(draw()))
+    
+    
+    return(plts)
+}
+
+
+plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
+    X = estimated_response %>%
+        left_join(drug_screen %>% mutate(real_ic50 = log(IC50_PUBLISHED)), 
+                  by=c("DRUG_ID", "sample"="ARXSPAN_ID")) %>%
+        drop_na(real_ic50, predicted_ic50)
+    
+    corrs = X %>% 
+        group_by(sample) %>%
+        summarize(correlation = cor(real_ic50, predicted_ic50, method="spearman"))
+    
+    plts = list()
+    plts[["drug_rec-spearmans"]] = corrs %>% 
+        gghistogram(x="correlation", color=NA, fill="gold4") + 
+        xlim(-1,1) + 
+        geom_vline(xintercept=median(corrs[['correlation']]), # 0.64
+                   linetype="dashed") + 
+        labs(x="Spearman Correlation", y="Count")
+    
+    # best and worse correlations
+    samples_oi = corrs %>% 
+        arrange(correlation) %>% 
+        filter(row_number()==1 | row_number()==n()) %>% 
+        pull(sample)
+    plts[['drug_rec-best_worse']] = X %>% 
+        filter(sample %in% samples_oi) %>% 
+        ggscatter(x="real_ic50", y="predicted_ic50", size=1) + 
+        facet_wrap(~sample, scales='free') +
+        stat_cor(method="spearman") + 
+        geom_abline(intercept=0, slope=1, linetype="dashed") +
+        labs(x="Real log(IC50)", y="Predicted log(IC50)") + 
+        theme_pubr(border=TRUE)
+    
+    # influence of pathway in ranking capacity?
+    corrs_bypath = X %>%
+        left_join(drug_targets %>% distinct(DRUG_NAME, TARGET_PATHWAY), 
+                  by="DRUG_NAME") %>% 
+        group_by(sample, TARGET_PATHWAY) %>%
+        summarize(correlation = cor(real_ic50, predicted_ic50, method="spearman"))
+    
+    plts[["drug_rec-spearmans_by_pathway"]] = corrs_bypath %>%
+        drop_na() %>%
+        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        arrange(TARGET_PATHWAY) %>%
+        ggboxplot(x="TARGET_PATHWAY", y="correlation", outlier.size=0.5,
+                  fill="TARGET_PATHWAY", palette=get_palette("jco", 21)) + 
+        ylim(-1,1) + 
+        labs(x="Target Pathway", y="Spearman Correlation") +
+        guides(fill="none") + 
+        coord_flip()
     
     
     return(plts)
@@ -308,9 +409,10 @@ plot_drugs_common_targets = function(models, drug_targets){
         count(drug_name)
 }
 
-make_plots = function(models, drug_targets, embedding){
+make_plots = function(models, drug_targets, embedding, estimated_response, drug_screen){
     plts = list(
-        plot_associations(models, drug_targets, embedding)
+        plot_associations(models, drug_targets, embedding),
+        plot_drug_rec(estimated_response, drug_screen, drug_targets)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -332,6 +434,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
 
 
 save_plots = function(plts, figs_dir){
+    # drug-event associations
     save_plt(plts, 'associations-lr_pvalues', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-lr_fdr', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-drug_counts', '.pdf', figs_dir, width=5, height=5)
@@ -342,7 +445,14 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-target_pathway-umap', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-target_pathway-silhouettes', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'associations-target_ranking', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'associations-target_ranking-vio', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'associations-target_ranking-cdf', '.pdf', figs_dir, width=5, height=5)
+    
+    # drug recommendations
+    save_plt(plts, 'drug_rec-spearmans', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-best_worse', '.pdf', figs_dir, width=5, height=2.7)
+    save_plt(plts, 'drug_rec-spearmans_by_pathway', '.pdf', figs_dir, width=5, height=5)
+    
 }
 
 
@@ -368,6 +478,8 @@ main = function(){
     models_file = args$models_file
     drug_targets_file = args$drug_targets_file
     embedding_file = args$embedding_file
+    estimated_response_file = args$estimated_response_file
+    drug_screen_file = args$drug_screen_file
     figs_dir = args$figs_dir
     
     dir.create(figs_dir, recursive = TRUE)
@@ -382,6 +494,8 @@ main = function(){
         separate_rows(TARGET) %>%
         distinct()
     embedding = read_tsv(embedding_file)
+    estimated_response = read_tsv(estimated_response_file)
+    drug_screen = read_tsv(drug_screen_file)
     
     # make plots
     plts = make_plots(models, drug_targets, embedding)
