@@ -397,28 +397,41 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     
     # how often do selected exons get hit when the gene is mutated?
     X = models %>%
-        left_join(event_mut_freq, by='EVENT') %>%
-        group_by(Variant_Classification,EVENT,ratio) %>%
-        summarize(is_selected = any(is_selected)) %>%
-        drop_na() %>%
-        ungroup()
+        left_join(event_mut_freq, by=c('EVENT','GENE')) %>%
+        # keep only genes with a selected exon
+        group_by(GENE) %>%
+        filter(any(is_selected)) %>%
+        ungroup() %>%
+        drop_na()
+    
+    notsel_mut_freq = X %>%
+        # average mutation frequency per kb of not selected events
+        filter(!is_selected) %>%
+        group_by(Variant_Classification, GENE) %>%
+        summarize(notsel_mut_freq = mean(event_mut_freq_per_kb, na.rm=TRUE))
+    
+    X = X %>% 
+        left_join(notsel_mut_freq, by=c("Variant_Classification","GENE")) %>%
+        # Fold change difference 
+        mutate(fc_mut_freq = log2(event_mut_freq_per_kb / notsel_mut_freq))
     
     plts[['model_selection-mutation_event_count']] = X %>% 
         count(Variant_Classification, is_selected) %>%
         ggbarplot(x='Variant_Classification', y='n', label=TRUE, palette='npg',
                   fill='is_selected', color=NA, position=position_dodge(0.9)) + 
         yscale('log10', .format=TRUE) + 
-        labs(x='Mutation Effect', y='No. Genes', 
-             fill='Selected Model') +
+        labs(x='Mutation Effect', y='No. Events', fill='Selected Model') +
         theme_pubr(x.text.angle=70)
     
     plts[['model_selection-mutation_event_frequency']] = X %>% 
-        filter(is_selected) %>%
-        ggviolin(x="Variant_Classification", y="ratio", fill="orange", 
-                  add="jitter", add.params=list(size=0.1), trim=TRUE) +
-        labs(x='Mutation Effect', y='Mut. Ratio per Gene') +
+        ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
+                   group=interaction(Variant_Classification,is_selected))) +
+        geom_boxplot(aes(fill=is_selected), outlier.size=0.5, 
+                     position=position_dodge(0.7)) +
+        stat_compare_means(aes(group=is_selected), 
+                           method='wilcox.test', label='p.signif') +
         theme_pubr(x.text.angle=70)
-        
+    
     
     # what are the exons/genes selected?
     ## protein impact
@@ -809,6 +822,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-pvalue_vs_ctl_pos', '.pdf', figs_dir, width=5, height=2.5)
     save_plt(plts, 'model_selection-roc_curve', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pvalue_vs_n_events', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-pearson_corr_vs_spearman', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-selected_vs_event_std', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-mutation_gene_count', '.pdf', figs_dir, width=8, height=4)
     save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=4)
