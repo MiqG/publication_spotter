@@ -323,23 +323,25 @@ rule mutation_frequency_per_event:
     input:
         snv_event = os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'),
         snv_gene = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
-        annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
+        annot_events = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
+        annot_genes = os.path.join(RAW_DIR,'ENSEMBL','gene_annotation-hg19.tsv.gz')
     output:
         os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz')
     params:
         id_col = 'DepMap_ID',
-        gene_col = 'Hugo_Symbol',
         event_col = 'EVENT',
+        gene_col = 'Hugo_Symbol',
         effect_col = 'Variant_Classification'
     shell:
         """
         python scripts/count_mutations_per_event_and_variant.py \
                     --snv_event_file={input.snv_event} \
                     --snv_gene_file={input.snv_gene} \
-                    --annotation_file={input.annotation} \
+                    --annot_events_file={input.annot_events} \
+                    --annot_genes_file={input.annot_genes} \
                     --id_col={params.id_col} \
-                    --gene_col={params.gene_col} \
                     --event_col={params.event_col} \
+                    --gene_col={params.gene_col} \
                     --effect_col={params.effect_col} \
                     --output_file={output}
         """

@@ -46,8 +46,12 @@ def read_snv(snv_file):
 def load_data(snv_event_file, snv_gene_file, annot_events_file, annot_genes_file):
     snv_event = read_snv(snv_event_file)
     snv_gene = read_snv(snv_gene_file)
-    annot_events = pd.read_table(annot_events_file)
-    annot_genes = pd.read_table(annot_genes_file)
+    annot_events = pd.read_table(annot_events_file).rename(
+        columns={"LE_o": "length_event"}
+    )
+    annot_genes = pd.read_table(annot_genes_file).rename(
+        columns={"Gene": "GENE", "length": "length_gene"}
+    )
 
     return snv_event, snv_gene, annot_events, annot_genes
 
@@ -74,9 +78,12 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--snv_event_file", type=str)
+    parser.add_argument("--snv_gene_file", type=str)
     parser.add_argument("--annot_events_file", type=str)
+    parser.add_argument("--annot_genes_file", type=str)
     parser.add_argument("--id_col", type=str)
     parser.add_argument("--event_col", type=str)
+    parser.add_argument("--gene_col", type=str)
     parser.add_argument("--effect_col", type=str)
     parser.add_argument("--output_file", type=str)
 
@@ -94,40 +101,52 @@ def main():
     output_file = args.output_file
     id_col = args.id_col
     event_col = args.event_col
+    gene_col = args.gene_col
     effect_col = args.effect_col
 
     # load data
-    snv_event, annot_events = load_data(snv_event_file, annot_events_file)
+    snv_event, snv_gene, annot_events, annot_genes = load_data(
+        snv_event_file, snv_gene_file, annot_events_file, annot_genes_file
+    )
 
     # count mapped mutations
     mut_freq_event = count_mutations_per_item_and_effect(
         snv_event, id_col, event_col, effect_col
     )
+    mut_freq_gene = count_mutations_per_item_and_effect(
+        snv_gene, id_col, gene_col, effect_col
+    )
 
-    # for each variant, how many mutations in the gene mapped on the exon?
+    # for each variant, what is the mutation frequency per kilobase?
+    ## events
     mut_freq_event = pd.merge(
-        mut_freq_event, annot_events[["EVENT", "GENE", "LE_o"]], on="EVENT", how="left"
+        mut_freq_event,
+        annot_events[["EVENT", "GENE", "length_event"]],
+        on="EVENT",
+        how="left",
     )
     mut_freq_event["event_mut_freq_per_kb"] = (
-        mut_freq_event["n"] / mut_freq_event["LE_o"]
+        mut_freq_event["n"] / mut_freq_event["length_event"]
+    ) * 1000
+    ## genes
+    mut_freq_gene = pd.merge(
+        mut_freq_gene.rename(columns={gene_col: "GENE", "n": "total"}),
+        annot_genes[["GENE", "length_gene"]],
+        on="GENE",
+        how="left",
+    )
+    mut_freq_gene["gene_mut_freq_per_kb"] = (
+        mut_freq_gene["total"] / mut_freq_gene["length_gene"]
     ) * 1000
 
-    # how different is the mutation frequency observed from the average?
-    avg_mut_freq = (
-        mut_freq_event.groupby(["GENE", "Variant_Classification"])[
-            "event_mut_freq_per_kb"
-        ]
-        .mean()
-        .rename("avg_mut_freq")
-        .reset_index()
-    )
+    # for each variant, how many mutations would I expect given the event length?
+    mut_freq_event["event_kb"] = mut_freq_event["length_event"] / 1000  # from bp to kb
     mut_freq_event = pd.merge(
-        mut_freq_event, avg_mut_freq, how="left", on=["GENE", "Variant_Classification"]
+        mut_freq_event, mut_freq_gene, how="left", on=["Variant_Classification", "GENE"]
     )
-    mut_freq_event["fc_mut_freq"] = np.log2(
-        mut_freq_event["event_mut_freq_per_kb"] / mut_freq_event["avg_mut_freq"]
-    )
-
+    mut_freq_event["expected_mutations"] = mut_freq_event["event_kb"] * mut_freq_event["gene_mut_freq_per_kb"]
+    mut_freq_event["fc_mutations"] = np.log2(mut_freq_event["n"] / mut_freq_event["expected_mutations"])
+    
     # save
     mut_freq_event.to_csv(output_file, sep="\t", index=False, compression="gzip")
 
