@@ -13,6 +13,7 @@
 require(tidyverse)
 require(tidytext)
 require(ggpubr)
+require(scattermore)
 require(cowplot)
 require(ggrepel)
 require(extrafont)
@@ -129,12 +130,13 @@ plot_associations = function(models, drug_targets, embedding){
                event_gene=reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>% 
         ggbarplot(x='event_gene', y='spldep_coefficient', fill='is_target', 
                   palette='lancet', color=NA) + 
-        facet_wrap(~drug_name_clean, scales='free') + 
+        facet_wrap(~drug_name_clean, scales='free', ncol=4) + 
         scale_x_reordered() +     
         labs(x='Event & Gene', y='Effect Size', fill='Is Drug Target', 
              title='Top 15 Significant Effect Sizes') + 
         coord_flip() +
-        theme_pubr(border=TRUE)
+        theme_pubr(border=TRUE) +
+        theme(strip.text = element_text(size=6))
     
     # do significantly associated events in gene targets rank to the top of
     # the association effect size?
@@ -199,8 +201,10 @@ plot_associations = function(models, drug_targets, embedding){
         left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
                   by=c("index"="DRUG_ID")) %>%
         filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
-        ggscatter(x="UMAP0", y="UMAP1", color="TARGET_PATHWAY", 
-                  palette=get_palette("jco", 21)) +
+        ggplot(aes(x=UMAP0, y=UMAP1, color=TARGET_PATHWAY)) +
+        geom_scattermore(pixels=c(1000,1000), pointsize=8) +
+        theme_pubr() +
+        color_palette(palette=get_palette("jco", 21)) +
         theme(aspect.ratio=1)
     
     ## check silhouettes
@@ -420,16 +424,16 @@ make_plots = function(models, drug_targets, embedding, estimated_response, drug_
 
 
 save_plt = function(plts, plt_name, extension='.pdf', 
-                    directory='', dpi=350, 
+                    directory='', dpi=350, format=TRUE,
                     width = par("din")[1], height = par("din")[2]){
     plt = plts[[plt_name]]
-    plt = ggpar(plt, font.title=11, font.subtitle=10, font.caption=10, 
-                font.x=10, font.y=10, font.legend=10,
-                font.tickslab=8, font.family='Arial')
+    if (format){
+        plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
+                    font.x=8, font.y=8, font.legend=8,
+                    font.tickslab=6, font.family='Arial')    
+    }
     filename = file.path(directory,paste0(plt_name,extension))
-    save_plot(filename, 
-              plt, 
-              base_width=width, base_height=height, dpi=dpi)
+    save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm')
 }
 
 
@@ -438,20 +442,20 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'associations-lr_pvalues', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-lr_fdr', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-drug_counts', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'associations-top_drug_counts', '.pdf', figs_dir, width=8, height=5)
+    save_plt(plts, 'associations-top_drug_counts', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'associations-spldep_counts', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'associations-top_spldep_counts', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'associations-top_found_targets', '.pdf', figs_dir, width=20, height=20)
-    save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'associations-target_pathway-umap', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'associations-target_pathway-silhouettes', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'associations-top_spldep_counts', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'associations-top_found_targets', '.pdf', figs_dir, width=25, height=25)
+    save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'associations-target_pathway-umap', '.pdf', figs_dir, width=10, height=10)
+    save_plt(plts, 'associations-target_pathway-silhouettes', '.pdf', figs_dir, width=6.5, height=6)
     save_plt(plts, 'associations-target_ranking-vio', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-target_ranking-cdf', '.pdf', figs_dir, width=5, height=5)
     
     # drug recommendations
     save_plt(plts, 'drug_rec-spearmans', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'drug_rec-best_worse', '.pdf', figs_dir, width=5, height=2.7)
-    save_plt(plts, 'drug_rec-spearmans_by_pathway', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-best_worse', '.pdf', figs_dir, width=10, height=5)
+    save_plt(plts, 'drug_rec-spearmans_by_pathway', '.pdf', figs_dir, width=6, height=6)
     
 }
 
@@ -498,8 +502,8 @@ main = function(){
     drug_screen = read_tsv(drug_screen_file)
     
     # make plots
-    plts = make_plots(models, drug_targets, embedding)
-
+    plts = make_plots(models, drug_targets, embedding, estimated_response, drug_screen)
+    
     # make figdata
     # figdata = make_figdata(results_enrich)
     
