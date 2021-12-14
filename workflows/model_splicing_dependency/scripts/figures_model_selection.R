@@ -135,19 +135,22 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
                is_ctl=GENE %in% ctl_neg) %>%
         ggscatter(x="index", y="rnai_std", color="is_ctl", 
                   size="is_ctl", palette=c('grey','brown')) +
-        theme_pubr() +
+        scale_size_discrete(range=c(0.5,1)) +
         labs(x='Index', y='Gene Std. Demeter2', 
              title=sprintf("Total Control Genes = %s", length(ctl_neg)),
-             color="In Negative Control", size="In Negative Control")
+             color="In Negative Control", size="In Negative Control") +
+        theme(aspect.ratio=1)
     
     plts[['model_selection-deps_med_vs_std_ctl_neg']] = rnai_stats %>% 
         mutate(is_ctl=GENE %in% ctl_neg) %>%
-        ggscatter(x="rnai_med", y="rnai_std", 
-                  color="is_ctl", palette=c('grey','brown')) +
+        ggplot(aes(x=rnai_med, y=rnai_std, color=is_ctl)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=8) +
         theme_pubr() +
+        color_palette(palette = c('grey','brown')) +
         labs(x='Gene Median Demeter2', y='Gene Std. Demeter2', 
              title=sprintf("Total Control Genes = %s", length(ctl_neg)),
-             color='In Negative Control')
+             color='In Negative Control') +
+        theme(aspect.ratio=1)
     
     # as a positive control, we got ~300 exons whose modulation affects cell
     # proliferation. Of course, we need them to belong to genes that vary to
@@ -159,19 +162,22 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
                is_ctl=GENE %in% ctl_pos_genes) %>%
         ggscatter(x="index", y="rnai_std", color="is_ctl", 
                   size="is_ctl", palette=c('grey','darkgreen')) +
-        theme_pubr() +
+        scale_size_discrete(range=c(0.5,1)) +
         labs(x='Index', y='Gene Std. Demeter2', 
              color='In Positive Control', size='In Positive Control', 
-             title=sprintf("Total Control Genes = %s", length(ctl_pos_genes)))
+             title=sprintf("Total Control Genes = %s", length(ctl_pos_genes))) +
+        theme(aspect.ratio=1)
     
     plts[['model_selection-deps_med_vs_std_ctl_pos']] = rnai_stats %>% 
         mutate(is_ctl=GENE %in% ctl_pos_genes) %>%
-        ggscatter(x="rnai_med", y="rnai_std",
-                  color="is_ctl", palette=c('grey','darkgreen')) +
+        ggplot(aes(x=rnai_med, y=rnai_std, color=is_ctl)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=8) +
         theme_pubr() +
+        color_palette(palette = c('grey','darkgreen')) +
         labs(x='Gene Median Demeter2', y='Gene Std. Demeter2', 
              title=sprintf("Total Control Genes = %s", length(ctl_pos_genes)),
-             color='In Positive Control')
+             color='In Positive Control') +
+        theme(aspect.ratio=1)
     
     ctl_pos = rnai_stats %>% 
         filter(GENE %in% ctl_pos_genes) %>% 
@@ -184,9 +190,10 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-lr_pvalue_ctl_pos']] = models %>%
         mutate(is_ctl_pos = EVENT %in% ctl_pos) %>%
         ggviolin(x="is_ctl_pos", y="lr_pvalue", trim = TRUE, 
-                 fill='is_ctl_pos', color=NA, palette='npg') + 
-        geom_boxplot(width=0.2, fill=NA) +
+                 fill='is_ctl_pos', color=NA, palette = c('grey','darkgreen')) + 
+        geom_boxplot(width=0.1) +
         stat_compare_means(method="wilcox.test") +
+        guides(fill="none") + 
         labs(x='Is Positive Control', y='LR Test p-value')
     
     # we selected the ensemble of models by their ability to rank dependencies
@@ -257,7 +264,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-pvalue_vs_n_genes']] = eval_pvalue %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_genes', label=TRUE, lab.size=3, 
+        ggbarplot(x='thresh', y='total_genes', label=TRUE, lab.size=1, 
                   fill='darkblue', color=NA) +
         labs(x='Thresholds LR Test p-value', y='No. Genes Selected') +
         theme_pubr(x.text.angle=70)
@@ -265,7 +272,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-pvalue_vs_n_events']] = eval_pvalue %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_events', label=TRUE, lab.size=3, 
+        ggbarplot(x='thresh', y='total_events', label=TRUE, lab.size=1, 
                   fill='lightblue', color=NA) +
         labs(x='Thresholds LR Test p-value', y='No. Events Selected') +
         theme_pubr(x.text.angle=70)
@@ -273,7 +280,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-pvalue_vs_ctl_neg']] = eval_pvalue %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_ctl_neg', label=TRUE, lab.size=3, 
+        ggbarplot(x='thresh', y='total_ctl_neg', label=TRUE, lab.size=1, 
                   fill='brown', color=NA) +
         labs(x='Thresholds LR Test p-value', y='No. Neg. Ctl. Genes Selected') +
         theme_pubr(x.text.angle=70)
@@ -281,7 +288,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-pvalue_vs_ctl_pos']] = eval_pvalue %>%
         dplyr::select(-one_of(c('id','corr','pvalue'))) %>%
         distinct() %>%
-        ggbarplot(x='thresh', y='total_ctl_pos', label=TRUE, lab.size=3, 
+        ggbarplot(x='thresh', y='total_ctl_pos', label=TRUE, lab.size=1, 
                   fill='darkgreen', color=NA) +
         labs(x='Thresholds LR Test p-value', y='No. Positive Control Exons Selected') +
         theme_pubr(x.text.angle=70)
@@ -291,12 +298,12 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         dplyr::select(-one_of(c('id','pvalue'))) %>% 
         group_by(thresh,fpr,tpr) %>% 
         summarize(med_corr=median(corr)) %>% 
-        ggline(x='fpr', y='tpr', linetype='dashed', numeric.x.axis = TRUE, 
-               label="thresh", repel = TRUE) + 
+        ggline(x='fpr', y='tpr', linetype='dashed', numeric.x.axis=TRUE, size=0.25,
+               label="thresh", repel=FALSE, font.label = c(6, "plain")) + 
         geom_abline(intercept=0, slope=1, linetype='dashed') + 
         labs(x='FPR', y='TPR', size='median(Spearman Corr.)') + 
-        xlim(0,1) + ylim(0,1)
-    
+        xlim(0,1) + 
+        ylim(0,1)
     
     # find the threshold for the mean pearson correlation
     threshs = seq(0,0.4,0.05)
@@ -345,7 +352,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     
     plts[['model_selection-pearson_corr_vs_spearman']] = eval_corr %>% 
         ggviolin(x='thresh', y='corr', fill='orange', color=NA) + 
-        geom_boxplot(fill=NA) +
+        geom_boxplot(fill=NA, outlier.size=0.5) +
         labs(x='Thresholds LR Test p-value', y='Spearman Correlation',
              title='Sample Size = 250') +
         theme_pubr(x.text.angle=70) +
@@ -359,7 +366,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-selected_vs_event_std']] = models %>%
         ggviolin(x='is_selected', y='event_std', color=NA, trim=TRUE,
                  fill='is_selected', palette='npg') +
-        geom_boxplot(fill=NA, outlier.size = 0.75) +
+        geom_boxplot(fill=NA, outlier.size = 0.5) +
         stat_compare_means(method='wilcox.test') +
         guides(color='none', fill='none') +
         labs(x='Selected Model', y='Event Std.')
@@ -374,7 +381,8 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     
     plts[['model_selection-mutation_gene_count']] = X %>% 
         count(Variant_Classification, is_selected) %>%
-        ggbarplot(x='Variant_Classification', y='n', label=TRUE, palette='npg',
+        ggbarplot(x='Variant_Classification', y='n', 
+                  label=TRUE, lab.size=2, palette='npg',
                   fill='is_selected', color=NA, position=position_dodge(0.9)) + 
         yscale('log10', .format=TRUE) + 
         labs(x='Mutation Effect', y='No. Genes', 
@@ -384,11 +392,10 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-mutation_gene_frequency']] = X %>% 
         ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
                    group=interaction(Variant_Classification,is_selected))) +
-        # geom_violin(aes(fill=is_selected), color=FALSE, scale='width') +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.5, 
                      position=position_dodge(0.7)) +
-        stat_compare_means(aes(group=is_selected), 
-                           method='wilcox.test', label='p.signif') +
+        stat_compare_means(aes(group=is_selected), method='wilcox.test', 
+                           label='p.signif', size=2) +
         yscale('log10', .format=TRUE) + 
         fill_palette('npg') +
         labs(x='Mutation Effect', y='log10(Mut. Freq. per Kb)', 
@@ -417,7 +424,8 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     
     plts[['model_selection-mutation_event_count']] = X %>% 
         count(Variant_Classification, is_selected) %>%
-        ggbarplot(x='Variant_Classification', y='n', label=TRUE, palette='npg',
+        ggbarplot(x='Variant_Classification', y='n', 
+                  label=TRUE, palette='npg', lab.size=2,
                   fill='is_selected', color=NA, position=position_dodge(0.9)) + 
         yscale('log10', .format=TRUE) + 
         labs(x='Mutation Effect', y='No. Events', fill='Selected Model') +
@@ -428,8 +436,11 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
                    group=interaction(Variant_Classification,is_selected))) +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.5, 
                      position=position_dodge(0.7)) +
-        stat_compare_means(aes(group=is_selected), 
-                           method='wilcox.test', label='p.signif') +
+        stat_compare_means(aes(group=is_selected), method='wilcox.test', 
+                           label='p.signif', size=2) +
+        fill_palette('npg') +
+        labs(x='Mutation Effect', y='log2(FC Mut. Freq. per Kb)', 
+             fill='Selected Model') +
         theme_pubr(x.text.angle=70)
     
     
@@ -443,7 +454,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         group_by(is_selected,term) %>% 
         summarize(n=n()) %>% 
         arrange(n) %>%
-        ggbarplot(x='term', y='n', label=TRUE,
+        ggbarplot(x='term', y='n', label=TRUE, lab.size=2,
                   fill='is_selected', color=NA, palette='npg') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
@@ -479,7 +490,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         summarize(n=n()) %>%
         arrange(n) %>%
         drop_na() %>%
-        ggbarplot(x='term_clean', y='n', label=TRUE,
+        ggbarplot(x='term_clean', y='n', label=TRUE, lab.size=2,
                   fill='is_selected', color=NA, palette='npg') + 
         theme_pubr(x.text.angle = 45, legend='right') +
         guides(color='none') + 
@@ -514,7 +525,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         res = enrichment[[e_name]]
         plts = list()
         plts[['dotplot']] = dotplot(res)
-        plts[['cnetplot']] = cnetplot(res)
+        plts[['cnetplot']] = cnetplot(res, cex_label_category=0.5, cex_label_gene=0.5)
         names(plts) = sprintf('%s-%s',e_name,names(plts))
         return(plts)
     })
@@ -522,6 +533,8 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     names(plts_enrichment) = sprintf('model_selection-enrichment-%s',
                                      names(plts_enrichment))
     plts = c(plts, plts_enrichment)
+    plts[['model_selection-enrichment-GO_BP-dotplot']] = plts[['model_selection-enrichment-GO_BP-dotplot']] + 
+        theme_pubr()
     
     # overlaps between enriched GO processes and protein impact?
 #     sets = list(
@@ -673,7 +686,7 @@ plot_interactions = function(models, ontologies){
 plot_examples = function(models, protein_impact){
     X = models %>%
         filter(is_selected) %>%
-        arrange(lr_pvalue) %>%
+        arrange(pearson_correlation_mean) %>%
         mutate(index=row_number()) %>%
         left_join(protein_impact, by='EVENT')
     
@@ -683,15 +696,18 @@ plot_examples = function(models, protein_impact){
                 'interaction_subcategory','term','event_type','lr_pvalue')
     
     plts[['examples-top_overall-scatter']] = X %>%
-        ggscatter(x='index', y='lr_pvalue') +
-        yscale('log10', .format=TRUE) +
+        ggplot(aes(x=index, y=pearson_correlation_mean)) +
+        geom_scattermore(pixels=c(1000,1000), pointsize=8) +
         geom_text_repel(
             aes(label=event_gene),
             X %>%
-            slice_min(order_by=lr_pvalue, n=15),
-            max.overlaps = 10
+            slice_max(order_by=pearson_correlation_mean, n=15),
+            max.overlaps = 50,
+            size=1,
+            segment.size=0.1
         ) +
-        labs(x='Index', y='log10(LR Test p-value)', 
+        theme_pubr() +
+        labs(x='Index', y='Avg. Pearson Correlation (Test Set)', 
              title=sprintf('No. Selected Models=%s',nrow(X)))
     
      plts[['examples-top_overall-table']] = X %>%
@@ -763,15 +779,17 @@ plot_tumorigenesis = function(models, spldep){
     plts = list()
 
     plts[['tumorigenesis-scatter']] = spldep_stats %>% 
-        ggscatter(x="q05", y="q95") + 
+        ggplot(aes(x=q05, y=q95)) +
+        geom_scattermore(pointsize=8, pixels=c(1000,1000)) +
+        theme_pubr() +
         geom_hline(yintercept=0, linetype='dashed') + 
         geom_vline(xintercept=0, linetype='dashed') +
         labs(x='0.05 Quantile', y='0.95 Quantile') +
-        geom_text_repel(aes(label=event_gene), 
+        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1,
                         spldep_stats %>% slice_max(order_by = q05*q95, n=5)) +
-        geom_text_repel(aes(label=event_gene),
+        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1,
                         spldep_stats %>% filter(q95>1)) +
-        geom_text_repel(aes(label=event_gene),
+        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1,
                         spldep_stats %>% filter(q95>0 & q05<(-0.9)))
     
     return(plts)
@@ -796,14 +814,12 @@ save_plt = function(plts, plt_name, extension='.pdf',
                     width = par("din")[1], height = par("din")[2]){
     plt = plts[[plt_name]]
     if (format){
-        plt = ggpar(plt, font.title=11, font.subtitle=10, font.caption=10, 
-                    font.x=10, font.y=10, font.legend=10,
-                    font.tickslab=8, font.family='Arial')    
+        plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
+                    font.x=8, font.y=8, font.legend=8,
+                    font.tickslab=6, font.family='Arial')    
     }
     filename = file.path(directory,paste0(plt_name,extension))
-    save_plot(filename, 
-              plt, 
-              base_width=width, base_height=height, dpi=dpi)
+    save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm')
 }
 
 
@@ -817,23 +833,23 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-lr_pvalue', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-lr_pvalue_ctl_pos', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pearson_corr', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-pvalue_vs_n_genes', '.pdf', figs_dir, width=5, height=2.5)
-    save_plt(plts, 'model_selection-pvalue_vs_ctl_neg', '.pdf', figs_dir, width=5, height=2.5)
-    save_plt(plts, 'model_selection-pvalue_vs_ctl_pos', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_genes', '.pdf', figs_dir, width=5, height=4)
+    save_plt(plts, 'model_selection-pvalue_vs_ctl_neg', '.pdf', figs_dir, width=5, height=4)
+    save_plt(plts, 'model_selection-pvalue_vs_ctl_pos', '.pdf', figs_dir, width=5, height=4)
     save_plt(plts, 'model_selection-roc_curve', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-pvalue_vs_n_events', '.pdf', figs_dir, width=5, height=2.5)
+    save_plt(plts, 'model_selection-pvalue_vs_n_events', '.pdf', figs_dir, width=5, height=4)
     save_plt(plts, 'model_selection-pearson_corr_vs_spearman', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-selected_vs_event_std', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-mutation_gene_count', '.pdf', figs_dir, width=8, height=4)
-    save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=4)
+    save_plt(plts, 'model_selection-mutation_gene_count', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-mutation_gene_frequency', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-mutation_event_frequency', '.pdf', figs_dir, width=8, height=8)
-    save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-protein_impact_clean-counts', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-protein_impact_clean-freqs', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-enrichment-GO_BP-dotplot', '.pdf', figs_dir, width=9, height=8)
-    save_plt(plts, 'model_selection-enrichment-GO_BP-cnetplot', '.pdf', figs_dir, width=9, height=8)
+    save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-protein_impact_clean-counts', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'model_selection-protein_impact_clean-freqs', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'model_selection-enrichment-GO_BP-dotplot', '.pdf', figs_dir, width=12, height=8)
+    save_plt(plts, 'model_selection-enrichment-GO_BP-cnetplot', '.pdf', figs_dir, width=20, height=20)
     # save_plt(plts, 'model_selection-enrichment-GO_BP_vs_prot_imp', '.pdf', figs_dir, width=9, height=8)
     
     # interactions
