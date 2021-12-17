@@ -39,8 +39,8 @@ RANDOM_SEED = 1234
 # drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
 # figs_dir = file.path(RESULTS_DIR,'figures','model_drug_screens')
 # embedding_file = file.path(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz')
-# estimated_response_file = file.path(RESULTS_DIR, 'files', 'estimated_drug_response-GDSC1-EX', 'estimated_drug_response_by_drug.tsv.gz')
-# drug_screen_file = file.path(PREP_DIR,'drug_screens','GDSC1.tsv.gz')
+# estimated_response_file = file.path(RESULTS_DIR,'files','estimated_drug_response_by_drug-EX.tsv.gz')
+# drug_screen_file = file.path(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv')
 
 ##### FUNCTIONS #####
 get_sets = function(df, set_names, set_values){
@@ -237,7 +237,7 @@ plot_associations = function(models, drug_targets, embedding){
         arrange(TARGET_PATHWAY) %>%
         dplyr::select(sil_width, label, TARGET_PATHWAY) %>% 
         ggboxplot(x="label", y="sil_width", fill="TARGET_PATHWAY", 
-                  outlier.size=0.5, palette=get_palette("jco", 21)) + 
+                  outlier.size=0.1, palette=get_palette("jco", 21)) + 
         guides(fill="none") +
         labs(x='Target Pathway (N. Targets)', y='Silhouette Score') +
         coord_flip()
@@ -266,49 +266,54 @@ plot_associations = function(models, drug_targets, embedding){
 plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
     X = estimated_response %>%
         left_join(drug_screen %>% mutate(real_ic50 = log(IC50_PUBLISHED)), 
-                  by=c("DRUG_ID", "sample"="ARXSPAN_ID")) %>%
+                  by=c("drug_screen"="DATASET","DRUG_ID", "sample"="ARXSPAN_ID")) %>%
         drop_na(real_ic50, predicted_ic50)
     
     corrs = X %>% 
-        group_by(sample) %>%
+        group_by(drug_screen, sample) %>%
         summarize(correlation = cor(real_ic50, predicted_ic50, method="spearman"))
     
     plts = list()
     plts[["drug_rec-spearmans"]] = corrs %>% 
-        gghistogram(x="correlation", color=NA, fill="gold4") + 
-        xlim(-1,1) + 
-        geom_vline(xintercept=median(corrs[['correlation']]), # 0.64
-                   linetype="dashed") + 
-        labs(x="Spearman Correlation", y="Count")
+        ggviolin(x="drug_screen", y="correlation", 
+                 color=NA, fill="drug_screen", palette="jco") +
+        geom_boxplot(width=0.1, outlier.size=0.5) +
+        geom_hline(yintercept=0, linetype="dashed") +
+        ylim(-1,1) + 
+        guides(fill="none") + 
+        labs(x="Drug Screen", y="Spearman Correlation")
     
     # best and worse correlations
     samples_oi = corrs %>% 
+        group_by(drug_screen) %>%
         arrange(correlation) %>% 
-        filter(row_number()==1 | row_number()==n()) %>% 
-        pull(sample)
-    plts[['drug_rec-best_worse']] = X %>% 
-        filter(sample %in% samples_oi) %>% 
-        ggscatter(x="real_ic50", y="predicted_ic50", size=1) + 
-        facet_wrap(~sample, scales='free') +
-        stat_cor(method="spearman") + 
+        filter(row_number()==1 | row_number()==n()) %>%
+        left_join(X, by=c("drug_screen","sample"))
+    
+    plts[['drug_rec-best_worse']] = samples_oi %>% 
+        ggscatter(x="real_ic50", y="predicted_ic50", size=0.5) + 
+        facet_wrap(drug_screen~sample, scales='free') +
+        stat_cor(method="spearman", size=2) + 
         geom_abline(intercept=0, slope=1, linetype="dashed") +
         labs(x="Real log(IC50)", y="Predicted log(IC50)") + 
-        theme_pubr(border=TRUE)
+        theme_pubr(border=TRUE) +
+        theme(strip.text = element_text(size=6))
     
     # influence of pathway in ranking capacity?
     corrs_bypath = X %>%
         left_join(drug_targets %>% distinct(DRUG_NAME, TARGET_PATHWAY), 
                   by="DRUG_NAME") %>% 
-        group_by(sample, TARGET_PATHWAY) %>%
+        group_by(drug_screen, sample, TARGET_PATHWAY) %>%
         summarize(correlation = cor(real_ic50, predicted_ic50, method="spearman"))
     
     plts[["drug_rec-spearmans_by_pathway"]] = corrs_bypath %>%
         drop_na() %>%
         filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
         arrange(TARGET_PATHWAY) %>%
-        ggboxplot(x="TARGET_PATHWAY", y="correlation", outlier.size=0.5,
+        ggboxplot(x="TARGET_PATHWAY", y="correlation", outlier.size=0.1,
                   fill="TARGET_PATHWAY", palette=get_palette("jco", 21)) + 
         ylim(-1,1) + 
+        facet_wrap(~drug_screen) + 
         labs(x="Target Pathway", y="Spearman Correlation") +
         guides(fill="none") + 
         coord_flip()
@@ -454,8 +459,8 @@ save_plots = function(plts, figs_dir){
     
     # drug recommendations
     save_plt(plts, 'drug_rec-spearmans', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'drug_rec-best_worse', '.pdf', figs_dir, width=10, height=5)
-    save_plt(plts, 'drug_rec-spearmans_by_pathway', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'drug_rec-best_worse', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'drug_rec-spearmans_by_pathway', '.pdf', figs_dir, width=8, height=6)
     
 }
 
@@ -499,7 +504,7 @@ main = function(){
         distinct()
     embedding = read_tsv(embedding_file)
     estimated_response = read_tsv(estimated_response_file)
-    drug_screen = read_tsv(drug_screen_file)
+    drug_screen = read_csv(drug_screen_file)
     
     # make plots
     plts = make_plots(models, drug_targets, embedding, estimated_response, drug_screen)

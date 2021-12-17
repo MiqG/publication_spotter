@@ -38,12 +38,15 @@ rule all:
         # concatenate model summaries
         expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
+        # concatenate drug rankings
+        expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
         # embed association coefficients
         expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # plot models
-        os.path.join(RESULTS_DIR,'figures','model_drug_screens')
+        # os.path.join(RESULTS_DIR,'figures','model_drug_screens')
 
     
 rule model_drug_response:
@@ -118,8 +121,8 @@ rule figures_model_drug_screens:
         models = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-EX.tsv.gz'),
         drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
         embedding = os.path.join(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz'),
-        estimated_response = os.path.join(),
-        drug_screen = os.path.join()
+        # estimated_response = os.path.join(),
+        # drug_screen = os.path.join()
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_drug_screens'))
     shell:
@@ -152,3 +155,22 @@ rule predict_drug_response:
                     --output_dir={output}
         """
         
+rule combine_drug_rankings:
+    input:
+        [os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}').format( drug_screen=drug_screen, event_type='{event_type}') for drug_screen in DRUG_SCREENS]
+    output:
+        os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for d in input:
+            drug_screen = os.path.basename(d).replace('estimated_drug_response-','')[:5]
+            print(drug_screen)
+            filename = os.path.join(d,'estimated_drug_response_by_drug.tsv.gz')
+            df = pd.read_table(filename)
+            df["drug_screen"] = drug_screen
+            dfs.append(df)
+            
+        dfs = pd.concat(dfs)    
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
