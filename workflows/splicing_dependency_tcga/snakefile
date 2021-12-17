@@ -24,6 +24,7 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_tcga')
 SRC_DIR = os.path.join(ROOT,'src')
 MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+DRUG_ASSOC_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 
 EVENT_TYPES = ['EX'] # ['EX','ALTA','ALTD']
@@ -71,6 +72,7 @@ RESPONSE_TREATMENT = {
     'UCEC': 'CARBOPLATIN+PACLITAXEL', 
     'UCS': 'CARBOPLATIN+PACLITAXEL'
 }
+DRUG_SCREENS = ['GDSC1','GDSC2']
 
 DATASETS = ['psi','spldep']
 COMPARISONS = ['PrimaryTumor_vs_SolidTissueNormal','RESPONDER_vs_NONRESPONDER']
@@ -81,6 +83,7 @@ rule all:
     input:
         # compute splicing dependencies TCGA
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies TCGA
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
@@ -115,6 +118,12 @@ rule all:
         # plot
         # expand(os.path.join(RESULTS_DIR,'figures','differential_analysis-{event_type}'), event_type=EVENT_TYPES)
         
+        # estimate drug responses
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','estimated_drug_response-{drug_screen}-{event_type}'), cancer=CANCER_TYPES, event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS),
+        
+        # combine drug responses
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        
         
 rule compute_splicing_dependency_tcga:
     input:
@@ -140,7 +149,85 @@ rule compute_splicing_dependency_tcga:
                     --normalize_counts={params.normalize_counts} \
                     --n_jobs={threads}
         """
+
         
+rule summarize_splicing_dependency:
+    input:
+        spldeps = [os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}','mean.tsv.gz').format(cancer=cancer, event_type='{event_type}') for cancer in CANCER_TYPES],
+        metadatas = [os.path.join(PREP_DIR,'metadata','{cancer}.tsv').format(cancer=cancer) for cancer in CANCER_TYPES]
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for spldep_file, metadata_file in zip(input.spldeps, input.metadatas):
+            cancer_type = os.path.basename(os.path.dirname(os.path.dirname(spldep_file)))
+            print(cancer_type)
+            
+            spldep = pd.read_table(spldep_file, index_col=0)
+            metadata = pd.read_table(metadata_file)
+            
+            # only Primary Tumors
+            samples_oi = metadata.loc[metadata["sample_type"]=="Primary Tumor","sampleID"].values
+            samples_oi = set(spldep.columns).intersection(samples_oi)
+            print(samples_oi)
+            
+            df = pd.DataFrame({
+                "EVENT": spldep.index,
+                "mean": spldep[samples_oi].mean(axis=1),
+                "median": spldep[samples_oi].median(axis=1),
+                "std": spldep[samples_oi].std(axis=1),
+                "q05": spldep[samples_oi].quantile(0.05, axis=1),
+                "q95": spldep[samples_oi].quantile(0.95, axis=1),
+                "nobs": len(samples_oi)
+            })
+            df["cancer_type"] = cancer_type
+            dfs.append(df)
+        dfs = pd.concat(dfs)
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+        
+rule predict_drug_response:
+    input:
+        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}','mean.tsv.gz'),
+        fitted_dir = os.path.join(DRUG_ASSOC_DIR,'files','models_drug_response-{drug_screen}-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','{cancer}','estimated_drug_response-{drug_screen}-{event_type}'))
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        python {params.script_dir}/target_spotter drugassoc_predict \
+                    --splicing_dependency_file={input.spldep} \
+                    --model_summaries_file={input.fitted_dir}/model_summaries.tsv.gz \
+                    --fitted_growth_rates_file={input.fitted_dir}/growth_rates.tsv.gz \
+                    --fitted_spldep_file={input.fitted_dir}/fitted_splicing_dependency.tsv.gz \
+                    --output_dir={output}
+        """
+        
+rule combine_drug_rankings:
+    input:
+        [os.path.join(RESULTS_DIR,'files','{cancer}','estimated_drug_response-{drug_screen}-{event_type}').format(cancer=cancer, drug_screen=drug_screen, event_type='{event_type}') for cancer in CANCER_TYPES for drug_screen in DRUG_SCREENS]
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','estimated_drug_response_by_drug-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for d in input:
+            cancer_type = os.path.basename(os.path.dirname(d))
+            drug_screen = os.path.basename(d).replace('estimated_drug_response-','')[:5]
+            print(drug_screen, cancer_type)
+            filename = os.path.join(d,'estimated_drug_response_by_drug.tsv.gz')
+            df = pd.read_table(filename)
+            df["cancer_type"] = cancer_type
+            df["drug_screen"] = drug_screen
+            dfs.append(df)
+            
+        dfs = pd.concat(dfs)    
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+            
         
 rule impute_splicing_dependency:
     input:
