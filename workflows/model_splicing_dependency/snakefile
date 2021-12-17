@@ -35,7 +35,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
-        os.path.join(RESULTS_DIR,'figures','model_selection'),
+        # os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # write selected models
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=['EX']),
@@ -115,7 +115,7 @@ rule compute_splicing_dependency:
                     --output_dir={output} \
                     --n_jobs={threads}
         """
-    
+        
     
 rule list_selected_models:
     input:
@@ -123,7 +123,7 @@ rule list_selected_models:
     output:
         os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     params:
-        thresh_lr_pvalue = 0.0025,
+        thresh_lr_pvalue = 0.005,
         thresh_corr = 0.2
     run:
         import pandas as pd
