@@ -21,6 +21,7 @@ require(cluster)
 require(ComplexHeatmap)
 require(ggplotify)
 require(gridExtra)
+require(clusterProfiler)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -41,6 +42,8 @@ RANDOM_SEED = 1234
 # embedding_file = file.path(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz')
 # estimated_response_file = file.path(RESULTS_DIR,'files','estimated_drug_response_by_drug-EX.tsv.gz')
 # drug_screen_file = file.path(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv')
+# msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
+
 
 ##### FUNCTIONS #####
 get_sets = function(df, set_names, set_values){
@@ -51,7 +54,41 @@ get_sets = function(df, set_names, set_values){
     return(sets)
 }
 
-plot_associations = function(models, drug_targets, embedding){
+
+run_enrichment = function(genes, universe, ontologies){
+    enrichments = list()
+    enrichments[['hallmarks']] = enricher(genes, TERM2GENE=ontologies[['hallmarks']], universe=universe)
+    enrichments[['GO_BP']] = enricher(genes, TERM2GENE=ontologies[['GO_BP']], universe=universe)
+    enrichments[['oncogenic_signatures']] = enricher(genes, TERM2GENE=ontologies[['oncogenic_signatures']], universe=universe)
+    return(enrichments)
+}
+
+
+get_enrichment_result = function(enrich_list, thresh=0.05){
+    ## groups are extracted from names
+    ontos = names(enrich_list[[1]])
+    groups = names(enrich_list)
+    results = sapply(
+        ontos, function(onto){
+        result = lapply(groups, function(group){
+            result = enrich_list[[group]][[onto]]
+            if(!is.null(result)){
+                result = result@result
+                result$Cluster = group
+            }
+            return(result)
+        })
+        result[sapply(result, is.null)] = NULL
+        result = do.call(rbind,result)
+        ## filter by p.adjusted
+        result = result %>% filter(p.adjust<thresh)
+    }, simplify=FALSE)
+    
+    return(results)
+}
+
+
+plot_associations = function(models, drug_targets, embedding, ontologies){
     top_n = 25
     X = models %>% 
         left_join(drug_targets[,c("DRUG_ID","DRUG_NAME")], by="DRUG_ID")
@@ -109,12 +146,11 @@ plot_associations = function(models, drug_targets, embedding){
     # is there any drug that is significantly associated to the splicing
     # dependency of an event of a gene that it targets?
     found_targets = X %>% 
-        filter(lr_padj < THRESH_FDR) %>% 
         left_join(drug_targets, by=c("DRUG_ID","DRUG_NAME","GENE"="TARGET")) %>%
         drop_na(TARGET_PATHWAY) %>%
         mutate(is_target=TRUE)
-    drugs_oi = found_targets %>% pull(DRUG_NAME) %>% unique()
-    events_oi = found_targets %>% pull(EVENT) %>% unique()
+    drugs_oi = found_targets %>% filter(lr_padj < THRESH_FDR) %>% pull(DRUG_NAME) %>% unique()
+    events_oi = found_targets %>% filter(lr_padj < THRESH_FDR) %>% pull(EVENT) %>% unique()
     
     plts[['associations-top_found_targets']] = X %>% 
         filter(lr_padj<THRESH_FDR & DRUG_NAME%in%drugs_oi) %>% 
@@ -133,7 +169,10 @@ plot_associations = function(models, drug_targets, embedding){
         facet_wrap(~drug_name_clean, scales='free', ncol=4) + 
         scale_x_reordered() +     
         labs(x='Event & Gene', y='Effect Size', fill='Is Drug Target', 
-             title='Top 15 Significant Effect Sizes') + 
+             title=sprintf('Top 15 Significant Effect Sizes | %s out of %s', 
+                           found_targets %>% filter(lr_padj<THRESH_FDR) %>% 
+                               distinct(DRUG_NAME) %>% nrow(),
+                           found_targets %>% distinct(DRUG_NAME) %>% nrow())) + 
         coord_flip() +
         theme_pubr(border=TRUE) +
         theme(strip.text = element_text(size=6))
@@ -189,10 +228,10 @@ plot_associations = function(models, drug_targets, embedding){
     plts[['associations-target_pathway-counts']] = drug_targets %>% 
         distinct(DRUG_ID,TARGET_PATHWAY) %>%
         count(TARGET_PATHWAY) %>%
-        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        # filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
         ggbarplot(x='TARGET_PATHWAY', y="n",
                   fill="TARGET_PATHWAY", color=NA, 
-                  palette=get_palette("jco", 21)) +
+                  palette=get_palette("jco", 24)) +
         labs(x='Target Pathway', y='Count') +
         coord_flip() +
         theme_pubr(legend="none")
@@ -200,18 +239,18 @@ plot_associations = function(models, drug_targets, embedding){
     plts[['associations-target_pathway-umap']] = embedding %>%
         left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
                   by=c("index"="DRUG_ID")) %>%
-        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        # filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
         ggplot(aes(x=UMAP0, y=UMAP1, color=TARGET_PATHWAY)) +
         geom_scattermore(pixels=c(1000,1000), pointsize=8) +
         theme_pubr() +
-        color_palette(palette=get_palette("jco", 21)) +
+        color_palette(palette=get_palette("jco", 24)) +
         theme(aspect.ratio=1)
     
     ## check silhouettes
     X = embedding %>%
         left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
                   by=c("index"="DRUG_ID")) %>%
-        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        # filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
         mutate(lab = as.numeric(as.factor(TARGET_PATHWAY)))
         
     
@@ -226,7 +265,9 @@ plot_associations = function(models, drug_targets, embedding){
     ## Are silhouettes good only when there is a significant association 
     ## with event(s) in the gene target(s)?
     pathways_w_events = drug_targets %>% 
-        mutate(is_found = as.factor(TARGET %in% (found_targets %>% pull(GENE)))) %>%
+        mutate(is_found = as.factor(TARGET %in% (found_targets %>% 
+                                     filter(lr_padj<THRESH_FDR) %>% 
+                                     pull(GENE)))) %>%
         count(TARGET_PATHWAY, is_found, .drop=FALSE) %>%
         filter(is_found=="TRUE") %>%
         mutate(label = sprintf("%s (%s)", TARGET_PATHWAY, n))
@@ -237,27 +278,47 @@ plot_associations = function(models, drug_targets, embedding){
         arrange(TARGET_PATHWAY) %>%
         dplyr::select(sil_width, label, TARGET_PATHWAY) %>% 
         ggboxplot(x="label", y="sil_width", fill="TARGET_PATHWAY", 
-                  outlier.size=0.1, palette=get_palette("jco", 21)) + 
+                  outlier.size=0.1, palette=get_palette("jco", 24)) + 
         guides(fill="none") +
         labs(x='Target Pathway (N. Targets)', y='Silhouette Score') +
         coord_flip()
     
-    # in some cases, there seems to be an association between dependency profiles
-    # and drug mechanism of action / target pathway, but in others not.
-    # Does this have something to do with the number of specific splicing events
-    # whose dependency is associated with drugs of a certain target pathway?
-#     X = models %>% 
-#         left_join(drug_targets, by="DRUG_ID")
     
-#     events_oi = X %>% 
-#         filter(lr_padj < THRESH_FDR) %>% 
-#         distinct(EVENT,TARGET_PATHWAY) %>% 
-#         filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>% 
-#         get_sets('TARGET_PATHWAY', 'EVENT')
-#     m = events_oi %>% list_to_matrix() %>% make_comb_mat()
-#     UpSet(m, comb_order = order(comb_size(m)))
-#     as.ggplot(grid.grabExpr(draw()))
+    # are there other biological reasons for the umap clusters?
+    plts[['associations-leiden-umap']] = embedding %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
+                  by=c("index"="DRUG_ID")) %>%
+        # filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        mutate(leiden_labels=as.factor(leiden_labels)) %>%
+        ggplot(aes(x=UMAP0, y=UMAP1, color=leiden_labels)) +
+        geom_scattermore(pixels=c(1000,1000), pointsize=8) +
+        theme_pubr() +
+        theme(aspect.ratio=1)
     
+    gene_sets = embedding %>%
+        left_join(
+            drug_targets %>%
+            distinct(DRUG_ID,TARGET),
+          by=c("index"="DRUG_ID")) %>%
+        distinct(leiden_labels,TARGET) %>%
+        get_sets("leiden_labels","TARGET")
+    
+    universe = unique(unlist(gene_sets))
+    results = sapply(names(gene_sets), function(gene_set){
+        enrichment = run_enrichment(gene_sets[[gene_set]], universe, ontologies)
+        return(enrichment)
+    }, simplify=FALSE)
+    results = get_enrichment_result(results)
+    
+    plts_enrichment = sapply(names(results), function(onto){
+        result = results[[onto]]
+        res = new("compareClusterResult", compareClusterResult = result)
+        plt = dotplot(res) + labs(title=onto, x='Leiden Cluster')
+        return(plt)
+    }, simplify=FALSE)
+    names(plts_enrichment) = sprintf('associations-leiden-enrichment-%s',
+                                     names(plts_enrichment))
+    plts = c(plts,plts_enrichment)
     
     return(plts)
 }
@@ -277,9 +338,9 @@ plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
     plts[["drug_rec-spearmans"]] = corrs %>% 
         ggviolin(x="drug_screen", y="correlation", 
                  color=NA, fill="drug_screen", palette="jco") +
-        geom_boxplot(width=0.1, outlier.size=0.5) +
+        geom_boxplot(width=0.1, outlier.size=0.1) +
         geom_hline(yintercept=0, linetype="dashed") +
-        ylim(-1,1) + 
+        # ylim(-1,1) + 
         guides(fill="none") + 
         labs(x="Drug Screen", y="Spearman Correlation")
     
@@ -308,10 +369,10 @@ plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
     
     plts[["drug_rec-spearmans_by_pathway"]] = corrs_bypath %>%
         drop_na() %>%
-        filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
+        # filter(!(TARGET_PATHWAY %in% c("Other", "Other, kinases", "Unclassified"))) %>%
         arrange(TARGET_PATHWAY) %>%
         ggboxplot(x="TARGET_PATHWAY", y="correlation", outlier.size=0.1,
-                  fill="TARGET_PATHWAY", palette=get_palette("jco", 21)) + 
+                  fill="TARGET_PATHWAY", palette=get_palette("jco", 24)) + 
         ylim(-1,1) + 
         facet_wrap(~drug_screen) + 
         labs(x="Target Pathway", y="Spearman Correlation") +
@@ -418,9 +479,9 @@ plot_drugs_common_targets = function(models, drug_targets){
         count(drug_name)
 }
 
-make_plots = function(models, drug_targets, embedding, estimated_response, drug_screen){
+make_plots = function(models, drug_targets, embedding, estimated_response, drug_screen, ontologies){
     plts = list(
-        plot_associations(models, drug_targets, embedding),
+        plot_associations(models, drug_targets, embedding, ontologies),
         plot_drug_rec(estimated_response, drug_screen, drug_targets)
     )
     plts = do.call(c,plts)
@@ -454,6 +515,10 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=6, height=6)
     save_plt(plts, 'associations-target_pathway-umap', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'associations-target_pathway-silhouettes', '.pdf', figs_dir, width=6.5, height=6)
+    save_plt(plts, 'associations-leiden-umap', '.pdf', figs_dir, width=10, height=10)
+    save_plt(plts, 'associations-leiden-enrichment-hallmarks', '.pdf', figs_dir, width=8, height=6)
+    save_plt(plts, 'associations-leiden-enrichment-GO_BP', '.pdf', figs_dir, width=15, height=14)
+    
     save_plt(plts, 'associations-target_ranking-vio', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-target_ranking-cdf', '.pdf', figs_dir, width=5, height=5)
     
@@ -505,9 +570,14 @@ main = function(){
     embedding = read_tsv(embedding_file)
     estimated_response = read_tsv(estimated_response_file)
     drug_screen = read_csv(drug_screen_file)
+    ontologies = list(
+        "hallmarks" = read.gmt(file.path(msigdb_dir,'h.all.v7.4.symbols.gmt')),
+        "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,'c6.all.v7.4.symbols.gmt')),
+        "GO_BP" = read.gmt(file.path(msigdb_dir,'c5.go.bp.v7.4.symbols.gmt'))
+    )
     
     # make plots
-    plts = make_plots(models, drug_targets, embedding, estimated_response, drug_screen)
+    plts = make_plots(models, drug_targets, embedding, estimated_response, drug_screen, ontologies)
     
     # make figdata
     # figdata = make_figdata(results_enrich)
