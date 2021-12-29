@@ -157,16 +157,19 @@ plot_top_candidates_sample_type = function(diff_result, models, drug_targets){
     
     plts[['top_samples-candidates-drug_assocs']] = models %>% 
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID") %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,TARGET) %>% mutate(is_target=TRUE), 
+                  by=c("DRUG_ID", "GENE"="TARGET")) %>%
+        mutate(is_target=!is.na(is_target)) %>%
         filter(lr_padj<0.1 & EVENT%in%targetable_events) %>% 
         group_by(event_gene) %>% 
         slice_max(order_by=abs(spldep_coefficient), n=15) %>% 
         mutate(DRUG_NAME=as.factor(DRUG_NAME),
                name=reorder_within(DRUG_NAME, spldep_coefficient, event_gene)) %>% 
-        ggbarplot(x='name', y='spldep_coefficient', fill='orange', color=NA) + 
+        ggbarplot(x='name', y='spldep_coefficient', fill='is_target', palette="Set2", color=NA) + 
         facet_wrap(~event_gene, scales='free', ncol=4) + 
         coord_flip() +
         scale_x_reordered() +     
-        labs(x='Drug', y='Effect Size') + 
+        labs(x='Drug', y='Effect Size', fill='Is Drug Target') + 
         theme_pubr(border=TRUE) +
         theme(strip.text = element_text(size=6))
     
