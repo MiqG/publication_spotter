@@ -29,6 +29,7 @@ require(ggplotify)
 require(grid)
 require(umap)
 require(extrafont)
+require(gtools)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -335,8 +336,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-pearson_corr_vs_spearman']] = eval_corr %>%
         ggviolin(x='thresh_fct', y='corr', fill='orange', color=NA, trim=TRUE) + 
         geom_boxplot(fill=NA, outlier.size=0.1, width=0.2) +
-        labs(x='Thresholds Single-Model Avg. Pearson Correlation', y='Spearman Correlation',
-             title='Sample Size = 250') +
+        labs(x='Thresholds Single-Model Avg. Pearson Correlation', y='Spearman Correlation') +
         theme_pubr(x.text.angle=70) +
         geom_text(
             aes(x=thresh_fct, y=1.04, label=total_events), 
@@ -422,14 +422,23 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         labs(x='Mutation Effect', y='No. Events', fill='Selected Model') +
         theme_pubr(x.text.angle=70)
     
+    tests = X %>% 
+        filter(is_selected) %>% 
+        group_by(Variant_Classification) %>% 
+        summarize(pval= tryCatch(wilcox.test(fc_mut_freq)$p.value, 
+                                 error=function(err){NA})) %>% 
+        mutate(pval_lab=stars.pval(pval), 
+               pval_lab=ifelse(pval_lab %in%c(' ',''),"ns",pval_lab))
+    
     plts[['model_selection-mutation_event_frequency']] = X %>% 
-        ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
-                   group=interaction(Variant_Classification,is_selected))) +
+        filter(is_selected) %>%
+        ggplot(aes(x=Variant_Classification, y=fc_mut_freq)) +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
                      position=position_dodge(0.7)) +
-        stat_compare_means(aes(group=is_selected), method='wilcox.test', 
-                           label='p.signif', size=2) +
-        fill_palette('npg') +
+        fill_palette("npg") + 
+        geom_hline(yintercept=0, linetype='dashed') +
+        geom_text(aes(x=Variant_Classification, y=4, label=pval_lab), 
+                  tests, size=2) +
         labs(x='Mutation Effect', y='log2(FC Mut. Freq. per Kb)', 
              fill='Selected Model') +
         theme_pubr(x.text.angle=70)
@@ -805,7 +814,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
                     width = par("din")[1], height = par("din")[2]){
     plt = plts[[plt_name]]
     if (format){
-        plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
+        plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=8,
                     font.tickslab=6, font.family='Arial')    
     }
