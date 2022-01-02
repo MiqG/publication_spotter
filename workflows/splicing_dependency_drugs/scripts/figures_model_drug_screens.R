@@ -91,7 +91,7 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
 plot_associations = function(models, drug_targets, embedding, ontologies){
     top_n = 25
     X = models %>% 
-        left_join(drug_targets[,c("DRUG_ID","DRUG_NAME")], by="DRUG_ID")
+        left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
     
     plts = list()
     
@@ -111,34 +111,46 @@ plot_associations = function(models, drug_targets, embedding, ontologies){
     # how many drugs and events are significantly associated?
     plts[['associations-drug_counts']] = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
-        count(DRUG_NAME) %>% 
-        arrange(n) %>% 
-        ggbarplot(x='DRUG_NAME', y='n', fill='#2a9d8f', color=NA) + 
+        count(drug_screen, DRUG_NAME) %>% 
+        group_by(DRUG_NAME) %>%
+        mutate(total=sum(n)) %>%
+        arrange(total) %>%
+        ggbarplot(x='DRUG_NAME', y='n', fill='drug_screen', palette='jco', color=NA) + 
         labs(x='Drug', y='N. Significant Associations')
     
     plts[['associations-top_drug_counts']] = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
-        count(DRUG_NAME) %>% 
-        arrange(n) %>% 
-        tail(top_n) %>%
-        ggbarplot(x='DRUG_NAME', y='n', fill='#2a9d8f', color=NA) + 
+        count(drug_screen, DRUG_NAME) %>% 
+        group_by(DRUG_NAME) %>%
+        mutate(total=sum(n)) %>%
+        arrange(-total) %>%
+        ungroup() %>%
+        mutate(index=as.numeric(factor(DRUG_NAME, levels=unique(DRUG_NAME)))) %>%
+        filter(index <= top_n) %>%
+        ggbarplot(x='DRUG_NAME', y='n', fill='drug_screen', palette='jco', color=NA) + 
         labs(x='Drug', y='N. Significant Associations', 
              title=sprintf('Top %s', top_n)) +
         coord_flip()
     
     plts[['associations-spldep_counts']] = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
-        count(event_gene) %>% 
-        arrange(n) %>% 
-        ggbarplot(x='event_gene', y='n', fill='orange', color=NA) + 
+        count(drug_screen, event_gene) %>% 
+        group_by(event_gene) %>%
+        mutate(total=sum(n)) %>%
+        arrange(total) %>%
+        ggbarplot(x='event_gene', y='n', fill='drug_screen', palette='jco', color=NA) + 
         labs(x='Event & Gene', y='N. Significant Associations')
     
     plts[['associations-top_spldep_counts']] = X %>% 
         filter(lr_padj < THRESH_FDR) %>% 
-        count(event_gene) %>% 
-        arrange(n) %>% 
-        tail(top_n) %>%
-        ggbarplot(x='event_gene', y='n', fill='orange', color=NA) + 
+        count(drug_screen, event_gene) %>% 
+        group_by(event_gene) %>%
+        mutate(total=sum(n)) %>%
+        arrange(-total) %>%
+        ungroup() %>%
+        mutate(index=as.numeric(factor(event_gene, levels=unique(event_gene)))) %>%
+        filter(index <= top_n) %>%
+        ggbarplot(x='event_gene', y='n', fill='drug_screen', palette='jco', color=NA) + 
         labs(x='Event & Gene', y='N. Significant Associations', 
              title=sprintf('Top %s', top_n)) +
         coord_flip()
@@ -154,25 +166,54 @@ plot_associations = function(models, drug_targets, embedding, ontologies){
     
     plts[['associations-top_found_targets']] = X %>% 
         filter(lr_padj<THRESH_FDR & DRUG_NAME%in%drugs_oi) %>% 
+        # add is_target only to some genes
+        left_join(found_targets %>% distinct(DRUG_ID,GENE,is_target), 
+                  by=c('DRUG_ID','GENE')) %>%
+        # add drug pathway info to all entries
+        left_join(found_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
+                  by="DRUG_ID") %>%
+        ungroup() %>%
         group_by(DRUG_NAME) %>% 
-        slice_max(order_by=abs(spldep_coefficient), n=15) %>% 
-        left_join(distinct(found_targets[,c('DRUG_NAME','GENE','is_target')]), 
-                  by=c('DRUG_NAME','GENE')) %>% 
-        left_join(distinct(found_targets[,c('DRUG_NAME','TARGET_PATHWAY')]), 
-                  by=c('DRUG_NAME')) %>% 
+        slice_max(order_by=spldep_coefficient, n=15) %>%
         mutate(is_target=replace_na(is_target,FALSE), 
-               log10_pvalue=-log10(lr_pvalue), 
                drug_name_clean=sprintf('%s | %s',DRUG_NAME,TARGET_PATHWAY), 
-               event_gene=reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>% 
-        ggbarplot(x='event_gene', y='spldep_coefficient', fill='is_target', 
-                  palette='lancet', color=NA) + 
+               name=reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
+        ggplot(aes(x=name, y=spldep_coefficient)) +
+        geom_col(aes(fill=is_target, color=drug_screen, group=drug_screen), 
+                     position=position_dodge(1)) +
+        color_palette(c("white","black")) + 
+        fill_palette("Set2") +    
         facet_wrap(~drug_name_clean, scales='free', ncol=4) + 
+        coord_flip() +
         scale_x_reordered() +     
-        labs(x='Event & Gene', y='Effect Size', fill='Is Drug Target', 
+        labs(x='Drug', y='Effect Size', color='Drug Screen', fill='Is Drug Target',
              title=sprintf('Top 15 Significant Effect Sizes | %s out of %s', 
                            found_targets %>% filter(lr_padj<THRESH_FDR) %>% 
                                distinct(DRUG_NAME) %>% nrow(),
                            found_targets %>% distinct(DRUG_NAME) %>% nrow())) + 
+        theme_pubr(border=TRUE) +
+        theme(strip.text = element_text(size=6))
+    
+    # best associations of drugs without targets
+    drugs_oi = drug_targets %>% filter(is.na(TARGET)) %>% pull(DRUG_ID) %>% unique()
+    
+    plts[['associations-top_no_targets']] = X %>% 
+        filter(lr_padj<THRESH_FDR & DRUG_ID%in%drugs_oi) %>%
+        group_by(DRUG_NAME) %>% 
+        slice_max(order_by=spldep_coefficient, n=15) %>% 
+        left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), by="DRUG_ID") %>%
+        mutate(is_target=FALSE, 
+               drug_name_clean=sprintf('%s | %s',DRUG_NAME,TARGET_PATHWAY), 
+               name=reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>% 
+        ggplot(aes(x=name, y=spldep_coefficient)) +
+        geom_col(aes(fill=is_target, color=drug_screen, group=drug_screen), 
+                     position=position_dodge(1)) +
+        color_palette(c("white","black")) + 
+        fill_palette("Set2") +
+        facet_wrap(~drug_name_clean, scales='free', ncol=4) + 
+        scale_x_reordered() +     
+        labs(x='Event & Gene', y='Effect Size', fill='Is Drug Target', 
+             title='Top 15 Significant Effect Sizes') + 
         coord_flip() +
         theme_pubr(border=TRUE) +
         theme(strip.text = element_text(size=6))
@@ -284,6 +325,18 @@ plot_associations = function(models, drug_targets, embedding, ontologies){
         coord_flip()
     
     
+    # how many drugs of each pathway fall in each leiden cluster?
+    plts[['associations-leiden-vs_target_pathway']] = embedding %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
+                  by=c("index"="DRUG_ID")) %>%
+        group_by(leiden_labels,TARGET_PATHWAY) %>%
+        summarize(n = n()) %>%
+        mutate(prop = n / sum(n),
+               leiden_labels = as.character(leiden_labels)) %>%
+        ggballoonplot(x="TARGET_PATHWAY", y="leiden_labels",
+                      size="prop", fill="aquamarine3") +
+        scale_size_continuous(range=c(0.5,2.5))
+
     # are there other biological reasons for the umap clusters?
     plts[['associations-leiden-umap']] = embedding %>%
         left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), 
@@ -337,7 +390,7 @@ plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
     plts = list()
     plts[["drug_rec-spearmans"]] = corrs %>% 
         ggviolin(x="drug_screen", y="correlation", 
-                 color=NA, fill="drug_screen", palette="jco") +
+                 color=NA, fill="drug_screen", palette="Set2") +
         geom_boxplot(width=0.1, outlier.size=0.1) +
         geom_hline(yintercept=0, linetype="dashed") +
         # ylim(-1,1) + 
@@ -512,9 +565,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'associations-spldep_counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-top_spldep_counts', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'associations-top_found_targets', '.pdf', figs_dir, width=25, height=25)
+    save_plt(plts, 'associations-top_no_targets', '.pdf', figs_dir, width=25, height=25)
     save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=6, height=6)
     save_plt(plts, 'associations-target_pathway-umap', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'associations-target_pathway-silhouettes', '.pdf', figs_dir, width=6.5, height=6)
+    save_plt(plts, 'associations-leiden-vs_target_pathway', '.pdf', figs_dir, width=10.5, height=8)
     save_plt(plts, 'associations-leiden-umap', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'associations-leiden-enrichment-hallmarks', '.pdf', figs_dir, width=8, height=6)
     save_plt(plts, 'associations-leiden-enrichment-GO_BP', '.pdf', figs_dir, width=15, height=14)
