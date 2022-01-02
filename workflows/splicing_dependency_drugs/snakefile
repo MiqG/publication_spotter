@@ -78,11 +78,14 @@ rule combine_model_summaries:
     output:
         os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz')
     run:
+        import os
         import pandas as pd
         
         model_summaries = []
         for d in input:
+            drug_screen = os.path.basename(d).split('-')[1]
             summary = pd.read_table(os.path.join(d,'model_summaries.tsv.gz'))
+            summary['drug_screen'] = drug_screen
             model_summaries.append(summary)
         model_summaries = pd.concat(model_summaries)
         model_summaries.to_csv(output[0], sep='\t', index=False, compression='gzip')
