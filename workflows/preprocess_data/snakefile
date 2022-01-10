@@ -105,7 +105,9 @@ rule all:
         # preprocess TCGA
         ## harmonize names drug treatments
         expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
-        os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
+        os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz'),
+        ## clinically relevant subtypes
+        expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES)
         
         
 rule prepare_metadata_ccle:
@@ -444,4 +446,27 @@ rule preprocess_gdsc:
         idx = drug_response["DATASET"] == "GDSC2"
         drug_response.loc[idx].to_csv(output.gdsc2, sep='\t', index=False, compression="gzip")
         
-    
+
+rule prep_cancer_subtypes:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv'),
+        subtypes = os.path.join(RAW_DIR,'articles','Mina2017','tcga_subtypes.xls')
+    output:
+        subtypes = os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv')
+    run:
+        import pandas as pd
+        
+        subtypes = pd.read_excel(input.subtypes, skiprows=2)
+        subtypes["sampleID"] = subtypes["Sample id"].str.replace(".","-")
+        subtypes["bcr_patient_barcode"] = subtypes["sampleID"].str[:12]
+        subtypes["cancer_subtype"] = subtypes["Subtype"]
+        subtypes = subtypes[["bcr_patient_barcode","cancer_subtype"]]
+        
+        metadata = pd.read_table(input.metadata)
+        metadata["bcr_patient_barcode"] = metadata["sampleID"].str[:12]
+        metadata = metadata[["sampleID","bcr_patient_barcode","cancer","sample_type"]]
+        
+        df = pd.merge(metadata, subtypes, how="left", on="bcr_patient_barcode")
+        
+        df.to_csv(output.subtypes, sep="\t", index=False)
+        
