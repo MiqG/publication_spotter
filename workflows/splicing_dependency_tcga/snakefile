@@ -47,6 +47,25 @@ CANCER_TYPES = [
     'UCS'
 ]
 
+CANCER_SUBTYPES = {
+    'brca_NotBasal': 'BRCA',
+    'brca_Basal': 'BRCA',
+    'brca_Her2': 'BRCA',
+    'crc_MSS': 'READ',
+    'crc_MSI': 'READ',
+    'crc_POLE': 'READ',
+    'gmb_IDH_wildtype': 'GBM',
+    'gbm_IDH_mutant': 'GBM',
+    'lgg_IDH_mutant': 'LGG',
+    'lgg_IDH_mutant_codeletion': 'LGG',
+    'lgg_IDH_wildtype': 'LGG',
+    'ucec_CN_low': 'UCEC',
+    'ucec_CN_high': 'UCEC',
+    'ucec_POLE': 'UCEC',
+    'ucec_MSI': 'UCEC'
+}
+
+
 # RESPONSE_CANCER_TYPES = [
 #     'BRCA', 
 #     'COAD', 
@@ -92,9 +111,13 @@ rule all:
         ## PSI
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
         ## PSI (cancer subtype)
+        expand(os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), subtype=CANCER_SUBTYPES.keys()),
         
         # combine differential analyses
+        ## cancer type
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        ## cancer subtype
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # run GSEA for each differential analysis
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','gsea-{comparison}-{event_type}.tsv.gz'), event_type=EVENT_TYPES, comparison=['PrimaryTumor_vs_SolidTissueNormal'], cancer=CANCER_TYPES, dataset=DATASETS),
@@ -261,6 +284,100 @@ rule differential_psi_sample_type:
                     --output_file={output} \
                     --padj_method={params.padj_method} 
         """
+        
+        
+rule combine_differential_analyses_sample_type:
+    input:
+        psi_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+                     for cancer in CANCER_TYPES],
+    params:
+        event_type = '{event_type}'
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        
+        event_type = params.event_type
+        
+        dfs = []
+        for psi_file in input.psi_files:
+            # combine
+            psi = pd.read_table(psi_file).set_index('EVENT').add_prefix('psi__')
+            psi = psi.loc[psi.index.str.contains(event_type)].copy() # filter event types
+            df = psi.reset_index()
+            
+            # add cancer type
+            cancer_type = os.path.basename(os.path.dirname(psi_file))
+            print(cancer_type)
+            df['cancer_type'] = cancer_type
+            
+            dfs.append(df)
+            
+            del psi, df
+            
+        dfs = pd.concat(dfs)  
+        dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        
+rule differential_psi_sample_type_cancer_subtype:
+    input:
+        psi = lambda wildcards: os.path.join(PREP_DIR,'event_psi','{cancer}.tsv').format(cancer=CANCER_SUBTYPES[wildcards.subtype]),
+        metadata = lambda wildcards: os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv').format(cancer=CANCER_SUBTYPES[wildcards.subtype])
+    output:
+        os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        padj_method = PADJ_METHOD,
+        subtype = '{subtype}'
+    shell:
+        """
+        python {params.script_dir}/MannWhitneyU.py \
+                    --data_file={input.psi} \
+                    --metadata_file={input.metadata} \
+                    --sample_col='sampleID' \
+                    --comparison_col='sample_type' \
+                    --condition_a='Primary Tumor' \
+                    --condition_b='Solid Tissue Normal' \
+                    --output_file={output} \
+                    --subset_col='cancer_subtype' \
+                    --subset_values='{params.subtype},STN' \
+                    --padj_method={params.padj_method} 
+        """
+        
+        
+rule combine_differential_analyses_sample_type_cancer_subtype:
+    input:
+        psi_files = [os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz').format(subtype=subtype, event_type='{event_type}')
+                     for subtype in CANCER_SUBTYPES.keys()],
+    params:
+        event_type = '{event_type}'
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        
+        event_type = params.event_type
+        
+        dfs = []
+        for psi_file in input.psi_files:
+            # combine
+            psi = pd.read_table(psi_file).set_index('EVENT').add_prefix('psi__')
+            psi = psi.loc[psi.index.str.contains(event_type)].copy() # filter event types
+            df = psi.reset_index()
+            
+            # add cancer type
+            cancer_type = os.path.basename(os.path.dirname(psi_file))
+            print(cancer_type)
+            df['cancer_type'] = cancer_type
+            
+            dfs.append(df)
+            
+            del psi, df
+            
+        dfs = pd.concat(dfs)  
+        dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
         
         
 rule gsea_differential_analyses:

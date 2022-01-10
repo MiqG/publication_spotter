@@ -106,8 +106,12 @@ rule all:
         ## harmonize names drug treatments
         expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
         os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz'),
+        
         ## clinically relevant subtypes
-        expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES)
+        expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES),
+        
+        # merge metadata TCGA
+        os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
         
         
 rule prepare_metadata_ccle:
@@ -458,15 +462,32 @@ rule prep_cancer_subtypes:
         
         subtypes = pd.read_excel(input.subtypes, skiprows=2)
         subtypes["sampleID"] = subtypes["Sample id"].str.replace(".","-")
-        subtypes["bcr_patient_barcode"] = subtypes["sampleID"].str[:12]
         subtypes["cancer_subtype"] = subtypes["Subtype"]
-        subtypes = subtypes[["bcr_patient_barcode","cancer_subtype"]]
+        subtypes = subtypes[["sampleID","cancer_subtype"]]
         
         metadata = pd.read_table(input.metadata)
-        metadata["bcr_patient_barcode"] = metadata["sampleID"].str[:12]
-        metadata = metadata[["sampleID","bcr_patient_barcode","cancer","sample_type"]]
+        metadata = metadata[["sampleID","cancer","sample_type"]]
         
-        df = pd.merge(metadata, subtypes, how="left", on="bcr_patient_barcode")
+        df = pd.merge(metadata, subtypes, how="left", on="sampleID")
+        
+        # consider STN as a subtype
+        df.loc[df["sample_type"]=="Solid Tissue Normal","cancer_subtype"] = "STN"
         
         df.to_csv(output.subtypes, sep="\t", index=False)
         
+        
+rule merge_tcga_metadata_subtypes:
+    input:
+        metadata_files = [os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv').format(cancer=c) 
+                          for c in CANCER_TYPES]
+    output:
+        os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
+    run:
+        import pandas as pd
+        metadata = []
+        for f in input.metadata_files:
+            df = pd.read_table(f)
+            metadata.append(df)
+            del df
+        metadata = pd.concat(metadata)
+        metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
