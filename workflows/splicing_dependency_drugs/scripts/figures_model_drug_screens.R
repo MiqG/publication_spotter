@@ -88,7 +88,7 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
 }
 
 
-plot_associations = function(models, drug_targets, embedding, ontologies){
+plot_associations = function(models, drug_targets, embedding, ontologies, rankings){
     top_n = 25
     X = models %>% 
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
@@ -373,6 +373,48 @@ plot_associations = function(models, drug_targets, embedding, ontologies){
                                      names(plts_enrichment))
     plts = c(plts,plts_enrichment)
     
+    # overall best drug-exon rankings per drug
+    X = rankings %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_min(combined_ranking, n=1) %>% 
+        ungroup() %>% 
+        arrange(index) %>%
+        left_join(drug_targets %>% 
+                      distinct(DRUG_ID,TARGET) %>% 
+                      mutate(is_target=TRUE), 
+                  by=c("DRUG_ID", "GENE"="TARGET")) %>%
+        mutate(is_target=!is.na(is_target))
+    
+    ## all drugs    
+    plts[['associations-rankings-all']] = X %>%
+        slice_min(index, n=top_n) %>%
+        ggbarplot(x="DRUG_NAME", y="combined_ranking", 
+                  fill="is_target", color="drug_screen") +
+        color_palette(c("white","black")) + 
+        fill_palette("Set2") + 
+        geom_text(aes(label=index), X %>% slice_min(index, n=top_n), 
+                  size=1, family='Arial') +
+        geom_text(aes(y=0.005, label=event_gene), 
+                  X %>% slice_min(index, n=top_n), size=1, family='Arial') +
+        labs(x="Event & Gene", y="Ranking Ratio Sum", 
+             fill="Is Drug Target", color="Drug Screen") +
+        coord_flip()
+        
+    ## without targets
+    plts[['associations-rankings-no_target']] = X %>%
+        filter(DRUG_ID %in% drugs_oi) %>%
+        ggbarplot(x="DRUG_NAME", y="combined_ranking", 
+                  fill="is_target", color="drug_screen") +
+        color_palette(c("white","black")) + 
+        fill_palette("Set2") + 
+        geom_text(aes(label=index), X %>% filter(DRUG_ID %in% drugs_oi), 
+                  size=1, family='Arial') +
+        geom_text(aes(y=0.05, label=event_gene), 
+                  X %>% filter(DRUG_ID %in% drugs_oi), size=1, family='Arial') +
+        labs(x="Event & Gene", y="Ranking Ratio Sum", 
+             fill="Is Drug Target", color="Drug Screen") +
+        coord_flip()
+    
     return(plts)
 }
 
@@ -532,9 +574,10 @@ plot_drugs_common_targets = function(models, drug_targets){
         count(drug_name)
 }
 
-make_plots = function(models, drug_targets, embedding, estimated_response, drug_screen, ontologies){
+
+make_plots = function(models, drug_targets, embedding, estimated_response, drug_screen, ontologies, rankings){
     plts = list(
-        plot_associations(models, drug_targets, embedding, ontologies),
+        plot_associations(models, drug_targets, embedding, ontologies, rankings),
         plot_drug_rec(estimated_response, drug_screen, drug_targets)
     )
     plts = do.call(c,plts)
@@ -576,6 +619,9 @@ save_plots = function(plts, figs_dir){
     
     save_plt(plts, 'associations-target_ranking-vio', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-target_ranking-cdf', '.pdf', figs_dir, width=5, height=5)
+    
+    save_plt(plts, 'associations-rankings-all', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'associations-rankings-no_target', '.pdf', figs_dir, width=8, height=8)
     
     # drug recommendations
     save_plt(plts, 'drug_rec-spearmans', '.pdf', figs_dir, width=5, height=5)
@@ -631,8 +677,30 @@ main = function(){
         "GO_BP" = read.gmt(file.path(msigdb_dir,'c5.go.bp.v7.4.symbols.gmt'))
     )
     
+    rankings = models %>% 
+        filter(lr_padj<0.1) %>% 
+        group_by(DRUG_ID) %>% 
+        arrange(DRUG_ID, -spldep_coefficient) %>% 
+        mutate(ranking = row_number(), 
+               ranking_ratio = ranking/n(), 
+               ranking_drug = ranking_ratio) %>% 
+        ungroup() %>% 
+        group_by(event_gene) %>% 
+        arrange(event_gene, -spldep_coefficient) %>% 
+        mutate(ranking = row_number(), 
+               ranking_ratio = ranking/n(), 
+               ranking_event = ranking_ratio) %>%
+        ungroup() %>%
+        dplyr::select(event_gene, EVENT, GENE, DRUG_ID, spldep_coefficient,
+                      drug_screen, ranking_drug, ranking_event) %>%
+        # shortest distance to diagonal 
+        mutate(combined_ranking = ranking_event + ranking_drug) %>% 
+        arrange(combined_ranking) %>%
+        mutate(index = row_number()) %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
+    
     # make plots
-    plts = make_plots(models, drug_targets, embedding, estimated_response, drug_screen, ontologies)
+    plts = make_plots(models, drug_targets, embedding, estimated_response, drug_screen, ontologies, rankings)
     
     # make figdata
     # figdata = make_figdata(results_enrich)
