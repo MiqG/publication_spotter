@@ -396,7 +396,7 @@ plot_associations = function(models, drug_targets, embedding, ontologies, rankin
                   size=1, family='Arial') +
         geom_text(aes(y=0.005, label=event_gene), 
                   X %>% slice_min(index, n=top_n), size=1, family='Arial') +
-        labs(x="Event & Gene", y="Ranking Ratio Sum", 
+        labs(x="Drug", y="Ranking Ratio Sum", 
              fill="Is Drug Target", color="Drug Screen") +
         coord_flip()
         
@@ -411,7 +411,7 @@ plot_associations = function(models, drug_targets, embedding, ontologies, rankin
                   size=1, family='Arial') +
         geom_text(aes(y=0.05, label=event_gene), 
                   X %>% filter(DRUG_ID %in% drugs_oi), size=1, family='Arial') +
-        labs(x="Event & Gene", y="Ranking Ratio Sum", 
+        labs(x="Drug", y="Ranking Ratio Sum", 
              fill="Is Drug Target", color="Drug Screen") +
         coord_flip()
     
