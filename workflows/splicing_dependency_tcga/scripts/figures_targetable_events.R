@@ -53,6 +53,8 @@ MIN_SAMPLES = 10
 # models_file = file.path(MODELS_DIR,'files','model_summaries_drug_response-EX.tsv.gz')
 # drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
+# diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
+# spldep_stats_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
 
 
 ##### FUNCTIONS #####
@@ -71,7 +73,8 @@ prep_diff_result = function(diff_result, spldep_stats){
 }
 
 
-plot_top_candidates_sample_type = function(diff_result, models, drug_targets){
+plot_top_candidates_sample_type = function(diff_result, models, drug_targets, rankings, patt=''){
+    
     plts = list()
 
     # how many samples do we have for each cancer and sample type?
@@ -80,6 +83,7 @@ plot_top_candidates_sample_type = function(diff_result, models, drug_targets){
                STN = `psi__condition_b-n_present` + `psi__condition_b-n_nan`) %>% 
         distinct(cancer_type,PT,STN) %>%
         pivot_longer(c(PT,STN),names_to='sample_type',values_to='n')
+    
     plts[['top_samples-sample_counts_cancer']] = X %>% 
         ggbarplot(x='cancer_type', y='n', fill='sample_type', color=NA,
                   position=position_dodge(0.7), label=TRUE, lab.size=1, palette='lancet') + 
@@ -148,6 +152,32 @@ plot_top_candidates_sample_type = function(diff_result, models, drug_targets){
         labs(x='Event & Gene', y='Delta PSI', fill='Cancer Type') +
         coord_flip()
     
+    x = X %>% 
+        filter(cancer_type %in% cancers_oi) %>%
+        filter(psi__is_significant & 
+               ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0)))
+    a = x %>% dplyr::select(c("event_gene","psi__condition_a-median",
+                              "psi__condition_a-mad","psi__condition_a"))
+    colnames(a) = gsub("_a","",colnames(a))
+    b = x %>% dplyr::select(c("event_gene","psi__condition_b-median",
+                              "psi__condition_b-mad","psi__condition_b"))
+    colnames(b) = gsub("_b","",colnames(b))
+    x = bind_rows(a,b)
+    
+    plts[['top_samples-dpsi_vs_spldep-candidates_psi']] = x %>% 
+        mutate(ymin=`psi__condition-median` - `psi__condition-mad`,
+               ymax=`psi__condition-median` + `psi__condition-mad`) %>%
+        ggplot(aes(x=cancer_type, y=`psi__condition-median`)) +
+        geom_pointrange(aes(ymin=ymin, ymax=ymax, color=psi__condition), 
+                        fatten=1, position=position_dodge(0.5)) + 
+        facet_wrap(~event_gene, ncol=5) +
+        color_palette("npg") + 
+        labs(x="Cancer Type", y="PSI", color="Sample Type") +
+        theme_pubr() + 
+        coord_flip() +
+        theme(strip.text = element_text(size=6))
+        
+    
     # which drugs are associated with targetable exons?
     targetable_events = X %>% 
         filter(cancer_type %in% cancers_oi) %>%
@@ -174,9 +204,37 @@ plot_top_candidates_sample_type = function(diff_result, models, drug_targets){
         facet_wrap(~event_gene, scales='free', ncol=4) + 
         coord_flip() +
         scale_x_reordered() +     
-        labs(x='Drug', y='Effect Size', fill='Drug Screen', color='Is Drug Target') + 
+        labs(x='Drug', y='Effect Size', color='Drug Screen', fill='Is Drug Target') + 
         theme_pubr(border=TRUE) +
         theme(strip.text = element_text(size=6))
+    
+    X = rankings %>% 
+        filter(EVENT %in% targetable_events) %>% 
+        group_by(event_gene) %>% 
+        slice_min(combined_ranking, n=1) %>% 
+        ungroup() %>% 
+        arrange(index) %>%
+        left_join(drug_targets %>% 
+                      distinct(DRUG_ID,TARGET) %>% 
+                      mutate(is_target=TRUE), 
+                  by=c("DRUG_ID", "GENE"="TARGET")) %>%
+        mutate(is_target=!is.na(is_target))
+    
+    plts[['top_samples-candidates-drug_assocs_best']] = X %>%
+        ggbarplot(x="event_gene", y="combined_ranking", 
+                  fill="is_target", color="drug_screen") +
+        color_palette(c("white","black")) + 
+        fill_palette("Set2") + 
+        geom_text(aes(label=index), X, size=1, family='Arial') +
+        geom_text(aes(y=0.015, label=DRUG_NAME), X, 
+                  size=1, family='Arial') +
+        labs(x="Event & Gene", y="Ranking Ratio Sum", 
+             fill="Is Drug Target", color="Drug Screen") +
+        coord_flip()
+        
+    
+    
+    names(plts) = paste0(patt,names(plts))
     
     return(plts)
 }
@@ -384,11 +442,14 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
     return(plts)
 }
 
-make_plots = function(diff_result_sample, spldep, 
+make_plots = function(diff_result_sample, diff_result_subtypes, spldep, 
                       metadata, diff_result_sample_raw, psi_ccle, spldep_stats, 
-                      spldep_stats_ccle, selected_events, models, drug_targets){
+                      spldep_stats_ccle, selected_events, models, drug_targets, rankings){
     plts = list(
-        plot_top_candidates_sample_type(diff_result_sample, models, drug_targets),
+        plot_top_candidates_sample_type(diff_result_sample, models, 
+                                        drug_targets, rankings),
+        plot_top_candidates_sample_type(diff_result_subtypes, models, 
+                                        drug_targets, rankings, 'subtypes-'),
         plot_spldeps_pt(diff_result_sample, spldep, metadata),
         plot_ccle_vs_tcga(diff_result_sample_raw, psi_ccle),
         plot_tumorigenesis(spldep_stats, spldep_stats_ccle)
@@ -419,7 +480,19 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=8, height=9)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=8, height=9)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=18, height=18)
     save_plt(plts, 'top_samples-candidates-drug_assocs', '.pdf', figs_dir, width=27, height=27)
+    save_plt(plts, 'top_samples-candidates-drug_assocs_best', '.pdf', figs_dir, width=8, height=8)
+    
+    # top candidates sample type (cancer subtypes)
+    save_plt(plts, 'subtypes-top_samples-sample_counts_cancer', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-scatter', '.pdf', figs_dir, width=10, height=10)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=8, height=9)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=8, height=9)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=15, height=15)
+    save_plt(plts, 'subtypes-top_samples-candidates-drug_assocs', '.pdf', figs_dir, width=27, height=27)
+    save_plt(plts, 'subtypes-top_samples-candidates-drug_assocs_best', '.pdf', figs_dir, width=8, height=8)
     
     # splicing dependencies in primary tumors
     ## PANCAN
@@ -458,22 +531,38 @@ main = function(){
     
     # load
     diff_result_sample = read_tsv(diff_result_sample_file)
+    diff_result_subtypes = read_tsv(diff_result_subtypes_file)
     annot = read_tsv(annotation_file)
     psi_ccle = read_tsv(psi_ccle_file)
     selected_events = readLines(selected_events_file)
     spldep_stats = read_tsv(spldep_stats_file) %>% 
         filter(EVENT %in% selected_events)
+    spldep_stats_subtypes = read_tsv(spldep_stats_subtypes_file) %>% 
+        filter(EVENT %in% selected_events)
     spldep_ccle = read_tsv(spldep_ccle_file) %>% 
         filter(index %in% selected_events) 
     
+    
     # add event gene
     spldep_stats = spldep_stats %>%
+        left_join(annot[,c('EVENT','GENE')], by='EVENT') %>%
+        mutate(event_gene = paste0(EVENT,'_',GENE))
+    spldep_stats_subtypes = spldep_stats_subtypes %>%
         left_join(annot[,c('EVENT','GENE')], by='EVENT') %>%
         mutate(event_gene = paste0(EVENT,'_',GENE))
     
     # prep results differential analyses
     diff_result_sample_raw = diff_result_sample
     diff_result_sample = prep_diff_result(diff_result_sample, spldep_stats)
+    diff_result_subtypes_raw = diff_result_subtypes
+    diff_result_subtypes = prep_diff_result(
+        diff_result_subtypes %>%
+            mutate(cancer = cancer_type, 
+                   cancer_type = paste0(cancer_type,'_',cancer_subtype)), 
+        spldep_stats_subtypes %>%
+            mutate(cancer = cancer_type, 
+                   cancer_type = paste0(cancer_type,'_',cancer_subtype)) %>%
+            dplyr::select(-c(cancer, cancer_subtype)))
     
     # prep summary stats CCLE
     X = spldep_ccle %>%
@@ -511,10 +600,33 @@ main = function(){
         separate_rows(TARGET) %>%
         distinct()
     
+    # drug-event rankings
+    rankings = models %>% 
+        filter(lr_padj<0.1) %>% 
+        group_by(DRUG_ID) %>% 
+        arrange(DRUG_ID, -spldep_coefficient) %>% 
+        mutate(ranking = row_number(), 
+               ranking_ratio = ranking/n(), 
+               ranking_drug = ranking_ratio) %>% 
+        ungroup() %>% 
+        group_by(event_gene) %>% 
+        arrange(event_gene, -spldep_coefficient) %>% 
+        mutate(ranking = row_number(), 
+               ranking_ratio = ranking/n(), 
+               ranking_event = ranking_ratio) %>%
+        ungroup() %>%
+        dplyr::select(event_gene, EVENT, GENE, DRUG_ID, spldep_coefficient,
+                      drug_screen, ranking_drug, ranking_event) %>%
+        # shortest distance to diagonal 
+        mutate(combined_ranking = ranking_event + ranking_drug) %>% 
+        arrange(combined_ranking) %>%
+        mutate(index = row_number()) %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
+    
     # plot
-    plts = make_plots(diff_result_sample, spldep, 
+    plts = make_plots(diff_result_sample, diff_result_subtypes, spldep, 
                       metadata, diff_result_sample_raw, psi_ccle, spldep_stats, 
-                      spldep_stats_ccle, selected_events, models, drug_targets)
+                      spldep_stats_ccle, selected_events, models, drug_targets, rankings)
 
     # save
     save_plots(plts, figs_dir)

@@ -34,9 +34,10 @@ THRESH_LR_FDR = 0.1
 # drug_treatments_file = file.path(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','drug_recommendation')
 # drug_response_file = file.path(RESULTS_DIR,'files','PANCAN','estimated_drug_response_by_drug-EX.tsv.gz')
+# metadata_subtypes_file = file.path(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
 
 ##### FUNCTIONS #####
-plot_drug_recommendations = function(drug_treatments, drug_response){
+plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     # Would we recommend some of the drugs given to patients if 
     # we would use our recommendations?
     
@@ -62,7 +63,9 @@ plot_drug_recommendations = function(drug_treatments, drug_response){
                  ranking_ratio, predicted_ic50, DRUG_NAME) %>% 
         group_by(cancer_type, sample, DRUG_NAME) %>% 
         # only consider the best case scenario
-        slice_min(order_by=ranking_ratio, n=1) 
+        slice_min(order_by=ranking_ratio, n=1) %>%
+        left_join(metadata %>% distinct(sampleID, cancer_subtype), 
+                  by=c("sample"="sampleID"))
     
     plts = list()
     plts[['drug_rec-sample_counts_by_cancer']] = X %>% 
@@ -92,6 +95,29 @@ plot_drug_recommendations = function(drug_treatments, drug_response){
                   palette=get_palette("Paired", length(unique(X[["cancer_type"]])))) + 
         guides(fill="none") + 
         labs(x="Cancer Type", y="Ranking Ratio") + 
+        coord_flip()
+    
+    cancers_w_subtypes = c("BRCA","READ","GBM","LGG","UCEC")
+    plts[['drug_rec-sample_counts_by_cancer-by_subtype']] = X %>% 
+        filter(!str_detect(cancer_subtype,"_STN") & !str_detect(cancer_subtype,"_NA")) %>%
+        filter(cancer_type %in% cancers_w_subtypes) %>%
+        ungroup() %>% 
+        count(cancer_subtype) %>% 
+        ggbarplot(x="cancer_subtype", y="n", fill="cancer_subtype", color=NA, 
+                  palette=get_palette("Paired", 15), 
+                  label=TRUE, lab.size=1) + 
+        guides(fill="none") + 
+        labs(x="Cancer Subtype", y="Count") + 
+        coord_flip()
+    
+    plts[['drug_rec-drugs_ranking_ratios-by_subtype']] = X %>% 
+        filter(!str_detect(cancer_subtype,"_STN") & !str_detect(cancer_subtype,"_NA")) %>%
+        filter(cancer_type %in% cancers_w_subtypes) %>%
+        ggboxplot(x="cancer_subtype", y="ranking_ratio", 
+                  fill="cancer_subtype", outlier.size=0.1, 
+                  palette=get_palette("Paired", 15)) + 
+        guides(fill="none") + 
+        labs(x="Cancer Subtype", y="Ranking Ratio") + 
         coord_flip()
     
     ## Does the drug recommendation ranking associate with patient survival?
@@ -128,6 +154,27 @@ plot_drug_recommendations = function(drug_treatments, drug_response){
         labs(x="Cancer Type", y="Cox Coefficient") +
         coord_flip()
     
+    # What is the probability of receiving another treatment after first treatment?
+    treatments_prep = drug_treatments %>% 
+        distinct(bcr_patient_barcode, cancer_type, 
+                 DRUG_NAME, pharmaceutical_tx_started_days_to) %>%
+        # sort by how late the treatment started
+        drop_na() %>%
+        arrange(cancer_type, bcr_patient_barcode, 
+                pharmaceutical_tx_started_days_to) %>%
+        group_by(cancer_type, bcr_patient_barcode) %>%
+        mutate(tx_order = row_number(),
+               tx_mult = n()>1)
+    
+    freqs_mult_tx = treatments_prep %>%
+        filter(tx_order==1) %>%
+        ungroup() %>%
+        group_by(cancer_type, DRUG_NAME, tx_mult) %>%
+        summarize(n = n()) %>%
+        mutate(freq = n/sum(n)) %>%
+        ungroup()
+    
+    
     return(plts)
 }
 
@@ -159,6 +206,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-sample_counts_by_cancer', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-sample_counts_by_cancer_and_treatment', '.pdf', figs_dir, width=11, height=12)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-drug_ranking_coxph', '.pdf', figs_dir, width=5, height=5)
 }
 
@@ -201,11 +250,15 @@ main = function(){
         mutate(pharmaceutical_tx_started_days_to = as.numeric(pharmaceutical_tx_started_days_to))
     drug_response = read_tsv(drug_response_file) %>%
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
-    metadata = read_tsv(metadata_file)
+    metadata_subtypes = read_tsv(metadata_subtypes_file) %>% 
+        mutate(cancer_subtype=paste0(cancer,"_",cancer_subtype))
+    metadata = read_tsv(metadata_file) %>%
+        left_join(metadata_subtypes, by= c("sampleID", "cancer", "sample_type"))
+    
 #     spldep = read_tsv(spldep_file)
     
     # make plots
-    plts = make_plots(drug_treatments, drug_response)
+    plts = make_plots(drug_treatments, drug_response, metadata)
     
     # make figdata
     # figdata = make_figdata(results_enrich)
