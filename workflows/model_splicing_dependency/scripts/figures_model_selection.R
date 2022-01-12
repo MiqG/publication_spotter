@@ -369,7 +369,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         summarize(is_selected = any(is_selected)) %>%
         drop_na() %>%
         ungroup()
-    
+        
     plts[['model_selection-mutation_gene_count']] = X %>% 
         count(Variant_Classification, is_selected) %>%
         ggbarplot(x='Variant_Classification', y='n', 
@@ -393,6 +393,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
              fill='Selected Model') +
         theme_pubr(x.text.angle=70)
     
+    
     # how often do selected exons get hit when the gene is mutated?
     X = models %>%
         left_join(event_mut_freq, by=c('EVENT','GENE')) %>%
@@ -400,8 +401,9 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         group_by(GENE) %>%
         filter(any(is_selected)) %>%
         ungroup() %>%
-        drop_na()
-    
+        left_join(ontologies[['protein_impact']], by='EVENT') %>%
+        drop_na(Variant_Classification, term_clean, is_selected)
+
     notsel_mut_freq = X %>%
         # average mutation frequency per kb of not selected events
         filter(!is_selected) %>%
@@ -413,36 +415,76 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         # Fold change difference 
         mutate(fc_mut_freq = log2(event_mut_freq_per_kb / notsel_mut_freq))
     
+    ## do the same with a null distribution of 1000 random exons
+    null = models %>%
+        left_join(ontologies[['protein_impact']], by='EVENT') %>%
+        left_join(event_mut_freq, by=c('EVENT','GENE')) %>%
+        # shuffle selected exons by protein impact and mutation variant
+        group_by(Variant_Classification) %>%
+        mutate(is_selected = sample(is_selected)) %>%
+        ungroup() %>%
+        # keep only genes with a selected exon
+        group_by(GENE) %>%
+        filter(any(is_selected)) %>%
+        ungroup() %>%
+        drop_na(Variant_Classification, term_clean, is_selected)
+    
+    notsel_mut_freq = null %>%
+        # average mutation frequency per kb of not selected events
+        filter(!is_selected) %>%
+        group_by(Variant_Classification, GENE) %>%
+        summarize(notsel_mut_freq = mean(event_mut_freq_per_kb, na.rm=TRUE))
+    
+    null = null %>% 
+        left_join(notsel_mut_freq, by=c("Variant_Classification","GENE")) %>%
+        # Fold change difference 
+        mutate(fc_mut_freq = log2(event_mut_freq_per_kb / notsel_mut_freq))
+    
+    X = X %>% 
+        mutate(dataset = "Real") %>% 
+        bind_rows(null %>% mutate(dataset = "Random"))
+    
+    
     plts[['model_selection-mutation_event_count']] = X %>% 
-        count(Variant_Classification, is_selected) %>%
+        count(dataset, Variant_Classification, is_selected) %>%
         ggbarplot(x='Variant_Classification', y='n', 
                   label=TRUE, palette='npg', lab.size=2,
                   fill='is_selected', color=NA, position=position_dodge(0.9)) + 
         yscale('log10', .format=TRUE) + 
         labs(x='Mutation Effect', y='No. Events', fill='Selected Model') +
-        theme_pubr(x.text.angle=70)
+        theme_pubr(x.text.angle=70) +
+        facet_wrap(~dataset, ncol=1)
     
-    tests = X %>% 
-        filter(is_selected) %>% 
-        group_by(Variant_Classification) %>% 
-        summarize(pval= tryCatch(wilcox.test(fc_mut_freq)$p.value, 
-                                 error=function(err){NA})) %>% 
-        mutate(pval_lab=stars.pval(pval), 
-               pval_lab=ifelse(pval_lab %in%c(' ',''),"ns",pval_lab))
     
     plts[['model_selection-mutation_event_frequency']] = X %>% 
         filter(is_selected) %>%
-        ggplot(aes(x=Variant_Classification, y=fc_mut_freq)) +
-        geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
+        ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
+                   group=interaction(Variant_Classification,dataset))) +
+        geom_boxplot(aes(fill=dataset), outlier.size=0.1, 
                      position=position_dodge(0.7)) +
         fill_palette("npg") + 
         geom_hline(yintercept=0, linetype='dashed') +
-        geom_text(aes(x=Variant_Classification, y=4, label=pval_lab), 
-                  tests, size=2) +
+        stat_compare_means(aes(group=dataset), method='wilcox.test', 
+                           label='p.signif', size=2) +
         labs(x='Mutation Effect', y='log2(FC Mut. Freq. per Kb)', 
              fill='Selected Model') +
         theme_pubr(x.text.angle=70)
     
+    
+    plts[['model_selection-mutation_event_frequency-by_protein_impact']] = X %>% 
+        filter(is_selected) %>%
+        ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
+                   group=interaction(Variant_Classification,dataset))) +
+        geom_boxplot(aes(fill=dataset), outlier.size=0.1, 
+                     position=position_dodge(0.7)) +
+        fill_palette("npg") + 
+        geom_hline(yintercept=0, linetype='dashed') +
+        stat_compare_means(aes(group=dataset), method='wilcox.test', 
+                           label='p.signif', size=2) +
+        labs(x='Mutation Effect', y='log2(FC Mut. Freq. per Kb)', 
+             fill='Selected Model') +
+        theme_pubr(x.text.angle=70) +
+        facet_wrap(~term_clean)
     
     # what are the exons/genes selected?
     ## protein impact
@@ -842,9 +884,10 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-pearson_corr_vs_spearman', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-selected_vs_event_std', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-mutation_gene_count', '.pdf', figs_dir, width=8, height=8)
-    save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=10)
     save_plt(plts, 'model_selection-mutation_gene_frequency', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-mutation_event_frequency', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'model_selection-mutation_event_frequency-by_protein_impact', '.pdf', figs_dir, width=16, height=16)
     save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact_clean-counts', '.pdf', figs_dir, width=6, height=6)
