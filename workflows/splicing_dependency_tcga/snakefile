@@ -96,18 +96,23 @@ DRUG_SCREENS = ['GDSC1','GDSC2']
 DATASETS = ['psi','spldep']
 COMPARISONS = ['PrimaryTumor_vs_SolidTissueNormal'] #,'RESPONDER_vs_NONRESPONDER']
 PADJ_METHOD = 'fdr_bh'
+SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
 ##### RULES #####
 rule all:
     input:
         # compute splicing dependencies TCGA
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies TCGA
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES+["PANCAN"], event_type=EVENT_TYPES),
         
+        # embed and cluster TCGA
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES+["PANCAN"], event_type=['EX']),
+                
         # differential sample type TCGA
         ## PSI
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
@@ -163,6 +168,48 @@ rule compute_splicing_dependency_tcga:
                     --normalize_counts={params.normalize_counts} \
                     --n_jobs={threads}
         """
+        
+rule combine_splicing_dependency_tcga:
+    input:
+        spldep = [os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}').format(cancer=c, event_type='{event_type}') for c in CANCER_TYPES],
+        selected_events = os.path.join(MODELS_DIR,'files','selected_models-{event_type}.txt')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','PANCAN','splicing_dependency-{event_type}'))
+    run:
+        import os
+        import gc
+        import pandas as pd
+        
+        selected_events = pd.read_table(input.selected_events, header=None)[0].to_list()
+        
+        spldep_means = []
+        spldep_medians = []
+        spldep_stds = []
+        for d in input.spldep:
+            print(d)
+            spldep_mean = pd.read_table(os.path.join(d,'mean.tsv.gz'), index_col=0)
+            avail_events = set(selected_events).intersection(spldep_mean.index)
+            spldep_mean = spldep_mean.loc[avail_events].copy()
+            spldep_median = pd.read_table(os.path.join(d,'median.tsv.gz'), index_col=0)
+            spldep_median = spldep_median.loc[avail_events].copy()
+            spldep_std = pd.read_table(os.path.join(d,'std.tsv.gz'), index_col=0)
+            spldep_std = spldep_std.loc[avail_events].copy()
+            
+            spldep_means.append(spldep_mean)
+            spldep_medians.append(spldep_median)
+            spldep_stds.append(spldep_std)
+            
+            del spldep_mean, spldep_median, spldep_std
+            gc.collect()
+            
+        spldep_means = pd.concat(spldep_means, axis=1).reset_index()
+        spldep_medians = pd.concat(spldep_medians, axis=1).reset_index()
+        spldep_stds = pd.concat(spldep_stds, axis=1).reset_index()
+        
+        os.makedirs(output[0])
+        spldep_means.to_csv(os.path.join(output[0],'mean.tsv.gz'), **SAVE_PARAMS)
+        spldep_medians.to_csv(os.path.join(output[0],'median.tsv.gz'), **SAVE_PARAMS)
+        spldep_stds.to_csv(os.path.join(output[0],'std.tsv.gz'), **SAVE_PARAMS)
 
         
 rule summarize_splicing_dependency:
@@ -288,7 +335,8 @@ rule combine_drug_rankings:
         
 rule impute_splicing_dependency:
     input:
-        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}','mean.tsv.gz')
+        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}','mean.tsv.gz'),
+        rows_oi = os.path.join(MODELS_DIR,'files','selected_models-{event_type}.txt')
     output:
         os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz')
     params:
@@ -301,9 +349,25 @@ rule impute_splicing_dependency:
         python {params.script_dir}/impute_nan.py \
                     --input_file={input.spldep} \
                     --output_file={output} \
+                    --rows_oi_file={input.rows_oi} \
                     --method={params.method} \
                     --method_kws={params.method_kws} \
                     --features_as_rows={params.features_as_rows}
+        """
+        
+        
+rule embed_matrices:
+    input:
+        os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','embedded_splicing_dependency_mean-{event_type}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python')
+    shell:
+        """
+        python {params.script_dir}/embed_and_cluster.py \
+                    --matrix_file={input} \
+                    --output_file={output} 
         """
         
         

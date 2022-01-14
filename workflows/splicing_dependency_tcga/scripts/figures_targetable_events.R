@@ -55,7 +55,7 @@ MIN_SAMPLES = 10
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
-
+# embedding_file = file.path(RESULTS_DIR,'files','PANCAN','embedded_splicing_dependency_mean-EX.tsv.gz')
 
 ##### FUNCTIONS #####
 prep_diff_result = function(diff_result, spldep_stats){
@@ -442,9 +442,57 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
     return(plts)
 }
 
+
+plot_patient_clusters = function(embedding){
+    X = embedding
+    n_cancers = length(unique(X[["cancer"]]))
+    n_clusters = length(unique(X[["leiden_labels"]]))
+    
+    plts = list()
+    plts[["pat_clust-umap-cancers"]] = X %>% 
+        ggplot(aes(x=UMAP0, y=UMAP1)) + 
+        geom_scattermore(aes(color=cancer), pointsize=5, 
+                         pixels=c(1000,1000), alpha=0.5) + 
+        color_palette(get_palette("Paired", n_cancers)) + 
+        theme_pubr() + 
+        guides(color = guide_legend(override.aes = list(alpha = 1))) + 
+        labs(color="Cancer Type") + 
+        theme(aspect.ratio=1)
+    
+    plts[["pat_clust-umap-clusters"]] = X %>% 
+        ggplot(aes(x=UMAP0, y=UMAP1)) + 
+        geom_scattermore(aes(color=leiden_labels), pointsize=5, 
+                         pixels=c(1000,1000), alpha=0.5) + 
+        color_palette(get_palette("default", n_clusters)) + 
+        theme_pubr() + 
+        guides(color = guide_legend(override.aes = list(alpha = 1))) + 
+        labs(color="Cluster") + 
+        theme(aspect.ratio=1)
+    
+    plts[["pat_clust-clusters_vs_cancers-balloon"]] = X %>% 
+        count(leiden_labels, cancer) %>%
+        group_by(leiden_labels) %>%
+        mutate(perc = n / sum(n)) %>%
+        ggballoonplot(x="cancer", y="leiden_labels", size="perc", 
+                      fill="tomato3", color="white") +
+        scale_size(range=c(1,3)) + 
+        labs(x="Cancer Type", y="Cluster")
+    
+    plts[["pat_clust-clusters_vs_cancers-bar"]] = X %>% 
+        count(leiden_labels, cancer) %>%
+        ggbarplot(x="leiden_labels", y="n", fill="cancer", position=position_dodge(0.9),
+                  color=NA, palette=get_palette("Paired", n_cancers)) +
+        labs(x="Cluster", y="Count", fill="Cancer Type") +
+        coord_flip()
+        
+    return(plts)
+}
+
+
 make_plots = function(diff_result_sample, diff_result_subtypes, spldep, 
                       metadata, diff_result_sample_raw, psi_ccle, spldep_stats, 
-                      spldep_stats_ccle, selected_events, models, drug_targets, rankings){
+                      spldep_stats_ccle, selected_events, models, drug_targets, 
+                      rankings, embedding){
     plts = list(
         plot_top_candidates_sample_type(diff_result_sample, models, 
                                         drug_targets, rankings),
@@ -452,7 +500,8 @@ make_plots = function(diff_result_sample, diff_result_subtypes, spldep,
                                         drug_targets, rankings, 'subtypes-'),
         plot_spldeps_pt(diff_result_sample, spldep, metadata),
         plot_ccle_vs_tcga(diff_result_sample_raw, psi_ccle),
-        plot_tumorigenesis(spldep_stats, spldep_stats_ccle)
+        plot_tumorigenesis(spldep_stats, spldep_stats_ccle),
+        plot_patient_clusters(embedding)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -511,6 +560,12 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'tumorigenesis-diff_medians', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'tumorigenesis-diff_ranges', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'tumorigenesis-top_diff_ranges', '.pdf', figs_dir, width=6, height=12)
+    
+    # patient clustering
+    save_plt(plts, 'pat_clust-umap-cancers', '.pdf', figs_dir, width=9, height=9)
+    save_plt(plts, 'pat_clust-umap-clusters', '.pdf', figs_dir, width=9, height=9)
+    save_plt(plts, 'pat_clust-clusters_vs_cancers-balloon', '.pdf', figs_dir, width=9, height=8)
+    save_plt(plts, 'pat_clust-clusters_vs_cancers-bar', '.pdf', figs_dir, width=5, height=12)
 }
 
 
@@ -541,7 +596,8 @@ main = function(){
         filter(EVENT %in% selected_events)
     spldep_ccle = read_tsv(spldep_ccle_file) %>% 
         filter(index %in% selected_events) 
-    
+    embedding = read_tsv(embedding_file) %>%
+        mutate(leiden_labels=as.factor(leiden_labels))
     
     # add event gene
     spldep_stats = spldep_stats %>%
@@ -623,10 +679,17 @@ main = function(){
         mutate(index = row_number()) %>%
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
     
+    # add metadata to embedding
+    embedding = embedding %>% 
+        left_join(metadata %>% distinct(sampleID, cancer, sample_type), 
+                  by=c("index"="sampleID")) %>%
+        filter(sample_type=="Primary Tumor")
+    
     # plot
     plts = make_plots(diff_result_sample, diff_result_subtypes, spldep, 
                       metadata, diff_result_sample_raw, psi_ccle, spldep_stats, 
-                      spldep_stats_ccle, selected_events, models, drug_targets, rankings)
+                      spldep_stats_ccle, selected_events, models, drug_targets, 
+                      rankings, embedding)
 
     # save
     save_plots(plts, figs_dir)
