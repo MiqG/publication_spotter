@@ -455,7 +455,8 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         yscale('log10', .format=TRUE) + 
         labs(x='Mutation Effect', y='No. Events', fill='Selected Model') +
         theme_pubr(x.text.angle=70) +
-        facet_wrap(~dataset, ncol=1)
+        facet_wrap(~dataset, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     
     plts[['model_selection-mutation_event_frequency']] = X %>% 
@@ -487,7 +488,8 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         labs(x='Mutation Effect', y='log2(FC Mut. Freq. per Kb)', 
              fill='Selected Model') +
         theme_pubr(x.text.angle=70) +
-        facet_wrap(~term_clean)
+        facet_wrap(~term_clean) +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     # what are the exons/genes selected?
     ## protein impact
@@ -611,6 +613,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
                name = reorder_within(event_gene, correlation, index_name)) %>%
         ggbarplot(x="name", y="correlation", fill="#4DBBD5FF", color=NA) +
         facet_wrap(~index_name, scales='free') +
+        theme(strip.text.x = element_text(size=6, family='Arial')) +
         scale_x_reordered() +
         labs(x="Event & Gene", y="Spearman Correlation") +
         coord_flip()
@@ -624,6 +627,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
                name = reorder_within(event_gene, correlation, index_name)) %>%
         ggbarplot(x="name", y="correlation", fill="#4DBBD5FF", color=NA) +
         facet_wrap(~index_name, scales='free') +
+        theme(strip.text.x = element_text(size=6, family='Arial')) +
         scale_x_reordered() +
         labs(x="Event & Gene", y="Spearman Correlation") +
         coord_flip()
@@ -922,7 +926,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=10)
     save_plt(plts, 'model_selection-mutation_gene_frequency', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-mutation_event_frequency', '.pdf', figs_dir, width=8, height=8)
-    save_plt(plts, 'model_selection-mutation_event_frequency-by_protein_impact', '.pdf', figs_dir, width=14, height=9)
+    save_plt(plts, 'model_selection-mutation_event_frequency-by_protein_impact', '.pdf', figs_dir, width=14, height=8)
     save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact_clean-counts', '.pdf', figs_dir, width=6, height=6)
