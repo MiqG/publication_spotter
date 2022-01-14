@@ -56,6 +56,7 @@ MIN_SAMPLES = 10
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
 # embedding_file = file.path(RESULTS_DIR,'files','PANCAN','embedded_splicing_dependency_mean-EX.tsv.gz')
+# spldep_stats_ccle_cancers_file = file.path(ROOT,'results','model_splicing_dependency','files','splicing_dependency_summaries-EX','primary_disease.tsv.gz')
 
 ##### FUNCTIONS #####
 prep_diff_result = function(diff_result, spldep_stats){
@@ -443,8 +444,11 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
 }
 
 
-plot_patient_clusters = function(embedding){
-    X = embedding
+plot_patient_clusters = function(embedding, metadata){
+    X = embedding %>% 
+        left_join(metadata %>% distinct(sampleID, cancer, sample_type, OS, OS.time), 
+                  by=c("index"="sampleID")) %>%
+        filter(sample_type=="Primary Tumor")
     n_cancers = length(unique(X[["cancer"]]))
     n_clusters = length(unique(X[["leiden_labels"]]))
     
@@ -484,7 +488,45 @@ plot_patient_clusters = function(embedding){
                   color=NA, palette=get_palette("Paired", n_cancers)) +
         labs(x="Cluster", y="Count", fill="Cancer Type") +
         coord_flip()
+    
         
+    return(plts)
+}
+
+
+plot_spldep_distrs = function(spldep_stats_ccle_cancers, spldep_stats){
+    plts = list()
+    
+    X = spldep_stats_ccle_cancers %>% 
+        pivot_wider(id_cols="EVENT", 
+                    names_from="primary_disease", 
+                    values_from="median") %>% 
+        column_to_rownames("EVENT")
+    X = X[,!(colSums(is.na(X))==nrow(X))]
+    X = X[!(rowSums(is.na(X))>=(ncol(X)-1)),]
+    X = t(apply(X, 1, function(x){replace_na(x, median(x, na.rm=TRUE))}))
+    mat = t(scale(t(X)))
+    plts[["spldep_distrs-ccle-heat"]] = mat %>% 
+        Heatmap(show_row_names = FALSE, 
+                column_names_gp=gpar(fontsize=6),
+                show_row_dend = FALSE)
+    plts[["spldep_distrs-ccle-heat"]] = as.ggplot(grid.grabExpr(draw(plts[["spldep_distrs-ccle-heat"]])))
+    
+    X = spldep_stats %>% 
+        pivot_wider(id_cols="EVENT", 
+                    names_from="cancer_type", 
+                    values_from="median") %>% 
+        column_to_rownames("EVENT")
+    X = X[,!(colSums(is.na(X))==nrow(X))]
+    X = X[!(rowSums(is.na(X))>=(ncol(X)-1)),]
+    X = t(apply(X, 1, function(x){replace_na(x, median(x, na.rm=TRUE))}))
+    mat = t(scale(t(X)))
+    plts[["spldep_distrs-tcga-heat"]] = mat %>% 
+        Heatmap(show_row_names=FALSE, 
+                column_names_gp=gpar(fontsize=6),
+                show_row_dend = FALSE)
+    plts[["spldep_distrs-tcga-heat"]] = as.ggplot(grid.grabExpr(draw(plts[["spldep_distrs-tcga-heat"]])))
+    
     return(plts)
 }
 
@@ -501,7 +543,7 @@ make_plots = function(diff_result_sample, diff_result_subtypes, spldep,
         plot_spldeps_pt(diff_result_sample, spldep, metadata),
         plot_ccle_vs_tcga(diff_result_sample_raw, psi_ccle),
         plot_tumorigenesis(spldep_stats, spldep_stats_ccle),
-        plot_patient_clusters(embedding)
+        plot_patient_clusters(embedding, metadata)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -566,6 +608,10 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'pat_clust-umap-clusters', '.pdf', figs_dir, width=9, height=9)
     save_plt(plts, 'pat_clust-clusters_vs_cancers-balloon', '.pdf', figs_dir, width=9, height=8)
     save_plt(plts, 'pat_clust-clusters_vs_cancers-bar', '.pdf', figs_dir, width=5, height=12)
+    
+    # splicing dependency distributions
+    save_plt(plts, 'spldep_distrs-ccle-heat', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'spldep_distrs-tcga-heat', '.pdf', figs_dir, width=8, height=8)
 }
 
 
@@ -598,6 +644,8 @@ main = function(){
         filter(index %in% selected_events) 
     embedding = read_tsv(embedding_file) %>%
         mutate(leiden_labels=as.factor(leiden_labels))
+    spldep_stats_ccle_cancers = read_tsv(spldep_stats_ccle_cancers_file) %>% 
+        filter(EVENT %in% selected_events) 
     
     # add event gene
     spldep_stats = spldep_stats %>%
@@ -678,12 +726,6 @@ main = function(){
         arrange(combined_ranking) %>%
         mutate(index = row_number()) %>%
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
-    
-    # add metadata to embedding
-    embedding = embedding %>% 
-        left_join(metadata %>% distinct(sampleID, cancer, sample_type), 
-                  by=c("index"="sampleID")) %>%
-        filter(sample_type=="Primary Tumor")
     
     # plot
     plts = make_plots(diff_result_sample, diff_result_subtypes, spldep, 

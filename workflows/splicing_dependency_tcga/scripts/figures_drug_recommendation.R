@@ -59,7 +59,7 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         left_join(drug_recs,
             by=c('bcr_patient_barcode','cancer_type','DRUG_NAME')) %>%
         drop_na() %>%
-        distinct(drug_screen, cancer_type, sample, ranking, 
+        distinct(drug_screen, cancer_type, sample, ranking, bcr_patient_barcode,
                  ranking_ratio, predicted_ic50, DRUG_NAME) %>% 
         group_by(cancer_type, sample, DRUG_NAME) %>% 
         # only consider the best case scenario
@@ -153,8 +153,17 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         guides(color="none") + 
         labs(x="Cancer Type", y="Cox Coefficient") +
         coord_flip()
+
+    # are ranking ratios associated with the order of the treatment?
+    x = treatments_clean %>%
+        left_join(drug_recs,
+            by=c('bcr_patient_barcode','cancer_type','DRUG_NAME')) %>%
+        drop_na() %>%
+        distinct(drug_screen, cancer_type, sample, ranking, bcr_patient_barcode,
+                 ranking_ratio, predicted_ic50, DRUG_NAME) %>% 
+        left_join(metadata %>% distinct(sampleID, cancer_subtype), 
+                  by=c("sample"="sampleID"))
     
-    # What is the probability of receiving another treatment after first treatment?
     treatments_prep = drug_treatments %>% 
         distinct(bcr_patient_barcode, cancer_type, 
                  DRUG_NAME, pharmaceutical_tx_started_days_to) %>%
@@ -162,26 +171,30 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         drop_na() %>%
         arrange(cancer_type, bcr_patient_barcode, 
                 pharmaceutical_tx_started_days_to) %>%
+        # if a treatment was given more than once, keep the earliest it was given
+        group_by(bcr_patient_barcode, DRUG_NAME) %>%
+        slice_min(pharmaceutical_tx_started_days_to, n=1) %>%
+        ungroup() %>%
+        # for each patient, in which order was the drug given?
         group_by(cancer_type, bcr_patient_barcode) %>%
         mutate(tx_order = row_number(),
-               tx_mult = n()>1)
-    
-    freqs_mult_tx = treatments_prep %>%
-        filter(tx_order==1) %>%
+               tx_order_ratio = tx_order / n(),
+               tx_mult = n()>1,
+               tx_n = n())
+    x = X %>%
         ungroup() %>%
-        group_by(cancer_type, DRUG_NAME, tx_mult) %>%
-        summarize(n = n()) %>%
-        mutate(freq = n/sum(n)) %>%
-        ungroup()
+        left_join(treatments_prep, by=c("bcr_patient_barcode", "DRUG_NAME", "cancer_type"))
+    x %>% filter(cancer_type=="BRCA") %>% ggscatter(x="tx_order", y="ranking_ratio", color="DRUG_NAME", size="tx_n") + stat_cor(method="spearman")# + facet_wrap(~cancer_subtype)
     
+    # combinations recommended drug cancer not tested?
     
     return(plts)
 }
 
 
-make_plots = function(drug_treatments, drug_response){
+make_plots = function(drug_treatments, drug_response, metadata){
     plts = list(
-        plot_drug_recommendations(drug_treatments, drug_response)
+        plot_drug_recommendations(drug_treatments, drug_response, metadata)
     )
     plts = do.call(c,plts)
     return(plts)
