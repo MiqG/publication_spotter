@@ -274,9 +274,12 @@ rule combine_embedded_matrices:
         dfs = []
         for f in input:
             drug_id = os.path.basename(f).replace(".tsv.gz","")
+            _, drug_screen, event_type = os.path.basename(os.path.dirname(os.path.dirname(f))).split("-")
             print(drug_id)
             df = pd.read_table(f)
             df["DRUG_ID"] = drug_id
+            df["drug_screen"] = drug_screen
+            df["event_type"] = event_type
             dfs.append(df)
         
         dfs = pd.concat(dfs)
