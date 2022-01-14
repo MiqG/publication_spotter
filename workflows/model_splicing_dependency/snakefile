@@ -34,6 +34,9 @@ rule all:
         # compute splicing dependencies (mean, median, std)
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
+        # summarize splicing dependencies by primary disease
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_summaries-{event_type}','{field}.tsv.gz'), field=["primary_disease"], event_type=EVENT_TYPES),
+        
         # EDA models of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','model_selection'),
         
@@ -136,6 +139,46 @@ rule list_selected_models:
         with open(output[0], 'w') as f:
             for event in models['EVENT'].values:
                 f.write("%s\n" % event)
+        
+        
+rule summarize_splicing_dependency_by_field:
+    input:
+        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz').format(event_type='{event_type}'),
+        metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+    output:
+        os.path.join(RESULTS_DIR,'files','splicing_dependency_summaries-{event_type}','{field}.tsv.gz')
+    params:
+        field = '{field}'
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        spldep = pd.read_table(input.spldep, index_col=0)
+        metadata = pd.read_table(input.metadata)
+            
+        field_values = set(metadata[params.field].dropna().unique())
+        for field_value in field_values:
+            print(field_value)
+            idx = (metadata[params.field]==field_value)
+            samples_oi = metadata.loc[idx,"DepMap_ID"].values
+            samples_oi = set(spldep.columns).intersection(samples_oi)
+
+            df = pd.DataFrame({
+                "EVENT": spldep.index,
+                "mean": spldep[samples_oi].mean(axis=1),
+                "median": spldep[samples_oi].median(axis=1),
+                "std": spldep[samples_oi].std(axis=1),
+                "q05": spldep[samples_oi].quantile(0.05, axis=1),
+                "q95": spldep[samples_oi].quantile(0.95, axis=1),
+                "nobs": len(samples_oi)
+            })
+            df[params.field] = field_value
+            dfs.append(df)
+
+            del df
+
+        dfs = pd.concat(dfs)
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
         
     
 rule impute_splicing_dependency:
