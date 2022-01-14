@@ -31,9 +31,11 @@ import os
 ROOT = '~/projects/publication_splicing_dependency'
 PREP_DIR = os.path.join(ROOT,'data','prep')
 matrix_file = os.path.join(PREP_DIR,'exon_psi_imputed','CCLE-EX.tsv.gz')
+matrix_file = "/home/miquel/mounts/crg_hpc/projects/publication_splicing_dependency/results/splicing_dependency_drugs/files/cluster_estimated_drug_response-GDSC2-EX/imputed_matrices/1926.tsv.gz"
 features_as_rows = True
-log_transform = True
+log_transform = False
 standardize = True
+no_std_replace = 0
 """
 
 SAVE_PARAMS = {'sep':'\t', 'index':False, 'compression':'gzip'}
@@ -47,11 +49,18 @@ def load_data(filename):
     return df
 
 
-def preprocess_matrix(X, log_transform, standardize):
+def preprocess_matrix(X, log_transform, standardize, no_std_replace):
     if log_transform:
         X = np.log2(X + 1)
     if standardize: 
-        X = (X - np.mean(X, axis=0)) / np.std(X, axis=0)
+        mean = np.mean(X, axis=0)
+        std = np.std(X, axis=0)
+        X = (X - mean) / std
+        
+        # when std 0, the whole row will have missing values
+        # put the same value there
+        if no_std_replace is not None:
+            X.loc[:,std==0] = no_std_replace
         
     return X
     
@@ -60,6 +69,11 @@ def reduce_dimensions(X, pca_kws={'n_components':50}, umap_kws={'n_neighbors':30
     """
     Perform PCA and UMAP dimension reduction.
     """
+    max_comp = min(*X.shape)
+    if pca_kws["n_components"]>max_comp:
+        pca_kws["n_components"] = max_comp
+        print("Using %s components..." % max_comp)
+    
     # PCA
     pca = PCA(**pca_kws)
     pcs = pca.fit_transform(X)
@@ -76,6 +90,7 @@ def reduce_dimensions(X, pca_kws={'n_components':50}, umap_kws={'n_neighbors':30
     explained_variance = pd.DataFrame([pca.explained_variance_ratio_],
                                       index = pcs.index,
                                       columns = ['explained_variance_ratio-PC%s'%n for n in range(pcs.shape[1])])
+    explained_variance["n_features"] = X.shape[1]
     umaps = pd.DataFrame(umaps,
                          columns = ['UMAP%s'%n for n in range(umaps.shape[1])],
                          index = X.index)
@@ -127,6 +142,7 @@ def parse_args():
     parser.add_argument('--features_as_rows',type=bool,default=True)
     parser.add_argument('--standardize',type=bool,default=True)
     parser.add_argument('--log_transform',type=bool,default=False)
+    parser.add_argument('--no_std_replace', type=float, default=None)
     
     args = parser.parse_args()
     return args
@@ -139,13 +155,14 @@ def main():
     features_as_rows = args.features_as_rows
     standardize = args.standardize
     log_transform = args.log_transform
+    no_std_replace = args.no_std_replace
     
     # load
     matrix = load_data(matrix_file)
     
     # preprocess
     if features_as_rows: matrix = matrix.T.copy()
-    matrix = preprocess_matrix(matrix, log_transform, standardize)
+    matrix = preprocess_matrix(matrix, log_transform, standardize, no_std_replace)
     
     # cluster
     result = cluster_samples(matrix.dropna(axis=1))

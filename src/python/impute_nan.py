@@ -13,6 +13,23 @@ from sklearn.impute import KNNImputer
 # variables
 SAVE_PARAMS = {'sep':'\t', 'compression':'gzip', 'index':False}
 
+"""
+Development
+-----------
+import os
+from sso_targets import config
+import json
+cancer = 'LUAD'
+prep_clean_tcga_dir = os.path.join(config.ROOT,'data','prep','clean','TCGA')
+prep_imputed_tcga_dir = os.path.join(config.ROOT,'data','prep','imputed','TCGA')
+
+input_file = os.path.join(prep_clean_tcga_dir,'exon_psi',cancer+'.tsv')
+output_file = os.path.join(prep_imputed_tcga_dir,'exon_psi',cancer+'.tsv')
+method = 'knn'
+method_kws = json.loads('{"n_neighbors":5}')
+features_as_rows = True
+"""
+
 ##### FUNCTIONS #####
 def load_data(input_file, rows_oi_file=None):
     if 'csv' in input_file:
@@ -93,22 +110,6 @@ def main():
     
     
 ##### SCRIPT #####
-"""
-Development
------------
-import os
-from sso_targets import config
-import json
-cancer = 'LUAD'
-prep_clean_tcga_dir = os.path.join(config.ROOT,'data','prep','clean','TCGA')
-prep_imputed_tcga_dir = os.path.join(config.ROOT,'data','prep','imputed','TCGA')
-
-input_file = os.path.join(prep_clean_tcga_dir,'exon_psi',cancer+'.tsv')
-output_file = os.path.join(prep_imputed_tcga_dir,'exon_psi',cancer+'.tsv')
-method = 'knn'
-method_kws = json.loads('{"n_neighbors":10, "weights":"distance"}')
-features_as_rows = True
-"""
 if __name__ == '__main__':
     main()
     print('Done!')
