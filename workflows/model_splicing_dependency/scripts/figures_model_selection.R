@@ -30,6 +30,7 @@ require(grid)
 require(umap)
 require(extrafont)
 require(gtools)
+require(tidytext)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -56,6 +57,7 @@ SIZE_CTL = 100
 # figs_dir = file.path(RESULTS_DIR,'figures','model_selection')
 # possible_interactions_file = file.path(ROOT,'support','possible_pairwise_interaction_categories.tsv')
 # cancer_events_file = file.path(ROOT,'support','cancer_events.tsv')
+# indices_file = file.path(RESULTS_DIR,'files','correlation_spldep_indices-EX.tsv.gz')
 
 ##### FUNCTIONS #####
 get_sets = function(df, set_names, set_values){
@@ -420,7 +422,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
         left_join(ontologies[['protein_impact']], by='EVENT') %>%
         left_join(event_mut_freq, by=c('EVENT','GENE')) %>%
         # shuffle selected exons by protein impact and mutation variant
-        group_by(Variant_Classification) %>%
+        group_by(Variant_Classification,GENE) %>%
         mutate(is_selected = sample(is_selected)) %>%
         ungroup() %>%
         # keep only genes with a selected exon
@@ -472,6 +474,7 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     
     
     plts[['model_selection-mutation_event_frequency-by_protein_impact']] = X %>% 
+        drop_na(fc_mut_freq) %>%
         filter(is_selected) %>%
         ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
                    group=interaction(Variant_Classification,dataset))) +
@@ -578,21 +581,53 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     plts[['model_selection-enrichment-GO_BP-dotplot']] = plts[['model_selection-enrichment-GO_BP-dotplot']] + 
         theme_pubr()
     
-    # overlaps between enriched GO processes and protein impact?
-#     sets = list(
-#         prot_imp %>% 
-#             filter(is_selected) %>% 
-#             get_sets('term_clean','GENE'),
-#         enrichment[['GO_BP']] %>% 
-#             as.data.frame() %>% 
-#             dplyr::select(Description,geneID) %>% 
-#             separate_rows(geneID) %>% 
-#             get_sets('Description','geneID')
-#     )
-#     sets = do.call(c,sets)
-#     m = sets %>% list_to_matrix() %>% make_comb_mat()
-#     plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = UpSet(m, comb_order = order(comb_size(m)))
-#     plts[['model_selection-enrichment-GO_BP_vs_prot_imp']] = as.ggplot(grid.grabExpr(draw(plts[['model_selection-enrichment-GO_BP_vs_prot_imp']])))
+    # are selected exons associated to transcriptomic indices?
+    X = models %>%
+        left_join(indices, by=c("EVENT"="index")) %>% 
+        mutate(abs_corr = abs(correlation),
+               corr_sign = ifelse(sign(correlation)>0,"Positive","Negative")) %>%
+        drop_na(correlation, is_selected)
+    
+    plts[["model_selection-indices-violin"]] = X %>% 
+        ggplot(aes(x=index_name, y=correlation, 
+                   group=interaction(index_name,is_selected))) + 
+        geom_violin(aes(fill=is_selected), color=NA) + 
+        geom_boxplot(fill=NA, outlier.size=0.1, 
+                     width=0.2, position=position_dodge(0.9)) +
+        stat_compare_means(aes(group=is_selected), method='wilcox.test', 
+                           label='p.signif', size=2) + 
+        fill_palette("npg") + 
+        geom_hline(yintercept=0, linetype="dashed") + 
+        #facet_wrap(~corr_sign) + 
+        theme_pubr() + 
+        labs(x="Transcriptomic Index", y="Spearman Correlation")
+    
+    plts[["model_selection-indices-top_pos"]] = X %>% 
+        filter(is_selected) %>%
+        group_by(index_name) %>%
+        slice_max(correlation, n=15) %>%
+        ungroup() %>%
+        mutate(event_gene = as.factor(event_gene),
+               name = reorder_within(event_gene, correlation, index_name)) %>%
+        ggbarplot(x="name", y="correlation", fill="#4DBBD5FF", color=NA) +
+        facet_wrap(~index_name, scales='free') +
+        scale_x_reordered() +
+        labs(x="Event & Gene", y="Spearman Correlation") +
+        coord_flip()
+    
+    plts[["model_selection-indices-top_neg"]] = X %>% 
+        filter(is_selected) %>%
+        group_by(index_name) %>%
+        slice_max(-correlation, n=15) %>%
+        ungroup() %>%
+        mutate(event_gene = as.factor(event_gene),
+               name = reorder_within(event_gene, correlation, index_name)) %>%
+        ggbarplot(x="name", y="correlation", fill="#4DBBD5FF", color=NA) +
+        facet_wrap(~index_name, scales='free') +
+        scale_x_reordered() +
+        labs(x="Event & Gene", y="Spearman Correlation") +
+        coord_flip()
+    
     return(plts)
 }
 
@@ -887,7 +922,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-mutation_event_count', '.pdf', figs_dir, width=8, height=10)
     save_plt(plts, 'model_selection-mutation_gene_frequency', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-mutation_event_frequency', '.pdf', figs_dir, width=8, height=8)
-    save_plt(plts, 'model_selection-mutation_event_frequency-by_protein_impact', '.pdf', figs_dir, width=16, height=16)
+    save_plt(plts, 'model_selection-mutation_event_frequency-by_protein_impact', '.pdf', figs_dir, width=14, height=9)
     save_plt(plts, 'model_selection-protein_impact-counts', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact-freqs', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'model_selection-protein_impact_clean-counts', '.pdf', figs_dir, width=6, height=6)
@@ -895,6 +930,10 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-enrichment-GO_BP-dotplot', '.pdf', figs_dir, width=12, height=8)
     save_plt(plts, 'model_selection-enrichment-GO_BP-cnetplot', '.pdf', figs_dir, width=20, height=20)
     # save_plt(plts, 'model_selection-enrichment-GO_BP_vs_prot_imp', '.pdf', figs_dir, width=9, height=8)
+    save_plt(plts, 'model_selection-indices-violin', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'model_selection-indices-top_pos', '.pdf', figs_dir, width=10, height=6)
+    save_plt(plts, 'model_selection-indices-top_neg', '.pdf', figs_dir, width=10, height=6)
+    
     
     # interactions
     save_plt(plts, 'interactions-counts', '.pdf', figs_dir, width=5, height=5)
@@ -962,6 +1001,8 @@ main = function(){
                interaction_zscore = interaction_coefficient_mean / interaction_coefficient_std,
                intercept_zscore = intercept_coefficient_mean / intercept_coefficient_std)
     ccle_stats = read_tsv(ccle_stats_file)
+    indices = read_tsv(indices_file) %>%
+        filter(index_name %in% c("stemness","mitotic_index"))
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% 
         dplyr::rename(GENE=Hugo_Symbol) %>% 
         mutate(log_rel_entropy=log2(max_rel_entropy))
@@ -982,14 +1023,13 @@ main = function(){
     possible_interactions = read_tsv(possible_interactions_file)
     cancer_events = read_tsv(cancer_events_file)
     
-    # add interaction categories to models
+    # add interaction categories, summary stats and correlation with indices to models
     models = models %>% 
         left_join(get_interaction_categories(models, possible_interactions), 
                   by='event_gene') %>%
         mutate(is_selected = pearson_correlation_mean>THRESH_CORR & lr_pvalue<THRESH_LR_PVALUE) %>%
         dplyr::select(-c(event_mean,event_std,gene_mean,gene_std)) %>% 
         left_join(ccle_stats, by=c("EVENT","ENSEMBL","GENE"))
-        
     
     plts = make_plots(models, rnai, spldep, gene_mut_freq, event_mut_freq, ontologies, cancer_events)
 

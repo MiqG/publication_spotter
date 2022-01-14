@@ -50,7 +50,7 @@ rule all:
         # os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
         
         # Associations
-        # expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
