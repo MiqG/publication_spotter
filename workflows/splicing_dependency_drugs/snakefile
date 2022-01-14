@@ -14,6 +14,7 @@ Outline
 """
 
 import os
+import pandas as pd
 
 # variables
 ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
@@ -26,14 +27,17 @@ SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 
 EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD']
-DRUG_SCREENS = ['GDSC1','GDSC2']
+DRUG_SCREENS = {
+    'GDSC1': pd.read_table(os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'))["DRUG_ID"].unique(),
+    'GDSC2': pd.read_table(os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz'))["DRUG_ID"].unique()
+}
 
 ##### RULES #####
 rule all:
     input:
         # associations drug responses and splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS),
-        expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS),
+        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
+        expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
         
         # concatenate model summaries
         expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
@@ -44,6 +48,16 @@ rule all:
         # embed association coefficients
         expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # split, embed and cluster estimated drug effects of significant associations
+        ## split
+        expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
+        ## impute
+        [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
+        ## embed
+        [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
+        ## combine
+        expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # plot models
         # os.path.join(RESULTS_DIR,'figures','model_drug_screens')
@@ -176,4 +190,94 @@ rule combine_drug_rankings:
             dfs.append(df)
             
         dfs = pd.concat(dfs)    
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+
+# cluster estimated drug profiles
+rule split_estimated_ic50:
+    input:
+        models_dir = os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'),
+        preds_dir = os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices'))
+    params:
+        thresh_fdr = 0.1
+    run:
+        import pandas as pd
+        
+        models = pd.read_table(os.path.join(input.models_dir,'model_summaries.tsv.gz')) 
+        preds = pd.read_table(os.path.join(input.preds_dir,'estimated_drug_response_by_drug_and_event.tsv.gz'))
+        outdir = output[0]
+        os.makedirs(outdir)
+        for drug in preds["DRUG_ID"].unique():
+            print(drug)
+            tmp = preds.loc[preds["DRUG_ID"]==drug]
+            tmp = tmp.drop(columns=["DRUG_ID","ENSEMBL","GENE"]).set_index("EVENT")
+            
+            # only significant associations
+            idx = (models["lr_padj"]<params.thresh_fdr) & (models["DRUG_ID"]==drug)
+            events_oi = models.loc[idx,"EVENT"].unique()
+            tmp.loc[~tmp.index.isin(events_oi),:] = 0
+            
+            tmp.reset_index().to_csv(
+                os.path.join(outdir,str(drug)+".tsv.gz"), sep="\t", index=False, compression="gzip"
+            )
+            
+            
+rule impute_estimated_ic50:
+    input:
+        pred = os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices','{drug}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        method = 'knn',
+        method_kws = '\'{"n_neighbors":5}\'',
+        features_as_rows = True
+    shell:
+        """
+        python {params.script_dir}/impute_nan.py \
+                    --input_file={input.pred} \
+                    --output_file={output} \
+                    --method={params.method} \
+                    --method_kws={params.method_kws} \
+                    --features_as_rows={params.features_as_rows}
+        """
+
+        
+rule embed_matrices:
+    input:
+        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        no_std_replace = 0
+    shell:
+        """
+        python {params.script_dir}/embed_and_cluster.py \
+                    --matrix_file={input} \
+                    --output_file={output}  \
+                    --no_std_replace={params.no_std_replace}
+        """
+        
+        
+rule combine_embedded_matrices:
+    input:
+        [os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz').format(drug_screen=drug_screen, drug=drug, event_type='{event_type}') for drug_screen in DRUG_SCREENS.keys() for drug in DRUG_SCREENS[drug_screen]]
+    output:
+        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        
+        dfs = []
+        for f in input:
+            drug_id = os.path.basename(f).replace(".tsv.gz","")
+            print(drug_id)
+            df = pd.read_table(f)
+            df["DRUG_ID"] = drug_id
+            dfs.append(df)
+        
+        dfs = pd.concat(dfs)
         dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
