@@ -83,7 +83,7 @@ def parse_args():
     parser.add_argument('--method', type=str)
     parser.add_argument('--method_kws', type=str,
                         help='Example: \'{"n_neighbors":10, "weights":"distance"}\'')
-    parser.add_argument('--features_as_rows', type=bool, default=True)
+    parser.add_argument('--features_as_rows', choices=("True", "False"), default="True")
     args = parser.parse_args()
     return args
     
@@ -96,7 +96,7 @@ def main():
     rows_oi_file = args.rows_oi_file
     method = args.method
     method_kws = json.loads(args.method_kws)
-    features_as_rows = args.features_as_rows
+    features_as_rows = args.features_as_rows == "True"
         
     # run
     print('Loading data...')
