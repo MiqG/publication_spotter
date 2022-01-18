@@ -73,7 +73,7 @@ rule model_gene_dependency:
         mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'))
-    threads: 20
+    threads: 16
     resources:
         runtime = 604800, # seconds = 168h = 7 days
         memory = 30
@@ -113,7 +113,6 @@ rule compute_splicing_dependency:
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
                     --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
-                    --coefs_interaction_file={input.coefs_dir}/coefs_interaction.pickle.gz \
                     --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
                     --output_dir={output} \
                     --n_jobs={threads}
@@ -126,7 +125,7 @@ rule list_selected_models:
     output:
         os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     params:
-        thresh_lr_pvalue = 0.005,
+        thresh_lr_pvalue = 0.025,
         thresh_corr = 0.2
     run:
         import pandas as pd
