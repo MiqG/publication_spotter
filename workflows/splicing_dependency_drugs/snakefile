@@ -324,8 +324,8 @@ rule shortest_paths_random:
         os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz')
     params:
         mode = 'random',
-        n_random_sources = 100
-    threads: 4
+        n_random_sources = 1000
+    threads: 16
     shell:
         """
         python scripts/ppi_path_lengths.py \

@@ -47,6 +47,8 @@ RANDOM_SEED = 1234
 # clusters_file = file.path(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-EX.tsv.gz')
 # metadata_file = file.path(PREP_DIR,'metadata','CCLE.tsv.gz')
 # spldep_ccle_file = file.path(MODELS_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
+# paths_real_file = file.path(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-EX.tsv.gz')
+# paths_random_file = file.path(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz')
 
 
 ##### FUNCTIONS #####
@@ -89,6 +91,48 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
     }, simplify=FALSE)
     
     return(results)
+}
+
+
+prepare_shortest_paths = function(paths_real, paths_random){
+    # for each drug and its targets,
+    # what is the probability of shortest path lengths of each significant association
+    drugs = paths_real %>% pull(DRUG_ID) %>% unique()
+    probs = lapply(drugs, function(drug_oi){
+        targets = paths_real %>% 
+            filter(DRUG_ID==drug_oi) %>% 
+            pull(target) %>% 
+            unique()
+        probs_bytarget = lapply(targets, function(target_oi){
+            null = paths_random %>% 
+                filter(target==target_oi) %>% 
+                pull(shortest_path_length)
+            
+            df = paths_real %>% 
+                filter(DRUG_ID==drug_oi & target==target_oi) %>% 
+                group_by(source) %>%
+                mutate(prob = sum(shortest_path_length < null) / length(null),
+                       pvalue = 1 - prob) %>%
+                ungroup()
+            
+            return(df)
+        })
+        probs_bytarget = do.call(rbind,probs_bytarget)
+        return(probs_bytarget)
+    })
+    probs = do.call(rbind,probs)
+    
+    # when a drug has multiple targets, we should keep the shortest 
+    # shortest path length to any of its targets
+    probs = probs %>%
+        group_by(DRUG_ID, source) %>%
+        slice_min(shortest_path_length, n=1) %>%
+        ungroup() %>%
+        group_by(DRUG_ID) %>%
+        mutate(padj = p.adjust(pvalue, method='fdr')) %>%
+        ungroup()
+    
+    return(probs)
 }
 
 
@@ -486,6 +530,72 @@ plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
 }
 
 
+plot_shortest_paths = function(shortest_paths, rankings){
+    X = shortest_paths %>% 
+        dplyr::select(source, shortest_path_length, padj, DRUG_ID) %>% 
+        left_join(rankings, by=c("source"="GENE", "DRUG_ID")) %>%
+        mutate(is_close=padj<0.2)
+        
+    
+    plts = list()
+    
+    # among significant drug - event associations, 
+    # there are events that belong to genes significantly close 
+    # to the drug target(s) in the PPI net
+    plts[["paths-direct_vs_indirect-boxplot"]] = X %>% 
+        filter(is_close) %>% 
+        ggplot(aes(x=as.factor(shortest_path_length), y=combined_ranking)) + 
+        geom_boxplot(outlier.color=NA, fill="darkred") + 
+        geom_jitter(size=0.1) + 
+        geom_text(aes(x=as.factor(shortest_path_length), y=2, label=n), 
+                  X %>% filter(is_close) %>% count(shortest_path_length),
+                  size=1, family="Arial") +
+        theme_pubr() + 
+        labs(x="Shortest Path Length to Drug Target", y="Combined Raking Ratio")
+    
+    # cases that are close and score better than drug target (if any) and 
+    # median drug targets
+    thresh_targets = X %>% 
+        filter(shortest_path_length==0) %>% 
+        pull(combined_ranking) %>% 
+        median(na.rm=TRUE)
+    
+    x = X %>% 
+        filter(is_close) %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_min(combined_ranking, n=1) %>% 
+        filter(shortest_path_length>0 & combined_ranking<thresh_targets) %>%
+        arrange(combined_ranking) %>%
+        mutate(best="Indirect") %>%
+        ungroup() %>%
+        bind_rows(
+            X %>% 
+            filter(is_close) %>% 
+            group_by(DRUG_NAME) %>% 
+            slice_min(combined_ranking, n=1) %>% 
+            filter(shortest_path_length==0) %>%
+            arrange(combined_ranking) %>%
+            mutate(best="Direct") %>%
+            ungroup()
+        )
+    
+    
+    plts[["paths-direct_vs_indirect-best"]] = x %>% 
+        ggbarplot(x="DRUG_NAME", y="combined_ranking", fill="event_gene", 
+                  position=position_dodge(0.9), color=NA, 
+                  palette=get_palette("Dark2",length(unique(x[["DRUG_NAME"]])))) + 
+        facet_wrap(~best, scales='free_y') +
+        geom_text(aes(y=0.01, label=event_gene), x, size=1, family="Arial") + 
+        geom_text(aes(label=shortest_path_length), x, size=1, family="Arial") + 
+        labs(x="Drug", y="Combined Ranking Ratio") + 
+        guides(fill="none") +    
+        coord_flip() +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
+    
+    return(plts)
+}
+
+
 plot_examples = function(models, drug_targets){
     plts = list()
     # SRSF7 is important in LUAD treated with carboxi + paclitaxel
@@ -664,6 +774,9 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-best_worse', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'drug_rec-spearmans_by_pathway', '.pdf', figs_dir, width=8, height=6)
     
+    # shortest paths
+    save_plt(plts, 'paths-direct_vs_indirect-boxplot', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'paths-direct_vs_indirect-best', '.pdf', figs_dir, width=8, height=5)
 }
 
 
@@ -715,6 +828,8 @@ main = function(){
     clusters = read_tsv(clusters_file)
     spldep_ccle = read_tsv(spldep_ccle_file) %>%
         filter(index %in% unique(models[["EVENT"]]))
+    paths_real = read_tsv(paths_real_file) %>% drop_na()
+    paths_random = read_tsv(paths_random_file) %>% drop_na()
     
     rankings = models %>% 
         filter(lr_padj<0.1) %>% 
@@ -737,6 +852,8 @@ main = function(){
         arrange(combined_ranking) %>%
         mutate(index = row_number()) %>%
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
+    
+    shortest_paths = prepare_shortest_paths(paths_real, paths_random)
     
     # make plots
     plts = make_plots(models, drug_targets, embedding, estimated_response, drug_screen, ontologies, rankings)
