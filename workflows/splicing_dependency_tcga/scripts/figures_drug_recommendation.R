@@ -29,7 +29,7 @@ THRESH_LR_FDR = 0.1
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
 # models_file = file.path(ROOT,'results','splicing_dependency_drugs','files','model_summaries_drug_response-EX.tsv.gz')
 # spldep_file = file.path(RESULTS_DIR,'files','LGG','splicing_dependency-EX','mean.tsv.gz')
-# drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 # metadata_file = file.path(PREP_DIR,'metadata','PANCAN.tsv.gz')
 # drug_treatments_file = file.path(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','drug_recommendation')
@@ -252,10 +252,9 @@ main = function(){
 #     models = read_tsv(models_file) %>% 
 #         mutate(event_gene = paste0(EVENT,'_',GENE),
 #                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
-    drug_targets = read_csv(drug_targets_file) %>% 
+    drug_targets = read_tsv(drug_targets_file) %>% 
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
         dplyr::select(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY) %>%
-        separate_rows(TARGET) %>%
         distinct()
     drug_treatments = read_tsv(drug_treatments_file) %>% 
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>% 

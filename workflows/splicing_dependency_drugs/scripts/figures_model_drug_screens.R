@@ -38,7 +38,7 @@ RANDOM_SEED = 1234
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_drugs')
 # MODELS_DIR = file.path(ROOT,'results','model_splicing_dependency')
 # models_file = file.path(RESULTS_DIR,'files','model_summaries_drug_response-EX.tsv.gz')
-# drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','model_drug_screens')
 # embedding_file = file.path(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz')
 # estimated_response_file = file.path(RESULTS_DIR,'files','estimated_drug_response_by_drug-EX.tsv.gz')
@@ -700,10 +700,9 @@ main = function(){
     models = read_tsv(models_file) %>% 
         mutate(event_gene = paste0(EVENT,'_',GENE),
                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
-    drug_targets = read_csv(drug_targets_file) %>% 
+    drug_targets = read_tsv(drug_targets_file) %>% 
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
         dplyr::select(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY) %>%
-        separate_rows(TARGET) %>%
         distinct()
     embedding = read_tsv(embedding_file)
     estimated_response = read_tsv(estimated_response_file)

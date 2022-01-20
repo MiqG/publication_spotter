@@ -51,7 +51,7 @@ MIN_SAMPLES = 10
 # spldep_ccle_file = file.path(ROOT,'results','model_splicing_dependency','files','splicing_dependency-EX','mean.tsv.gz')
 # MODELS_DIR = file.path(ROOT,'results','splicing_dependency_drugs')
 # models_file = file.path(MODELS_DIR,'files','model_summaries_drug_response-EX.tsv.gz')
-# drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
@@ -704,10 +704,9 @@ main = function(){
     models = read_tsv(models_file) %>% 
         mutate(event_gene = paste0(EVENT,'_',GENE),
                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
-    drug_targets = read_csv(drug_targets_file) %>% 
+    drug_targets = read_tsv(drug_targets_file) %>% 
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
         dplyr::select(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY) %>%
-        separate_rows(TARGET) %>%
         distinct()
     
     # drug-event rankings
