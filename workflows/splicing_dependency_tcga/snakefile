@@ -108,10 +108,10 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies TCGA
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES+["PANCAN"], event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','{cancer}','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES+["PANCAN"], event_type=EVENT_TYPES),
         
         # embed and cluster TCGA
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES+["PANCAN"], event_type=['EX']),
+        # expand(os.path.join(RESULTS_DIR,'files','{cancer}','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), cancer=CANCER_TYPES+["PANCAN"], event_type=['EX']),
                 
         # differential sample type TCGA
         ## PSI
@@ -162,7 +162,6 @@ rule compute_splicing_dependency_tcga:
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
                     --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
-                    --coefs_interaction_file={input.coefs_dir}/coefs_interaction.pickle.gz \
                     --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
                     --output_dir={output} \
                     --normalize_counts={params.normalize_counts} \
@@ -239,8 +238,8 @@ rule summarize_splicing_dependency:
                 "mean": spldep[samples_oi].mean(axis=1),
                 "median": spldep[samples_oi].median(axis=1),
                 "std": spldep[samples_oi].std(axis=1),
-                "q05": spldep[samples_oi].quantile(0.05, axis=1),
-                "q95": spldep[samples_oi].quantile(0.95, axis=1),
+                "q25": spldep[samples_oi].quantile(0.25, axis=1),
+                "q75": spldep[samples_oi].quantile(0.75, axis=1),
                 "nobs": len(samples_oi)
             })
             df["cancer_type"] = cancer_type
@@ -278,8 +277,8 @@ rule summarize_splicing_dependency_by_cancer_subtype:
                     "mean": spldep[samples_oi].mean(axis=1),
                     "median": spldep[samples_oi].median(axis=1),
                     "std": spldep[samples_oi].std(axis=1),
-                    "q05": spldep[samples_oi].quantile(0.05, axis=1),
-                    "q95": spldep[samples_oi].quantile(0.95, axis=1),
+                    "q25": spldep[samples_oi].quantile(0.25, axis=1),
+                    "q75": spldep[samples_oi].quantile(0.75, axis=1),
                     "nobs": len(samples_oi)
                 })
                 df["cancer_type"] = cancer_type

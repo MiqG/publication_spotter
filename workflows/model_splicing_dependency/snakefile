@@ -41,7 +41,7 @@ rule all:
         # os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # write selected models
-        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=['EX']),
+        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies with selected models
         expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),

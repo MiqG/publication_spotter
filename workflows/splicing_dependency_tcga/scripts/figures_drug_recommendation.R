@@ -146,7 +146,7 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         ggplot(aes(x=cancer_type, y=cox_coef, color=cancer_type)) + 
         geom_point(size=0.5) + 
         geom_errorbar(aes(ymin=cox_coef - cox_std, ymax=cox_coef + cox_std), size=0.25) + 
-        geom_text(aes(y=2.5, label=lab_pvals), color="black", size=2) +
+        geom_text(aes(y=2.5, label=lab_pvals), color="black", size=2, family='Arial') +
         theme_pubr() + 
         geom_hline(yintercept=0, linetype='dashed') + 
         color_palette(get_palette("Paired", length(unique(X[["cancer_type"]])))) + 
@@ -219,8 +219,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-sample_counts_by_cancer', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-sample_counts_by_cancer_and_treatment', '.pdf', figs_dir, width=11, height=12)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=6, height=5)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=6, height=5)
     save_plt(plts, 'drug_rec-drug_ranking_coxph', '.pdf', figs_dir, width=5, height=5)
 }
 

@@ -117,7 +117,8 @@ plot_top_candidates_sample_type = function(diff_result, models, drug_targets, ra
         labs(x='Delta PSI', y='median(Spl. Dep. in PT)') +
         ggpubr::color_palette(c("black","orange")) +
         geom_hline(yintercept=0, linetype='dashed') +
-        geom_vline(xintercept=0, linetype='dashed')
+        geom_vline(xintercept=0, linetype='dashed') +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     plts[['top_samples-dpsi_vs_spldep-selection']] = X %>%
         filter(psi__is_significant) %>%
@@ -176,7 +177,7 @@ plot_top_candidates_sample_type = function(diff_result, models, drug_targets, ra
         labs(x="Cancer Type", y="PSI", color="Sample Type") +
         theme_pubr() + 
         coord_flip() +
-        theme(strip.text = element_text(size=6))
+        theme(strip.text.x = element_text(size=6, family='Arial'))
         
     
     # which drugs are associated with targetable exons?
@@ -202,12 +203,12 @@ plot_top_candidates_sample_type = function(diff_result, models, drug_targets, ra
                      position=position_dodge(1)) +
         color_palette(c("white","black")) + 
         fill_palette("Set2") +    
-        facet_wrap(~event_gene, scales='free', ncol=4) + 
+        facet_wrap(~event_gene, scales='free', ncol=4) +
         coord_flip() +
         scale_x_reordered() +     
         labs(x='Drug', y='Effect Size', color='Drug Screen', fill='Is Drug Target') + 
         theme_pubr(border=TRUE) +
-        theme(strip.text = element_text(size=6))
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     X = rankings %>% 
         filter(EVENT %in% targetable_events) %>% 
@@ -262,7 +263,7 @@ plot_spldeps_pt = function(diff_result, spldep, metadata){
     n = length(unique(pcs[['cancer_type']]))
     plts[['spldeps_pt-pancan-pca']] = pcs %>% 
         ggscatter(x='PC1', y='PC2', color='cancer_type') +
-        geom_text_repel(aes(label=cancer_type, color=cancer_type)) +
+        geom_text_repel(aes(label=cancer_type, color=cancer_type), family="Arial") +
         ggpubr::color_palette(get_palette('Paired',n)) +
         guides(color='none')
     
@@ -330,7 +331,8 @@ plot_spldeps_pt = function(diff_result, spldep, metadata){
             filter(prop_spldep>0.25 & abs(med_spldep)>0.25) %>%
             ungroup() %>%
             arrange(event_gene),
-            max.overlaps=50
+            max.overlaps=50,
+            family="Arial"
         ) +
         labs(x='Proportion of Spl. Dep.', y='median(Spl. Dep.)')
     
@@ -362,7 +364,8 @@ plot_ccle_vs_tcga = function(diff_result_sample_raw, psi_ccle){
         labs(x='Event Std. in CCLE', y='|Delta PSI|') +
         geom_hline(yintercept=THRESH_MEDIAN_DIFF, linetype='dashed') +
         geom_vline(xintercept=1, linetype='dashed') +
-        stat_cor(method='spearman', label.sep = '\n', size=2)
+        stat_cor(method='spearman', label.sep = '\n', size=2) +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     return(plts)
 }
@@ -375,7 +378,7 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
     
     plts = list()
     plts[['tumorigenesis-scatters']] = X %>%
-        ggplot(aes(x=q05, y=q95)) +
+        ggplot(aes(x=q25, y=q75)) +
         geom_scattermore(
             pixels = c(1000,1000), 
             pointsize = 8,
@@ -383,21 +386,22 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
         labs(x='0.05 Quantile', y='0.95 Quantile') +
         geom_hline(yintercept=0, linetype='dashed') +
         geom_vline(xintercept=0, linetype='dashed') +
-        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1,
-                        X %>% group_by(cancer_type) %>% slice_max(order_by = q05*q95, n=5)) +
-        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1,
-                        X %>% group_by(cancer_type) %>% filter(q95>1)) +
-        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1,
-                        X %>% group_by(cancer_type) %>% filter(q95>0 & q05<(-0.9))) +
+        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial",
+                        X %>% group_by(cancer_type) %>% slice_max(order_by = q25*q75, n=5)) +
+        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial",
+                        X %>% group_by(cancer_type) %>% filter(q75>1)) +
+        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial",
+                        X %>% group_by(cancer_type) %>% filter(q75>0 & q25<(-0.9))) +
         facet_wrap(~cancer_type, ncol=4, scales="free") +
-        theme_pubr(border=TRUE)
+        theme_pubr(border=TRUE) +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     idx = X %>% pull(event_gene)
     diffs = data.frame(
         event_gene = idx,
         GENE = ref[idx,'GENE'],
         median_diff = X[['median']] - ref[idx, 'med'],
-        range_diff = abs(X[['q05']] - X[['q95']]) - abs(ref[idx,'q05'] - ref[idx,'q95']),
+        range_diff = abs(X[['q25']] - X[['q75']]) - abs(ref[idx,'q25'] - ref[idx,'q75']),
         cancer_type = X[['cancer_type']]
     )
     
@@ -411,7 +415,7 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
                         diffs %>% 
                         filter(abs(median_diff)>0.5),
                         size=1,
-                        segment.size=0.1) +  
+                        segment.size=0.1, family="Arial") +  
         theme_pubr(x.text.angle=70) + 
         labs(x="Cancer Type", 
              y="median(Spl. Dep. TCGA) - median(Spl. Dep. CCLE)")
@@ -422,19 +426,20 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill='none') + geom_hline(yintercept=0, linetype='dashed') + 
         geom_text_repel(aes(label=event_gene), diffs %>% 
-                        filter(abs(range_diff)>0.5),
+                        filter(abs(range_diff)>0.15), family="Arial",
                         size=1, segment.size=0.1, max.overlaps=15) +  
         theme_pubr(x.text.angle=70) + 
         labs(x="Cancer Type", y="range(Spl. Dep. TCGA) - range(Spl. Dep. CCLE)")
     
     plts[['tumorigenesis-top_diff_ranges']] = diffs %>% 
         group_by(cancer_type) %>% 
-        filter(range_diff>0.25) %>% # only higher than 0.25
+        filter(range_diff>0.05) %>% # only higher than 0.05
         count(event_gene) %>%
         ungroup() %>%
         group_by(event_gene) %>%
         mutate(total=sum(n)) %>%
         arrange(total) %>%
+        filter(total>1) %>%
         ggbarplot(x="event_gene", y="n", fill="cancer_type", 
                   color=NA, palette=get_palette("Paired",n_cancers)) +
         labs(x="Event & Gene", y="Count", fill="Cancer Type") +
@@ -543,7 +548,8 @@ make_plots = function(diff_result_sample, diff_result_subtypes, spldep,
         plot_spldeps_pt(diff_result_sample, spldep, metadata),
         plot_ccle_vs_tcga(diff_result_sample_raw, psi_ccle),
         plot_tumorigenesis(spldep_stats, spldep_stats_ccle),
-        plot_patient_clusters(embedding, metadata)
+        plot_patient_clusters(embedding, metadata),
+        plot_spldep_distrs(spldep_stats_ccle_cancers, spldep_stats)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -569,11 +575,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'top_samples-sample_counts_cancer', '.pdf', figs_dir, width=8, height=5)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-scatter', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=8, height=9)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=8, height=9)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=18, height=18)
-    save_plt(plts, 'top_samples-candidates-drug_assocs', '.pdf', figs_dir, width=27, height=27)
-    save_plt(plts, 'top_samples-candidates-drug_assocs_best', '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=8, height=11)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=6, height=11)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=18, height=30)
+    save_plt(plts, 'top_samples-candidates-drug_assocs', '.pdf', figs_dir, width=25, height=40)
+    save_plt(plts, 'top_samples-candidates-drug_assocs_best', '.pdf', figs_dir, width=7, height=10)
     
     # top candidates sample type (cancer subtypes)
     save_plt(plts, 'subtypes-top_samples-sample_counts_cancer', '.pdf', figs_dir, width=8, height=8)
@@ -601,7 +607,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'tumorigenesis-scatters', '.pdf', figs_dir, width=15, height=15)
     save_plt(plts, 'tumorigenesis-diff_medians', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'tumorigenesis-diff_ranges', '.pdf', figs_dir, width=8, height=8)
-    save_plt(plts, 'tumorigenesis-top_diff_ranges', '.pdf', figs_dir, width=6, height=12)
+    save_plt(plts, 'tumorigenesis-top_diff_ranges', '.pdf', figs_dir, width=6, height=8)
     
     # patient clustering
     save_plt(plts, 'pat_clust-umap-cancers', '.pdf', figs_dir, width=9, height=9)
@@ -676,8 +682,8 @@ main = function(){
             std = apply(X,1,sd, na.rm=TRUE),
             min = apply(X,1,min, na.rm=TRUE),
             max = apply(X,1,max, na.rm=TRUE),
-            q95 = apply(X,1,quantile, na.rm=TRUE, probs=0.95),
-            q05 = apply(X,1,quantile, na.rm=TRUE, probs=0.05),
+            q75 = apply(X,1,quantile, na.rm=TRUE, probs=0.75),
+            q25 = apply(X,1,quantile, na.rm=TRUE, probs=0.25),
             n_missing = rowSums(is.na(X))
         ) %>% rownames_to_column('EVENT') %>%
         left_join(annot[,c('EVENT','GENE')], by='EVENT') %>%

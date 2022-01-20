@@ -36,6 +36,7 @@ RANDOM_SEED = 1234
 # RAW_DIR = file.path(ROOT,'data','raw')
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_drugs')
+# MODELS_DIR = file.path(ROOT,'results','model_splicing_dependency')
 # models_file = file.path(RESULTS_DIR,'files','model_summaries_drug_response-EX.tsv.gz')
 # drug_targets_file = file.path(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
 # figs_dir = file.path(RESULTS_DIR,'figures','model_drug_screens')
@@ -43,6 +44,9 @@ RANDOM_SEED = 1234
 # estimated_response_file = file.path(RESULTS_DIR,'files','estimated_drug_response_by_drug-EX.tsv.gz')
 # drug_screen_file = file.path(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv')
 # msigdb_dir = file.path(ROOT,'data','raw','MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs')
+# clusters_file = file.path(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-EX.tsv.gz')
+# metadata_file = file.path(PREP_DIR,'metadata','CCLE.tsv.gz')
+# spldep_ccle_file = file.path(MODELS_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
 
 
 ##### FUNCTIONS #####
@@ -192,31 +196,7 @@ plot_associations = function(models, drug_targets, embedding, ontologies, rankin
                                distinct(DRUG_NAME) %>% nrow(),
                            found_targets %>% distinct(DRUG_NAME) %>% nrow())) + 
         theme_pubr(border=TRUE) +
-        theme(strip.text = element_text(size=6))
-    
-    # best associations of drugs without targets
-    drugs_oi = drug_targets %>% filter(is.na(TARGET)) %>% pull(DRUG_ID) %>% unique()
-    
-    plts[['associations-top_no_targets']] = X %>% 
-        filter(lr_padj<THRESH_FDR & DRUG_ID%in%drugs_oi) %>%
-        group_by(DRUG_NAME) %>% 
-        slice_max(order_by=spldep_coefficient, n=15) %>% 
-        left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), by="DRUG_ID") %>%
-        mutate(is_target=FALSE, 
-               drug_name_clean=sprintf('%s | %s',DRUG_NAME,TARGET_PATHWAY), 
-               name=reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>% 
-        ggplot(aes(x=name, y=spldep_coefficient)) +
-        geom_col(aes(fill=is_target, color=drug_screen, group=drug_screen), 
-                     position=position_dodge(1)) +
-        color_palette(c("white","black")) + 
-        fill_palette("Set2") +
-        facet_wrap(~drug_name_clean, scales='free', ncol=4) + 
-        scale_x_reordered() +     
-        labs(x='Event & Gene', y='Effect Size', fill='Is Drug Target', 
-             title='Top 15 Significant Effect Sizes') + 
-        coord_flip() +
-        theme_pubr(border=TRUE) +
-        theme(strip.text = element_text(size=6))
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     # do significantly associated events in gene targets rank to the top of
     # the association effect size?
@@ -264,6 +244,30 @@ plot_associations = function(models, drug_targets, embedding, ontologies, rankin
         guides(fill="none") +
         labs(x='Ranking Type', y='Ranking Ratio', 
              title=sprintf('n = %s', nrow(ranking_real)))
+    
+    # best associations of drugs without targets
+    drugs_oi = drug_targets %>% filter(is.na(TARGET)) %>% pull(DRUG_ID) %>% unique()
+    
+    plts[['associations-top_no_targets']] = X %>% 
+        filter(lr_padj<THRESH_FDR & DRUG_ID%in%drugs_oi) %>%
+        group_by(DRUG_NAME) %>% 
+        slice_max(order_by=spldep_coefficient, n=15) %>% 
+        left_join(drug_targets %>% distinct(DRUG_ID,TARGET_PATHWAY), by="DRUG_ID") %>%
+        mutate(is_target=FALSE, 
+               drug_name_clean=sprintf('%s | %s',DRUG_NAME,TARGET_PATHWAY), 
+               name=reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>% 
+        ggplot(aes(x=name, y=spldep_coefficient)) +
+        geom_col(aes(fill=is_target, color=drug_screen, group=drug_screen), 
+                     position=position_dodge(1)) +
+        color_palette(c("white","black")) + 
+        fill_palette("Set2") +
+        facet_wrap(~drug_name_clean, scales='free', ncol=4) +
+        scale_x_reordered() +     
+        labs(x='Event & Gene', y='Effect Size', fill='Is Drug Target', 
+             title='Top 15 Significant Effect Sizes') + 
+        coord_flip() +
+        theme_pubr(border=TRUE) +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     # are association profiles informative of drug mechanism of action?
     plts[['associations-target_pathway-counts']] = drug_targets %>% 
@@ -431,13 +435,15 @@ plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
     
     plts = list()
     plts[["drug_rec-spearmans"]] = corrs %>% 
-        ggviolin(x="drug_screen", y="correlation", 
-                 color=NA, fill="drug_screen", palette="Set2") +
+        ggviolin(x="drug_screen", y="correlation", trim=TRUE,
+                 color=NA, fill="drug_screen", palette="jco") +
         geom_boxplot(width=0.1, outlier.size=0.1) +
         geom_hline(yintercept=0, linetype="dashed") +
-        # ylim(-1,1) + 
         guides(fill="none") + 
-        labs(x="Drug Screen", y="Spearman Correlation")
+        labs(x="Drug Screen", y="Spearman Correlation") +
+        geom_text(aes(y=1, label=n), 
+                  corrs %>% count(drug_screen), 
+                  size=1, family='Arial')
     
     # best and worse correlations
     samples_oi = corrs %>% 
@@ -453,7 +459,7 @@ plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
         geom_abline(intercept=0, slope=1, linetype="dashed") +
         labs(x="Real log(IC50)", y="Predicted log(IC50)") + 
         theme_pubr(border=TRUE) +
-        theme(strip.text = element_text(size=6))
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     # influence of pathway in ranking capacity?
     corrs_bypath = X %>%
@@ -469,10 +475,11 @@ plot_drug_rec = function(estimated_response, drug_screen, drug_targets){
         ggboxplot(x="TARGET_PATHWAY", y="correlation", outlier.size=0.1,
                   fill="TARGET_PATHWAY", palette=get_palette("jco", 24)) + 
         ylim(-1,1) + 
-        facet_wrap(~drug_screen) + 
+        facet_wrap(~drug_screen) +
         labs(x="Target Pathway", y="Spearman Correlation") +
         guides(fill="none") + 
-        coord_flip()
+        coord_flip() +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     
     return(plts)
@@ -521,7 +528,8 @@ plot_examples = function(models, drug_targets){
         facet_wrap(~drug_name, scales='free_y', ncol=2) +
         scale_x_reordered() + 
         labs(x='Event & Gene', y='Effect Size', title='Top 15') +
-        coord_flip()
+        coord_flip() +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     # associations with events in TCGA
     events_oi = c(
@@ -544,7 +552,8 @@ plot_examples = function(models, drug_targets){
         facet_wrap(~event_gene, scales='free_y', ncol=2) +
         scale_x_reordered() + 
         labs(x='Drug Name', y='Effect Size', title='Top 15') +
-        coord_flip()
+        coord_flip() +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     return(plts)
 }
@@ -572,6 +581,33 @@ plot_drugs_common_targets = function(models, drug_targets){
         geom_abline(slope=1, intercept=0, linetype='dashed') +
         stat_cor()
         count(drug_name)
+}
+
+
+plot_drug_clusters = function(clusters, metadata, drug_screen, estimated_response, spldep_ccle){
+    X = drug_screen %>%
+        distinct(DRUG_NAME, DRUG_ID, DATASET) %>%
+        filter(str_detect(DRUG_NAME,"THZ-2-49")) %>%
+        left_join(clusters, by=c("DRUG_ID", "DATASET"="drug_screen")) %>%
+        left_join(metadata, by=c("index"="DepMap_ID")) %>%
+        left_join(drug_screen, by=c("index"="ARXSPAN_ID", "DRUG_NAME", 
+                                    "DRUG_ID", "DATASET")) %>%
+        left_join(estimated_response, by=c("DRUG_ID", "index"="sample",
+                                           "DATASET"="drug_screen")) %>%
+        mutate(log_ic50 = log(IC50_PUBLISHED),
+               in_training_set = !is.na(log_ic50),
+               leiden_labels = as.factor(leiden_labels)) %>%
+        left_join(spldep_ccle %>% 
+                      column_to_rownames("index") %>% 
+                      t() %>% as.data.frame() %>% 
+                      rownames_to_column("index"), by="index")
+
+    X %>% ggscatter(x="UMAP0", y="UMAP1", color="log_ic50") + scale_color_gradient2(low="blue",mid="white",high="red") + facet_wrap(~DRUG_NAME) 
+    X %>% ggscatter(x="UMAP0", y="UMAP1", color="in_training_set") + facet_wrap(~DRUG_NAME)
+    X %>% drop_na(HsaEX6007325) %>% ggscatter(x="UMAP0", y="UMAP1", color="HsaEX6007325") + scale_color_gradient2(low="blue", mid="white", high="red") + facet_wrap(~DRUG_NAME)
+    X %>% ggscatter(x="UMAP0", y="UMAP1", color="leiden_labels") + facet_wrap(~DRUG_NAME)
+     X %>% ggscatter(x="UMAP0", y="UMAP1", color="primary_disease", palette=get_palette("Paired", length(unique(X[["primary_disease"]])))) + facet_wrap(~DRUG_NAME)
+
 }
 
 
@@ -607,12 +643,12 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'associations-top_drug_counts', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'associations-spldep_counts', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'associations-top_spldep_counts', '.pdf', figs_dir, width=8, height=8)
-    save_plt(plts, 'associations-top_found_targets', '.pdf', figs_dir, width=25, height=25)
+    save_plt(plts, 'associations-top_found_targets', '.pdf', figs_dir, width=25, height=19)
     save_plt(plts, 'associations-top_no_targets', '.pdf', figs_dir, width=25, height=25)
-    save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=6, height=6)
+    save_plt(plts, 'associations-target_pathway-counts', '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, 'associations-target_pathway-umap', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'associations-target_pathway-silhouettes', '.pdf', figs_dir, width=6.5, height=6)
-    save_plt(plts, 'associations-leiden-vs_target_pathway', '.pdf', figs_dir, width=10.5, height=8)
+    save_plt(plts, 'associations-leiden-vs_target_pathway', '.pdf', figs_dir, width=10.5, height=5)
     save_plt(plts, 'associations-leiden-umap', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'associations-leiden-enrichment-hallmarks', '.pdf', figs_dir, width=8, height=6)
     save_plt(plts, 'associations-leiden-enrichment-GO_BP', '.pdf', figs_dir, width=15, height=14)
@@ -660,6 +696,7 @@ main = function(){
     dir.create(figs_dir, recursive = TRUE)
     
     # load
+    metadata = read_tsv(metadata_file)
     models = read_tsv(models_file) %>% 
         mutate(event_gene = paste0(EVENT,'_',GENE),
                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
@@ -676,6 +713,9 @@ main = function(){
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,'c6.all.v7.4.symbols.gmt')),
         "GO_BP" = read.gmt(file.path(msigdb_dir,'c5.go.bp.v7.4.symbols.gmt'))
     )
+    clusters = read_tsv(clusters_file)
+    spldep_ccle = read_tsv(spldep_ccle_file) %>%
+        filter(index %in% unique(models[["EVENT"]]))
     
     rankings = models %>% 
         filter(lr_padj<0.1) %>% 

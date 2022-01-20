@@ -117,7 +117,8 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
 }
 
 
-plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_freq, ontologies, cancer_events){
+plot_model_selection = function(models, rnai, spldep, gene_mut_freq, 
+                                event_mut_freq, ontologies, cancer_events){
     # prep data
     rnai = rnai %>% filter(index%in%models[['GENE']]) %>% column_to_rownames('index')
     spldep = spldep %>% filter(index%in%models[['EVENT']]) %>% column_to_rownames('index')
@@ -289,9 +290,9 @@ plot_model_selection = function(models, rnai, spldep, gene_mut_freq, event_mut_f
     
     plts[['model_selection-tpr_vs_fpr']] = eval_pvalue %>% 
         ggbarplot(x='thresh', y='cumsums', fill="lightblue", color=NA) +
-        labs(x='Thresholds LR Test p-value', y='TPR - FPR') +
+        labs(x='Thresholds LR Test p-value', y='CumSum(TPR - FPR)') +
         geom_text(aes(y=0.10, label=total_events), size=0.85, family="Arial", color="#994F00") +
-        geom_text(aes(y=0.093, label=total_genes), size=0.85, family="Arial", color="#006CD1")
+        geom_text(aes(y=0.08, label=total_genes), size=0.85, family="Arial", color="#006CD1")
     
     # find the threshold for the mean pearson correlation
     threshs = seq(0,0.4,0.05)
@@ -873,16 +874,14 @@ plot_tumorigenesis = function(models, spldep){
         geom_vline(xintercept=0, linetype='dashed') +
         labs(x='0.25 Quantile', y='0.75 Quantile') +
         geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial", 
-                        spldep_stats %>% slice_max(order_by=abs(q25*q75), n=10))
+                        spldep_stats %>% slice_max(order_by=abs(q25*q75), n=10), max.overlaps=50)
     
     return(plts)
 }
 
 
-plot_events_oi = function(rnai, spldep, splicing, genexpr){
-    event_oi = 'HsaEX1012875' # ENSG00000100385
-    gene_oi = 'EIF3B'
-    ensembl_oi = 'ENSG00000106263'
+plot_event_oi = function(event_oi, gene_oi, ensembl_oi, 
+                         rnai, spldep, splicing, genexpr, patt){
     
     spldep_oi = spldep %>% filter(index%in%event_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
     rnai_oi = rnai %>% filter(index%in%gene_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
@@ -896,123 +895,65 @@ plot_events_oi = function(rnai, spldep, splicing, genexpr){
     colnames(X) = c("sampleID","rnai","splicing","genexpr","spldep")
     
     plt_title = sprintf("%s_%s (%s)", event_oi, gene_oi, ensembl_oi)
-    X %>% ggscatter(x="rnai", y="spldep") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="splicing", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="splicing") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
+    plts = list()
+    plts[['spldep_vs_rnai']] = X %>% 
+        ggscatter(x="spldep", y="rnai", size=1, alpha=0.5) + 
+        stat_cor(method="spearman", label.y.npc="top", 
+                 label.x.npc = "middle", family='Arial', size=2) + 
+        labs(title=plt_title, x="Predicted Dep.", y="Real Dep.")
     
-    # 
-    event_oi = 'HsaEX0015457'
-    gene_oi = 'CKAP5'
-    ensembl_oi = 'ENSG00000175216'
+    plts[['splicing_vs_rnai']] = X %>% 
+        ggscatter(x="splicing", y="rnai", size=1, alpha=0.5) + 
+        stat_cor(method="spearman", label.y.npc="top", 
+                     label.x.npc = "middle", family='Arial', size=2) + 
+        labs(title=plt_title, x="Splicing (PSI)", y="Real Dep.")
     
-    spldep_oi = spldep %>% filter(index%in%event_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    rnai_oi = rnai %>% filter(index%in%gene_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    splicing_oi = splicing %>% filter(EVENT%in%event_oi) %>% column_to_rownames("EVENT") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    genexpr_oi = genexpr %>% filter(ID%in%ensembl_oi) %>% column_to_rownames("ID") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
+    plts[['genexpr_vs_rnai']] = X %>% 
+        ggscatter(x="genexpr", y="rnai", size=1, alpha=0.5) + 
+        stat_cor(method="spearman", label.y.npc="top", 
+                 label.x.npc = "middle", family='Arial', size=2) + 
+        labs(title=plt_title, x="mRNA levels (TPM)", y="Real Dep.")
     
-    X = rnai_oi %>%
-        left_join(splicing_oi, by="sampleID") %>%
-        left_join(genexpr_oi, by="sampleID") %>%
-        left_join(spldep_oi, by="sampleID")
-    colnames(X) = c("sampleID","rnai","splicing","genexpr","spldep")
+    plts[['genexpr_vs_splicing']] = X %>% 
+        ggscatter(x="genexpr", y="splicing", size=1, alpha=0.5) + 
+        stat_cor(method="spearman", label.y.npc="top", 
+                 label.x.npc = "middle", family='Arial', size=2) + 
+        labs(title=plt_title, x="mRNA levels (TPM)", y="Splicing (PSI)")
     
-    plt_title = sprintf("%s_%s (%s)", event_oi, gene_oi, ensembl_oi)
-    X %>% ggscatter(x="rnai", y="spldep") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="splicing", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="splicing") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
     
-    event_oi = 'HsaEX0050601'
-    gene_oi = 'PSMC5'
-    ensembl_oi = 'ENSG00000087191'
+    names(plts) = paste0(patt,'-',names(plts))
     
-    spldep_oi = spldep %>% filter(index%in%event_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    rnai_oi = rnai %>% filter(index%in%gene_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    splicing_oi = splicing %>% filter(EVENT%in%event_oi) %>% column_to_rownames("EVENT") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    genexpr_oi = genexpr %>% filter(ID%in%ensembl_oi) %>% column_to_rownames("ID") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    
-    X = rnai_oi %>%
-        left_join(splicing_oi, by="sampleID") %>%
-        left_join(genexpr_oi, by="sampleID") %>%
-        left_join(spldep_oi, by="sampleID")
-    colnames(X) = c("sampleID","rnai","splicing","genexpr","spldep")
-    
-    plt_title = sprintf("%s_%s (%s)", event_oi, gene_oi, ensembl_oi)
-    X %>% ggscatter(x="rnai", y="spldep") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="splicing", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="splicing") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    
-    event_oi = 'HsaEX0056182'
-    gene_oi = 'SAMSN1'
-    ensembl_oi = 'ENSG00000155307'
-    
-    spldep_oi = spldep %>% filter(index%in%event_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    rnai_oi = rnai %>% filter(index%in%gene_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    splicing_oi = splicing %>% filter(EVENT%in%event_oi) %>% column_to_rownames("EVENT") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    genexpr_oi = genexpr %>% filter(ID%in%ensembl_oi) %>% column_to_rownames("ID") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    
-    X = rnai_oi %>%
-        left_join(splicing_oi, by="sampleID") %>%
-        left_join(genexpr_oi, by="sampleID") %>%
-        left_join(spldep_oi, by="sampleID")
-    colnames(X) = c("sampleID","rnai","splicing","genexpr","spldep")
-    
-    plt_title = sprintf("%s_%s (%s)", event_oi, gene_oi, ensembl_oi)
-    X %>% ggscatter(x="rnai", y="spldep") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="splicing", y="spldep") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="spldep") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="splicing") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    
-    event_oi = 'HsaEX0057572'
-    gene_oi = 'SF3B1'
-    ensembl_oi = 'ENSG00000115524'
-    
-    spldep_oi = spldep %>% filter(index%in%event_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    rnai_oi = rnai %>% filter(index%in%gene_oi) %>% column_to_rownames("index") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    splicing_oi = splicing %>% filter(EVENT%in%event_oi) %>% column_to_rownames("EVENT") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    genexpr_oi = genexpr %>% filter(ID%in%ensembl_oi) %>% column_to_rownames("ID") %>% t() %>% as.data.frame() %>% rownames_to_column("sampleID")
-    
-    X = rnai_oi %>%
-        left_join(splicing_oi, by="sampleID") %>%
-        left_join(genexpr_oi, by="sampleID") %>%
-        left_join(spldep_oi, by="sampleID")
-    colnames(X) = c("sampleID","rnai","splicing","genexpr","spldep")
-    
-    plt_title = sprintf("%s_%s (%s)", event_oi, gene_oi, ensembl_oi)
-    X %>% ggscatter(x="rnai", y="spldep") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="splicing", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="rnai") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    X %>% ggscatter(x="genexpr", y="splicing") + stat_cor(method="spearman", label.y.npc="top", label.x.npc = "middle") + labs(title=plt_title)
-    
+    return(plts)
 }
 
 
-plot_multicollinearity = function(){
-    a = sample(1:100,50)
-    b = -0.5*a+rnorm(length(a))
-    y = 5*a + 3*b + rnorm(length(a)) 
-    df = data.frame(
-        a = a,
-        b = b,
-        y = y
+plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr){
+    # which events did we select from the positive set?
+    events_oi = models %>% filter(is_selected) %>% pull(EVENT)
+    X = cancer_events %>% mutate(is_selected=EVENT%in%events_oi) 
+    X %>% count(is_selected) %>% print()
+    X %>% filter(is_selected) %>% print()
+    
+    plts = list(
+        plot_event_oi('HsaEX0034998', 'KRAS', 'ENSG00000133703', 
+                      rnai, spldep, splicing, genexpr, 'KRAS'),
+        plot_event_oi('HsaEX0060482', 'SMNDC1', 'ENSG00000119953', 
+                      rnai, spldep, splicing, genexpr, 'SMNDC1')
     )
-    
-    fit = lm(y~a+b, data=df)
-    summary(fit)
-    df$pred = predict(fit,df)
-    df %>% ggscatter(x="a", y="b")
-    df %>% ggscatter(x="y", y="pred")
+    plts = do.call(c,plts)
+    names(plts) = paste0('events_oi-',names(plts))
 
+    return(plts)
 }
+
 
 make_plots = function(models, rnai, spldep, gene_mut_freq, 
                       event_mut_freq, ontologies, cancer_events){
     plts = list(
         plot_model_selection(models, rnai, spldep, gene_mut_freq, 
                              event_mut_freq, ontologies, cancer_events),
-        plot_tumorigenesis(models, spldep)
+        plot_tumorigenesis(models, spldep),
+        plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -1040,8 +981,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'model_selection-deps_med_vs_std_ctl_neg', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-deps_sorted_vs_std_ctl_pos', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-deps_med_vs_std_ctl_pos', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-lr_pvalue', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'model_selection-lr_pvalue_ctl_pos', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'model_selection-lr_pvalue', '.pdf', figs_dir, width=4, height=4)
+    save_plt(plts, 'model_selection-lr_pvalue_ctl_pos', '.pdf', figs_dir, width=4, height=4)
     save_plt(plts, 'model_selection-pearson_corr', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'model_selection-pvalue_vs_n_genes', '.pdf', figs_dir, width=5, height=4)
     save_plt(plts, 'model_selection-pvalue_vs_ctl_neg', '.pdf', figs_dir, width=5, height=4)
@@ -1088,6 +1029,16 @@ save_plots = function(plts, figs_dir){
     
     # tumorigenesis
     save_plt(plts, 'tumorigenesis-scatter', '.pdf', figs_dir, width=5, height=5)
+    
+    # events oi
+    genes_oi = c('KRAS','SMNDC1')
+    lapply(genes_oi, function(gene_oi){
+        lapply(c('spldep_vs_rnai','genexpr_vs_rnai','genexpr_vs_splicing','splicing_vs_rnai'), 
+               function(comparison){
+            plt_name = sprintf('events_oi-%s-%s',gene_oi,comparison)
+            save_plt(plts, plt_name, '.pdf', figs_dir, width=4, height=4)            
+        })
+    })
 }
 
 
