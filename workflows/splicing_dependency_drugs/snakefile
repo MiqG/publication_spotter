@@ -59,6 +59,12 @@ rule all:
         ## combine
         expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
+        # Shortest path lengths in PPIs between drug targets and associations
+        ## real
+        expand(os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        ## random
+        os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz'),
+        
         # plot models
         # os.path.join(RESULTS_DIR,'figures','model_drug_screens')
 
@@ -76,7 +82,7 @@ rule model_drug_response:
         script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/target_spotter drugassoc_fit \
+        nice python {params.script_dir}/target_spotter drugassoc_fit \
                     --drug_response_file={input.drug_response} \
                     --splicing_dependency_file={input.spldep} \
                     --mapping_file={input.mapping} \
@@ -284,3 +290,49 @@ rule combine_embedded_matrices:
         
         dfs = pd.concat(dfs)
         dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+        
+rule shortest_paths_real:
+    input:
+        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
+        drug_associations = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz')
+    params:
+        mode = 'real',
+        thresh_fdr = 0.1
+    threads: 8
+    shell:
+        """
+        python scripts/ppi_path_lengths.py \
+                    --mode={params.mode} \
+                    --ppi_file={input.ppi} \
+                    --drug_targets_file={input.drug_targets} \
+                    --drug_associations_file={input.drug_associations} \
+                    --output_file={output} \
+                    --thresh_fdr={params.thresh_fdr} \
+                    --n_jobs={threads}
+        """
+        
+        
+rule shortest_paths_random:
+    input:
+        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+    output:
+        os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz')
+    params:
+        mode = 'random',
+        n_random_sources = 100
+    threads: 4
+    shell:
+        """
+        python scripts/ppi_path_lengths.py \
+                    --mode={params.mode} \
+                    --ppi_file={input.ppi} \
+                    --drug_targets_file={input.drug_targets} \
+                    --output_file={output} \
+                    --n_random_sources={params.n_random_sources} \
+                    --n_jobs={threads}
+        """
