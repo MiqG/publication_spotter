@@ -295,7 +295,7 @@ rule combine_embedded_matrices:
 rule shortest_paths_real:
     input:
         ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
+        drug_targets = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz'),
         drug_associations = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz')
@@ -319,7 +319,7 @@ rule shortest_paths_real:
 rule shortest_paths_random:
     input:
         ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+        drug_targets = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz')
     params:

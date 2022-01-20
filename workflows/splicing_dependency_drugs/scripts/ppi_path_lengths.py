@@ -29,7 +29,7 @@ RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
 ppi_file = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz')
-drug_targets_file = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv')
+drug_targets_file = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 drug_associations_file = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-EX.tsv.gz')
 thresh_fdr = 0.1
 n_jobs=10
@@ -40,7 +40,7 @@ n_random_sources = 100
 def load_data(ppi_file, drug_targets_file, drug_associations_file):
     # load
     ppi = pd.read_table(ppi_file)
-    drug_targets = pd.read_csv(drug_targets_file)
+    drug_targets = pd.read_table(drug_targets_file)
 
     if drug_associations_file is not None:
         drug_associations = pd.read_table(drug_associations_file)
@@ -57,9 +57,6 @@ def prepare_data(ppi, drug_targets, drug_associations, thresh_fdr):
     print("Total nodes in PPI network: %s" % len(avail_genes))
 
     # drug - target pairs
-    drug_targets["TARGET"] = drug_targets["TARGET"].str.split(",")
-    drug_targets = drug_targets.explode("TARGET")
-    drug_targets["TARGET"] = drug_targets["TARGET"].str.replace(" ", "")
     ## drop genes not in the network
     drug_targets = drug_targets.loc[drug_targets["TARGET"].isin(avail_genes)]
 
