@@ -111,7 +111,10 @@ rule all:
         expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES),
         
         # merge metadata TCGA
-        os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
+        os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz'),
+        
+        # preprocess STRINGDB
+        os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz')
         
         
 rule prepare_metadata_ccle:
@@ -491,3 +494,18 @@ rule merge_tcga_metadata_subtypes:
             del df
         metadata = pd.concat(metadata)
         metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        
+rule preprocess_stringdb:
+    input:
+        ppi = os.path.join(RAW_DIR,'STRINGDB','9606.protein.links.full.v11.5.txt.gz'),
+        aliases = os.path.join(RAW_DIR,'STRINGDB','9606.protein.aliases.v11.5.txt.gz')
+    output:
+        os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz')
+    shell:
+        """
+        python scripts/preprocess_stringdb.py \
+                    --raw_ppi_file={input.ppi} \
+                    --raw_aliases_file={input.aliases} \
+                    --prep_ppi_file={output}
+        """
