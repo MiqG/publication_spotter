@@ -11,7 +11,7 @@ import pandas as pd
 import networkx as nx
 
 # variables
-SAVE_PARAMS = {'sep':'\t', 'index':False, 'compression':'gzip'}
+SAVE_PARAMS = {"sep": "\t", "index": False, "compression": "gzip"}
 SCORE_THRESH = 900
 
 """
@@ -26,16 +26,20 @@ raw_aliases_file = os.path.join(RAW_DIR,'STRINGDB','9606.protein.aliases.v11.5.t
 
 ##### FUNCTIONS #####
 def load_data(raw_ppi_file, raw_aliases_file):
-    ppi = pd.read_table(raw_ppi_file, sep=' ')
+    ppi = pd.read_table(raw_ppi_file, sep=" ")
     aliases = pd.read_table(raw_aliases_file)
-    
+
     return ppi, aliases
 
 
 def preprocess_stringdb(ppi, aliases):
     # map ENSP to gene symbol
-    gmap = aliases.loc[aliases["source"]=="BioMart_HUGO"].set_index("#string_protein_id")["alias"].to_dict()
-    
+    gmap = ( 
+        aliases.loc[aliases["source"] == "BioMart_HUGO"]
+        .set_index("#string_protein_id")["alias"]
+        .to_dict()
+    )
+
     # Filter by moderate confidence
     ppi = ppi[ppi["combined_score"] > SCORE_THRESH].copy()
 
@@ -45,20 +49,26 @@ def preprocess_stringdb(ppi, aliases):
 
     ppi["protein1"] = [gmap[p1] for p1 in ppi["protein1"]]
     ppi["protein2"] = [gmap[p2] for p2 in ppi["protein2"]]
-    
+
     # if duplicated, keep only edges with maximum weight
-    ppi = ppi.groupby(["protein1","protein2"])["combined_score"].max().reset_index()
-    
+    ppi = ppi.groupby(["protein1", "protein2"])["combined_score"].max().reset_index()
+
     # remove self loops
-    is_selfloop = ppi["protein1"]==ppi["protein2"]
+    is_selfloop = ppi["protein1"] == ppi["protein2"]
     ppi = ppi.loc[~is_selfloop].copy()
-    
+
     # standardize names
-    ppi = ppi.rename(columns={"protein1":"source", "protein2":"target", "combined_score":"stringdb_score"})
-    
+    ppi = ppi.rename(
+        columns={
+            "protein1": "source",
+            "protein2": "target",
+            "combined_score": "stringdb_score",
+        }
+    )
+
     return ppi
-    
-    
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--raw_ppi_file", type=str)
@@ -77,15 +87,15 @@ def main():
     prep_ppi_file = args.prep_ppi_file
 
     # load
-    print('Loading data...')
+    print("Loading data...")
     ppi, aliases = load_data(raw_ppi_file, raw_aliases_file)
-    print('Preprocessing data...')
+    print("Preprocessing data...")
     ppi = preprocess_stringdb(ppi, aliases)
-    
+
     # save
-    print('Saving data...')
+    print("Saving data...")
     ppi.to_csv(prep_ppi_file, **SAVE_PARAMS)
-    
+
 
 ##### SCRIPT #####
 if __name__ == "__main__":
