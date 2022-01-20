@@ -19,6 +19,7 @@ ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
 RAW_DIR = os.path.join(ROOT,'data','raw')
 SRC_DIR = os.path.join(ROOT,'src')
 PREP_DIR = os.path.join(ROOT,'data','prep')
+SUPPORT_DIR = os.path.join(ROOT,'support')
 
 EVENT_TYPES = ['EX','ALTA','ALTD','INT']
 CANCER_TYPES = [
@@ -114,7 +115,10 @@ rule all:
         os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz'),
         
         # preprocess STRINGDB
-        os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz')
+        os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        
+        # preprocess GDSC drug targets
+        os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
         
         
 rule prepare_metadata_ccle:
@@ -509,3 +513,32 @@ rule preprocess_stringdb:
                     --raw_aliases_file={input.aliases} \
                     --prep_ppi_file={output}
         """
+        
+        
+rule preprocess_gdsc_targets:
+    input:
+        raw_drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
+        symbol_checker = os.path.join(SUPPORT_DIR,'hgnc-symbol-check-drug_targets.csv')
+    output:
+        os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
+    run:
+        import pandas as pd
+        drug_targets = pd.read_csv(input.raw_drug_targets)
+        corrector = pd.read_csv(input.symbol_checker, skiprows=1)
+        
+        # prep corrector dictionary
+        corrector = corrector[
+            ["Input","Approved symbol"]
+        ].dropna().drop_duplicates().set_index("Input")["Approved symbol"].to_dict()
+        
+        # pivot longer the target genes
+        drug_targets["TARGET"] = drug_targets["TARGET"].str.split(",")
+        drug_targets = drug_targets.explode("TARGET")
+        drug_targets["TARGET"] = drug_targets["TARGET"].str.replace(" ", "")
+        drug_targets["TARGET"] = [corrector[t] if t in corrector.keys() else t 
+                                  for t in drug_targets["TARGET"]]
+        
+        # save
+        drug_targets.to_csv(output[0], index=False, sep="\t", compression="gzip")
+        
+        print("Done!")
