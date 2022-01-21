@@ -518,21 +518,62 @@ rule preprocess_stringdb:
 rule preprocess_gdsc_targets:
     input:
         raw_drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
-        symbol_checker = os.path.join(SUPPORT_DIR,'hgnc-symbol-check-drug_targets.csv')
+        Goncalves2020 = os.path.join(SUPPORT_DIR,'msb199405-sup-0003-datasetev2.xlsx'),
+        symbol_checker = os.path.join(SUPPORT_DIR,'hgnc-symbol-check-drug_targets-hand.csv')
     output:
         os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
     run:
         import pandas as pd
-        drug_targets = pd.read_csv(input.raw_drug_targets)
+        raw_drug_targets = pd.read_csv(input.raw_drug_targets)
+        gonc = pd.read_excel(input.Goncalves2020, sheet_name="Drug sheet")
         corrector = pd.read_csv(input.symbol_checker, skiprows=1)
+        
+        # prep gonc
+        cols_oi = ["DRUG_ID","DRUG_NAME","SYNONYMS","TARGET","TARGET_PATHWAY"]
+        gonc = gonc.rename(columns={
+            "Drug ID": "DRUG_ID",
+            "Name": "DRUG_NAME",
+            "Synonyms": "SYNONYMS",
+            "Gene Target": "TARGET",
+            "Pathway": "TARGET_PATHWAY"
+        })[cols_oi]
+        gonc["DRUG_NAME"] = gonc["DRUG_NAME"].str.upper()
+        gonc["ORIGIN"] = "Gonçalves 2020"
+        
+        # prep raw
+        raw_drug_targets["TARGET"] = raw_drug_targets["TARGET"].str.replace(",",";")
+        raw_drug_targets["DRUG_NAME"] = raw_drug_targets["DRUG_NAME"].str.upper()
+        raw_drug_targets["ORIGIN"] = "GDSC"
+        raw_drug_targets = raw_drug_targets.drop(columns="SCREENING_SITE")
+        
+        # if available in Goncalves, keep it
+        avail_drug_ids = set(gonc["DRUG_ID"]).intersection(raw_drug_targets["DRUG_ID"])
+        drug_targets = {}
+        for drug_id in raw_drug_targets["DRUG_ID"].unique():
+            drug_name = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id,"DRUG_NAME"].values
+            alternative = (gonc["DRUG_NAME"].isin(drug_name)) &\
+                          (~gonc["DRUG_ID"].isin(avail_drug_ids))
+            
+            if drug_id in gonc["DRUG_ID"]:
+                drug_targets[drug_id] = gonc.loc[gonc["DRUG_ID"]==drug_id]
+            elif any(alternative):
+                drug_targets[drug_id] = gonc.loc[alternative]
+            else:
+                drug_targets[drug_id] = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id]
+                
+        drug_targets = pd.concat(drug_targets)
         
         # prep corrector dictionary
         corrector = corrector[
             ["Input","Approved symbol"]
-        ].dropna().drop_duplicates().set_index("Input")["Approved symbol"].to_dict()
+        ].dropna().drop_duplicates()
+        corrector["symbol"] = corrector["Approved symbol"].str.split(";")
+        corrector = corrector.explode("symbol")
+        corrector["symbol"] = corrector["symbol"].str.replace(" ","")
+        corrector = corrector.set_index("Input")["symbol"].to_dict()
         
         # pivot longer the target genes
-        drug_targets["TARGET"] = drug_targets["TARGET"].str.split(",")
+        drug_targets["TARGET"] = drug_targets["TARGET"].str.split(";")
         drug_targets = drug_targets.explode("TARGET")
         drug_targets["TARGET"] = drug_targets["TARGET"].str.replace(" ", "")
         drug_targets["TARGET"] = [corrector[t] if t in corrector.keys() else t 
