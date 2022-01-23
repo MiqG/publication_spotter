@@ -71,7 +71,7 @@ SIZE_CTL = 100
 
 
 ##### FUNCTIONS #####
-load_ontologies = function(msigdb_dir){
+load_ontologies = function(msigdb_dir, protein_impact_file){
     ontologies = list(
         "hallmarks" = read.gmt(file.path(msigdb_dir,"h.all.v7.4.symbols.gmt")),
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,"c6.all.v7.4.symbols.gmt")),
@@ -968,7 +968,7 @@ main = function(){
     indices = read_tsv(indices_file) %>% filter(index_name %in% c("stemness","mitotic_index"))
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% dplyr::rename(GENE=Hugo_Symbol)
     event_mut_freq = read_tsv(event_mut_freq_file)
-    ontologies = load_ontologies(msigdb_dir)
+    ontologies = load_ontologies(msigdb_dir, protein_impact_file)
     spldep = read_tsv(spldep_file)
     rnai = read_tsv(rnai_file)
     genexpr = read_tsv(genexpr_file)
