@@ -721,9 +721,15 @@ save_plots = function(plts, figs_dir){
 
 save_figdata = function(figdata, dir){
     lapply(names(figdata), function(x){
-        filename = file.path(dir,"figdata",paste0(x,".xlsx"))
-        dir.create(dirname(filename), recursive=TRUE)
-        write_xlsx(figdata[[x]], filename)
+        d = file.path(dir,'figdata',x)
+        dir.create(d, recursive=TRUE)
+        lapply(names(figdata[[x]]), function(nm){
+            df = figdata[[x]][[nm]]
+            filename = file.path(d, paste0(nm,'.tsv.gz'))
+            write_tsv(df, filename)
+            
+            print(filename)
+        })
     })
 }
 

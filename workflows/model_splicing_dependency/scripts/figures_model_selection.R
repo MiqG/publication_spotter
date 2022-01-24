@@ -835,12 +835,12 @@ make_figdata = function(models, rnai_stats, cancer_events,
     )
     
     figdata = list(
-#         "datasets_CCLE" = list(
-#             "demeter2" = rnai,
-#             "gene_tpm" = genexpr,
-#             "splicing_psi" = splicing,
-#             "splicing_dependency" = spldep
-#         ),
+        "datasets_CCLE" = list(
+            "demeter2" = rnai,
+            "gene_tpm" = genexpr,
+            "splicing_psi" = splicing,
+            "splicing_dependency" = spldep
+        ),
         "model_selection" = list(
             "model_summaries"= models,
             "rnai_stats" = rnai_stats,
@@ -862,10 +862,10 @@ make_figdata = function(models, rnai_stats, cancer_events,
 }
 
 
-
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
                     width = par("din")[1], height = par("din")[2]){
+    print(plt_name)
     plt = plts[[plt_name]]
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
@@ -878,7 +878,6 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
-    
     # model selection
     ## controls
     save_plt(plts, "model_sel-deps_sorted_vs_std_ctl_neg", ".pdf", figs_dir, width=5, height=5)
@@ -938,12 +937,17 @@ save_plots = function(plts, figs_dir){
 
 save_figdata = function(figdata, dir){
     lapply(names(figdata), function(x){
-        filename = file.path(dir,"figdata",paste0(x,".xlsx"))
-        dir.create(dirname(filename), recursive=TRUE)
-        write_xlsx(figdata[[x]], filename)
+        d = file.path(dir,'figdata',x)
+        dir.create(d, recursive=TRUE)
+        lapply(names(figdata[[x]]), function(nm){
+            df = figdata[[x]][[nm]]
+            filename = file.path(d, paste0(nm,'.tsv.gz'))
+            write_tsv(df, filename)
+            
+            print(filename)
+        })
     })
 }
-
 
 
 main = function(){
