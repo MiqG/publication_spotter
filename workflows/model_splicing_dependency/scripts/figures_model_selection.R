@@ -69,7 +69,6 @@ SIZE_CTL = 100
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
-
 ##### FUNCTIONS #####
 load_ontologies = function(msigdb_dir, protein_impact_file){
     ontologies = list(
@@ -402,7 +401,7 @@ plot_model_properties = function(models, enrichment, indices, spldep_stats){
     plts[["model_prop-selected_vs_event_std"]] = X %>%
         ggviolin(x="is_selected", y="event_std", color=NA, trim=TRUE,
                  fill="is_selected", palette="npg") +
-        geom_boxplot(fill=NA, outlier.size = 0.5) +
+        geom_boxplot(fill=NA, outlier.size = 0.1) +
         stat_compare_means(method="wilcox.test") +
         guides(color="none", fill="none") +
         labs(x="Selected Model", y="Event Std.")
@@ -411,7 +410,7 @@ plot_model_properties = function(models, enrichment, indices, spldep_stats){
     plts[["model_prop-selected_vs_event_length"]] = X %>%
         ggviolin(x="is_selected", y="LE_o", color=NA, trim=TRUE,
                  fill="is_selected", palette="npg") +
-        geom_boxplot(fill=NA, outlier.size = 0.5) +
+        geom_boxplot(fill=NA, outlier.size = 0.1) +
         stat_compare_means(method="wilcox.test") +
         guides(color="none", fill="none") +
         labs(x="Selected Model", y="log10(Event Length)") +
@@ -572,15 +571,16 @@ plot_model_properties = function(models, enrichment, indices, spldep_stats){
         left_join(indices, by=c("EVENT"="index"))
     
     plts[["model_prop-tumorigenesis_vs_indices"]] = X %>% 
-        ggscatter(x="correlation", y="med", alpha=0.5) + 
-        stat_cor(method="spearman") + 
+        ggscatter(x="correlation", y="med", alpha=0.5, size=1) + 
+        stat_cor(method="spearman", label.y.npc = "bottom") + 
         geom_hline(yintercept=0, linetype="dashed") + 
         geom_vline(xintercept=0, linetype="dashed") +
         facet_wrap(~index_name) +
         theme(strip.text.x = element_text(size=6, family="Arial")) + 
         geom_text_repel(aes(label=event_gene),
                         X %>% group_by(index_name) %>% slice_max(abs(correlation)*abs(med), n=5),
-                        size=1, family="Arial")
+                        size=1, family="Arial", segment.size=0.1) +
+        labs(x="Spearman Correlation", y="Median(Spl. Dep.)")
     
     return(plts)
 }
@@ -835,12 +835,12 @@ make_figdata = function(models, rnai_stats, cancer_events,
     )
     
     figdata = list(
-        "datasets_CCLE" = list(
-            "demeter2" = rnai,
-            "gene_tpm" = genexpr,
-            "splicing_psi" = splicing,
-            "splicing_dependency" = spldep
-        ),
+#         "datasets_CCLE" = list(
+#             "demeter2" = rnai,
+#             "gene_tpm" = genexpr,
+#             "splicing_psi" = splicing,
+#             "splicing_dependency" = spldep
+#         ),
         "model_selection" = list(
             "model_summaries"= models,
             "rnai_stats" = rnai_stats,
@@ -894,9 +894,9 @@ save_plots = function(plts, figs_dir){
     
     # model properties
     ## std
-    save_plt(plts, "model_prop-selected_vs_event_std", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "model_prop-selected_vs_event_std", ".pdf", figs_dir, width=4, height=5)
     ## lengths
-    save_plt(plts, "model_prop-selected_vs_event_length", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "model_prop-selected_vs_event_length", ".pdf", figs_dir, width=4, height=5)
     ## protein impact
     save_plt(plts, "model_prop-protein_impact-counts", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_prop-protein_impact-freqs", ".pdf", figs_dir, width=8, height=8)
@@ -905,7 +905,7 @@ save_plots = function(plts, figs_dir){
     ## GSEA
     save_plt(plts, "model_prop-enrichment-hallmarks-dotplot", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_prop-enrichment-hallmarks-cnetplot", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_prop-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=12, height=8)
+    save_plt(plts, "model_prop-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=10.5, height=8)
     save_plt(plts, "model_prop-enrichment-GO_BP-cnetplot", ".pdf", figs_dir, width=20, height=20)
     ## transcriptomic indices
     save_plt(plts, "model_prop-indices-violin", ".pdf", figs_dir, width=6, height=6)
@@ -914,7 +914,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-indices-top_neg", ".pdf", figs_dir, width=10, height=6)
     ## tumorigenesis
     save_plt(plts, "model_prop-tumorigenesis-scatter", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "model_prop-tumorigenesis_vs_indices", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "model_prop-tumorigenesis_vs_indices", ".pdf", figs_dir, width=8, height=5)
     
     # model validation
     save_plt(plts, "model_val-mutation_gene_count", ".pdf", figs_dir, width=8, height=8)
