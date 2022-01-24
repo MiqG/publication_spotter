@@ -56,7 +56,7 @@ RANDOM_SEED = 1234
 # RESULTS_DIR = file.path(ROOT,"results","splicing_dependency_drugs")
 # MODELS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # models_file = file.path(RESULTS_DIR,"files","model_summaries_drug_response-EX.tsv.gz")
-# drug_targets_file = file.path(PREP_DIR,"drug_screens","drug_targets.tsv.gz")
+# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,"figures","model_drug_screens")
 # embedding_file = file.path(RESULTS_DIR,"files","embedded_drug_associations-EX.tsv.gz")
 # estimated_response_file = file.path(RESULTS_DIR,"files","estimated_drug_response_by_drug-EX.tsv.gz")
@@ -299,7 +299,8 @@ plot_associations = function(models, spldep_ccle, drug_screen){
                     values_fn=median) %>% 
         summarize(correl=cor(GDSC1,GDSC2,method="pearson",use="pairwise.complete.obs"))
     plts[["associations-agreement_between"]] = correls %>%
-        gghistogram(x="correl", fill="darkblue", color=NA)
+        gghistogram(x="correl", fill="darkblue", color=NA) +
+        labs(x="Pearson Correlation", y="Count")
     
     # - overlaps with cell lines used to model splicing dependency
     # - overlaps with cell lines used in GDSC1 and GDSC2
@@ -394,26 +395,25 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
         labs(x="Shortest Path Length to Drug Target", y="Combined Raking")
     
     # some indirect associations are better than those with target
-    plts[["rankings-index_vs_paths_known_best"]] = X %>%
+    x = X %>%
         group_by(DRUG_ID) %>%
         filter(any(shortest_path_length==0)) %>%
         ungroup() %>%
-        filter(is_best) %>%
-        ggplot(aes(x=as.factor(shortest_path_length), y=index)) +
-        geom_point(aes(color=DRUG_NAME)) +
-        #geom_violin(color=NA, width=1.2, fill="darkred") + 
-        #geom_boxplot(width=0.1, outlier.color=NA) + 
-        geom_text_repel(aes(label=event_gene), 
-                  X %>%
-                    group_by(DRUG_ID) %>%
-                    filter(any(shortest_path_length==0)) %>%
-                    ungroup() %>%
-                    filter(is_best),
-                  size=1, family="Arial") +
+        filter(is_best)
+    plts[["rankings-index_vs_paths_known_best"]] = x %>%
+        ggbarplot(x="DRUG_NAME", y="index", fill="event_gene", 
+                  color="drug_screen", palette="Dark3",
+                  position=position_dodge(0.9)) + 
+        geom_text(aes(y=2, label=event_gene), x, size=1, family="Arial") +
+        geom_text(aes(label=shortest_path_length), x, size=1, family="Arial",
+                  position=position_dodge(0.9)) +
         geom_hline(yintercept = thresh_targets, linetype="dashed") +
-        theme_pubr() + 
-        labs(x="Shortest Path Length to Drug Target", y="Combined Raking") +
-        yscale("log10", .format=TRUE)
+        yscale("log10", .format=TRUE) +
+        coord_flip() +
+        guides(fill="none") + 
+        color_palette(c("white","black")) +
+        labs(x="Drug", y="Combined Raking", 
+             color="Drug Screen")
     
     # for drugs whose target is not significantly associated,
     # we find events that are best associated
@@ -455,7 +455,7 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
                   position=position_dodge(0.9), color="drug_screen", 
                   palette=get_palette("Dark2",length(unique(x[["DRUG_NAME"]])))) + 
         color_palette(c("black","white")) + 
-        facet_wrap(~shortest_path_length, scales="free_y") +
+        facet_wrap(~shortest_path_length, scales="free") +
         geom_text(aes(y=0.01, label=event_gene), x, size=1, family="Arial") + 
         guides(fill="none") +    
         scale_x_reordered() +
@@ -471,7 +471,7 @@ plot_preds_ic50 = function(clusters, metadata, drug_screen, estimated_response, 
     # show prediction differences between seen and unseen data for a drug
     
     # NUTLIN-3A(-), TANESPIMYCIN, DOCETAXEL
-    drugs_oi = c(1047, 1026, 1007)
+    drugs_oi = c(1047)
     X = drug_screen %>%
         distinct(DRUG_NAME, DRUG_ID, DATASET) %>%
         filter(DRUG_ID%in%drugs_oi) %>%
@@ -494,15 +494,15 @@ plot_preds_ic50 = function(clusters, metadata, drug_screen, estimated_response, 
                max_conc = as.factor(MAX_CONC))
     
     plts = list()
-    plts[["preds_ic50-pred_response"]] = X %>% 
-        ggscatter(x="UMAP0", y="UMAP1", color="log_ic50", alpha=0.5) + 
+    plts[["preds_ic50-real_response"]] = X %>% 
+        ggscatter(x="UMAP0", y="UMAP1", color="log_ic50", alpha=0.5, size=1) + 
         scale_color_gradient2(low="blue",mid="white",high="red") + 
         facet_wrap(~DRUG_NAME) +
         labs(color="Scaled log(IC50)") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     plts[["preds_ic50-unseen"]] = X %>% 
-        ggscatter(x="UMAP0", y="UMAP1", color="in_training_set", alpha=0.5) + 
+        ggscatter(x="UMAP0", y="UMAP1", color="in_training_set", alpha=0.5, size=1) + 
         facet_wrap(~DRUG_NAME) +
         labs(color="In Training Set") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
@@ -513,20 +513,20 @@ plot_preds_ic50 = function(clusters, metadata, drug_screen, estimated_response, 
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
      plts[["preds_ic50-primary_disease"]] = X %>% 
-        ggscatter(x="UMAP0", y="UMAP1", color="primary_disease", alpha=0.5, 
+        ggscatter(x="UMAP0", y="UMAP1", color="primary_disease", alpha=0.5, size=1, 
                   palette=get_palette("Paired", length(unique(X[["primary_disease"]])))) + 
         facet_wrap(~DRUG_NAME) + 
         labs(color="Primary Disease") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     plts[["preds_ic50-drug_screen"]] = X %>% 
-        ggscatter(x="UMAP0", y="UMAP1", color="DATASET", palette="jco", alpha=0.5) + 
+        ggscatter(x="UMAP0", y="UMAP1", color="DATASET", palette="jco", size=1, alpha=0.5) + 
         facet_wrap(~DRUG_NAME) +
         labs(color="Drug Screen") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     plts[["preds_ic50-max_conc"]] = X %>% 
-        ggscatter(x="UMAP0", y="UMAP1", color="max_conc", alpha=0.5) + 
+        ggscatter(x="UMAP0", y="UMAP1", color="max_conc", alpha=0.5, size=1) + 
         facet_wrap(~DRUG_NAME) +
         labs(color="Max. Conc.") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
@@ -690,27 +690,27 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "associations-top_spldep_counts", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "associations-agreement_within", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "associations-agreement_between", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "associations-overlaps_screens-upset", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "associations-overlaps_screens-upset", ".pdf", figs_dir, width=8, height=8)
     
     # rankings
     save_plt(plts, "rankings-index_vs_known_targets", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "rankings-index_vs_paths_all", ".pdf", figs_dir, width=6, height=5)
-    save_plt(plts, "rankings-index_vs_paths_known_best", ".pdf", figs_dir, width=6, height=5)
+    save_plt(plts, "rankings-index_vs_paths_known_best", ".pdf", figs_dir, width=5, height=7)
     save_plt(plts, "rankings-index_vs_paths_unknown_best", ".pdf", figs_dir, width=6, height=5)
-    save_plt(plts, "rankings-index_vs_paths_unknown_top", ".pdf", figs_dir, width=14, height=8)
+    save_plt(plts, "rankings-index_vs_paths_unknown_top", ".pdf", figs_dir, width=14, height=10)
     
     # predictions
-    save_plt(plts, "preds_ic50-pred_response", ".pdf", figs_dir, width=14, height=5)
-    save_plt(plts, "preds_ic50-unseen", ".pdf", figs_dir, width=14, height=5)
-    save_plt(plts, "preds_ic50-leiden", ".pdf", figs_dir, width=14, height=5)
-    save_plt(plts, "preds_ic50-primary_disease", ".pdf", figs_dir, width=14, height=5)
-    save_plt(plts, "preds_ic50-drug_screen", ".pdf", figs_dir, width=14, height=5)
-    save_plt(plts, "preds_ic50-max_conc", ".pdf", figs_dir, width=14, height=5)
+    n_ = 1
+    save_plt(plts, "preds_ic50-real_response", ".pdf", figs_dir, width=4*n_, height=6)
+    save_plt(plts, "preds_ic50-unseen", ".pdf", figs_dir, width=4*n_, height=5.5)
+    save_plt(plts, "preds_ic50-leiden", ".pdf", figs_dir, width=4*n_, height=7)
+    save_plt(plts, "preds_ic50-primary_disease", ".pdf", figs_dir, width=4*n_, height=8.5)
+    save_plt(plts, "preds_ic50-drug_screen", ".pdf", figs_dir, width=4*n_, height=5.5)
+    save_plt(plts, "preds_ic50-max_conc", ".pdf", figs_dir, width=4*n_, height=5.5)
     
     # MoA
     save_plt(plts, "moa_clusters-leiden-umap", ".pdf", figs_dir, width=10, height=10)
-    save_plt(plts, "moa_clusters-leiden-enrichment-hallmarks", ".pdf", figs_dir, width=8, height=6)
-    save_plt(plts, "moa_clusters-leiden-enrichment-GO_BP", ".pdf", figs_dir, width=15, height=14)
+    save_plt(plts, "moa_clusters-leiden-enrichment-GO_BP", ".pdf", figs_dir, width=18, height=15)
     
     # drug recommendations
     save_plt(plts, "drug_rec-spearmans", ".pdf", figs_dir, width=5, height=5)
@@ -781,6 +781,7 @@ main = function(){
         return(res)
     }, simplify=FALSE)
     enrichment = get_enrichment_result(enrichment)
+    enrichment = enrichment[sapply(enrichment,nrow)>0]
     
     # make plots
     plts = make_plots(models, spldep_ccle, drug_screen,

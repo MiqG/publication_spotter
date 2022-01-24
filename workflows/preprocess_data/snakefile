@@ -59,66 +59,66 @@ for c in CANCER_TYPES:
 ##### RULES #####
 rule all:
     input:
-        # preprocess CCLE
-        ## metadata
-        os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
-        ## PSI
-        expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        ## gene expression
-        os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-
-        # preprocess DepMap data
-        expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=['demeter2']),
-
-        # impute CCLE PSI matrix
-        expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-
-        # impute RNAi matrix
-        os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz'),
-
-        # impute TCGA PSI matrices
-        expand(os.path.join(PREP_DIR,'event_psi_imputed','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
-
-        # compute transcriptome indices
-        os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
-
-        # count mutation frequency on genes
-        os.path.join(PREP_DIR,'gene_mutation_freq','CCLE.tsv.gz'),
-
-        # count mutation frequency on exons
-        os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv'),
-        expand(os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
-        expand(os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
-        
-        # Thomas 2020
-        os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
-
-        # merge metadata TCGA
-        os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
-
-        # Moiso 2021
-        os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz'),
-        
-        # split GDSC platforms
-        os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
-        os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz'),
-        
-        # preprocess TCGA
-        ## harmonize names drug treatments
-        expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
-        os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz'),
-        
-        ## clinically relevant subtypes
-        expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES),
-        
-        # merge metadata TCGA
-        os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz'),
-        
-        # preprocess STRINGDB
-        os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        
-        # preprocess GDSC drug targets
         os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
+#         # preprocess CCLE
+#         ## metadata
+#         os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+#         ## PSI
+#         expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+#         ## gene expression
+#         os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+
+#         # preprocess DepMap data
+#         expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=['demeter2']),
+
+#         # impute CCLE PSI matrix
+#         expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+
+#         # impute RNAi matrix
+#         os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz'),
+
+#         # impute TCGA PSI matrices
+#         expand(os.path.join(PREP_DIR,'event_psi_imputed','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
+
+#         # compute transcriptome indices
+#         os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
+
+#         # count mutation frequency on genes
+#         os.path.join(PREP_DIR,'gene_mutation_freq','CCLE.tsv.gz'),
+
+#         # count mutation frequency on exons
+#         os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv'),
+#         expand(os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
+#         expand(os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
+        
+#         # Thomas 2020
+#         os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
+
+#         # merge metadata TCGA
+#         os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
+
+#         # Moiso 2021
+#         os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz'),
+        
+#         # split GDSC platforms
+#         os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
+#         os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz'),
+        
+#         # preprocess TCGA
+#         ## harmonize names drug treatments
+#         expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
+#         os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz'),
+        
+#         ## clinically relevant subtypes
+#         expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES),
+        
+#         # merge metadata TCGA
+#         os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz'),
+        
+#         # preprocess STRINGDB
+#         os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        
+#         # preprocess GDSC drug targets
         
         
 rule prepare_metadata_ccle:
@@ -525,20 +525,20 @@ rule preprocess_gdsc_targets:
     run:
         import pandas as pd
         raw_drug_targets = pd.read_csv(input.raw_drug_targets)
-        gonc = pd.read_excel(input.Goncalves2020, sheet_name="Drug sheet")
+        # gonc = pd.read_excel(input.Goncalves2020, sheet_name="Drug sheet")
         corrector = pd.read_csv(input.symbol_checker, skiprows=1)
         
         # prep gonc
-        cols_oi = ["DRUG_ID","DRUG_NAME","SYNONYMS","TARGET","TARGET_PATHWAY"]
-        gonc = gonc.rename(columns={
-            "Drug ID": "DRUG_ID",
-            "Name": "DRUG_NAME",
-            "Synonyms": "SYNONYMS",
-            "Gene Target": "TARGET",
-            "Pathway": "TARGET_PATHWAY"
-        })[cols_oi]
-        gonc["DRUG_NAME"] = gonc["DRUG_NAME"].str.upper()
-        gonc["ORIGIN"] = "Gonçalves 2020"
+#         cols_oi = ["DRUG_ID","DRUG_NAME","SYNONYMS","TARGET","TARGET_PATHWAY"]
+#         gonc = gonc.rename(columns={
+#             "Drug ID": "DRUG_ID",
+#             "Name": "DRUG_NAME",
+#             "Synonyms": "SYNONYMS",
+#             "Gene Target": "TARGET",
+#             "Pathway": "TARGET_PATHWAY"
+#         })[cols_oi]
+#         gonc["DRUG_NAME"] = gonc["DRUG_NAME"].str.upper()
+#         gonc["ORIGIN"] = "Gonçalves 2020"
         
         # prep raw
         raw_drug_targets["TARGET"] = raw_drug_targets["TARGET"].str.replace(",",";")
@@ -547,21 +547,21 @@ rule preprocess_gdsc_targets:
         raw_drug_targets = raw_drug_targets.drop(columns="SCREENING_SITE")
         
         # if available in Goncalves, keep it
-        avail_drug_ids = set(gonc["DRUG_ID"]).intersection(raw_drug_targets["DRUG_ID"])
-        drug_targets = {}
-        for drug_id in raw_drug_targets["DRUG_ID"].unique():
-            drug_name = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id,"DRUG_NAME"].values
-            alternative = (gonc["DRUG_NAME"].isin(drug_name)) &\
-                          (~gonc["DRUG_ID"].isin(avail_drug_ids))
+#         avail_drug_ids = set(gonc["DRUG_ID"]).intersection(raw_drug_targets["DRUG_ID"])
+#         drug_targets = {}
+#         for drug_id in raw_drug_targets["DRUG_ID"].unique():
+#             drug_name = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id,"DRUG_NAME"].values
+#             alternative = (gonc["DRUG_NAME"].isin(drug_name)) &\
+#                           (~gonc["DRUG_ID"].isin(avail_drug_ids))
             
-            if drug_id in gonc["DRUG_ID"]:
-                drug_targets[drug_id] = gonc.loc[gonc["DRUG_ID"]==drug_id]
-            elif any(alternative):
-                drug_targets[drug_id] = gonc.loc[alternative]
-            else:
-                drug_targets[drug_id] = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id]
+#             if drug_id in gonc["DRUG_ID"]:
+#                 drug_targets[drug_id] = gonc.loc[gonc["DRUG_ID"]==drug_id]
+#             elif any(alternative):
+#                 drug_targets[drug_id] = gonc.loc[alternative]
+#             else:
+#                 drug_targets[drug_id] = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id]
                 
-        drug_targets = pd.concat(drug_targets)
+        drug_targets = raw_drug_targets.copy()
         
         # prep corrector dictionary
         corrector = corrector[

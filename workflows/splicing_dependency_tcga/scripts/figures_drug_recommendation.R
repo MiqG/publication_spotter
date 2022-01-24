@@ -126,10 +126,11 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     # combinations recommended drug cancer not tested?
     # patients with triple negative breast cancer were not given the drug 
     # we recommended, what would we recommend to them?
-    plts[["drug_rec-drugs_ranking_ratios-KIRC_given"]] = X %>% 
-        filter(cancer_type=="KIRC") %>% 
+    x = X %>% filter(cancer_type=="KIRC")
+    plts[["drug_rec-drugs_ranking_ratios-KIRC_given"]] = x %>% 
         ggboxplot(x="DRUG_NAME", y="ranking_ratio", 
-                     color="DRUG_NAME", palette="Dark2") + 
+                  color="DRUG_NAME", 
+                  palette=get_palette("Dark2",length(unique(x[["DRUG_NAME"]])))) + 
         labs(x="Drug", y="Ranking Ratio") + 
         guides(color="none") + 
         coord_flip()
@@ -191,8 +192,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-drugs_ranking_ratios', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=6, height=5)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=6, height=5)
-    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=6, height=5)
-    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=6, height=5)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=5, height=5)
 }
 
 

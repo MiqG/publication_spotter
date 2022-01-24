@@ -12,6 +12,8 @@
 # - clustering splicing dependency profiles across all cancers
 # - one-vs-all differential analysis for each of the new clusters, 
 #   specific vulnerabilities
+# - find a cluster with many different cancer types and find their common
+#   vulnerability; example with a cancer type with few patients.
 
 require(tidyverse)
 require(ggpubr)
