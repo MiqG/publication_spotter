@@ -8,13 +8,16 @@
 # 
 # Outline
 # -------
+# Drug Recommendations
+# - combine partial predictions of drug IC50 into one
+# - would we recommend drugs given to patients? By cancer type and subtype.
+# - for those cases in which we would give another drug, which would it be?
 
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
-require(survival)
-require(gtools)
 require(extrafont)
+require(writexl)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -27,8 +30,6 @@ THRESH_LR_FDR = 0.1
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RAW_DIR = file.path(ROOT,'data','raw')
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
-# models_file = file.path(ROOT,'results','splicing_dependency_drugs','files','model_summaries_drug_response-EX.tsv.gz')
-# spldep_file = file.path(RESULTS_DIR,'files','LGG','splicing_dependency-EX','mean.tsv.gz')
 # drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 # metadata_file = file.path(PREP_DIR,'metadata','PANCAN.tsv.gz')
 # drug_treatments_file = file.path(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
@@ -44,6 +45,7 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     ## treatments for each patient across cancer types
     treatments_clean = drug_treatments %>% 
         distinct(bcr_patient_barcode, cancer_type, DRUG_NAME)
+    avail_drugs = treatments_clean %>% pull(DRUG_NAME) %>% unique()
     
     ## ranking predicted drug responses per sample
     drug_recs = drug_response %>%
@@ -61,9 +63,10 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         drop_na() %>%
         distinct(drug_screen, cancer_type, sample, ranking, bcr_patient_barcode,
                  ranking_ratio, predicted_ic50, DRUG_NAME) %>% 
-        group_by(cancer_type, sample, DRUG_NAME) %>% 
+        group_by(cancer_type, sample) %>% 
         # only consider the best case scenario
         slice_min(order_by=ranking_ratio, n=1) %>%
+        ungroup() %>%
         left_join(metadata %>% distinct(sampleID, cancer_subtype), 
                   by=c("sample"="sampleID"))
     
@@ -120,73 +123,27 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         labs(x="Cancer Subtype", y="Ranking Ratio") + 
         coord_flip()
     
-    ## Does the drug recommendation ranking associate with patient survival?
-    x = X %>% 
-        ungroup() %>%
-        left_join(metadata %>% distinct(sampleID, PFI, PFI.time),
-                  by=c("sample"="sampleID"))
-    
-    result = lapply(unique(X[["cancer_type"]]), function(cancer_oi){
-        test = coxph(Surv(PFI.time, PFI) ~ ranking_ratio, 
-                     data=x %>% filter(cancer_type==cancer_oi))
-        test = summary(test)$coefficients
-        df = data.frame(
-            cancer_type = cancer_oi,
-            cox_coef = test["ranking_ratio","coef"],
-            cox_std = test["ranking_ratio","se(coef)"],
-            cox_zscore = test["ranking_ratio","z"],
-            cox_pvalue = test["ranking_ratio","Pr(>|z|)"]
-        )
-        return(df)
-    })
-    result = do.call(rbind, result)
-    
-    plts[['drug_rec-drug_ranking_coxph']] = result %>% 
-        mutate(lab_pvals = stars.pval(cox_pvalue)) %>%
-        ggplot(aes(x=cancer_type, y=cox_coef, color=cancer_type)) + 
-        geom_point(size=0.5) + 
-        geom_errorbar(aes(ymin=cox_coef - cox_std, ymax=cox_coef + cox_std), size=0.25) + 
-        geom_text(aes(y=2.5, label=lab_pvals), color="black", size=2, family='Arial') +
-        theme_pubr() + 
-        geom_hline(yintercept=0, linetype='dashed') + 
-        color_palette(get_palette("Paired", length(unique(X[["cancer_type"]])))) + 
-        guides(color="none") + 
-        labs(x="Cancer Type", y="Cox Coefficient") +
-        coord_flip()
-
-    # are ranking ratios associated with the order of the treatment?
-    x = treatments_clean %>%
-        left_join(drug_recs,
-            by=c('bcr_patient_barcode','cancer_type','DRUG_NAME')) %>%
-        drop_na() %>%
-        distinct(drug_screen, cancer_type, sample, ranking, bcr_patient_barcode,
-                 ranking_ratio, predicted_ic50, DRUG_NAME) %>% 
-        left_join(metadata %>% distinct(sampleID, cancer_subtype), 
-                  by=c("sample"="sampleID"))
-    
-    treatments_prep = drug_treatments %>% 
-        distinct(bcr_patient_barcode, cancer_type, 
-                 DRUG_NAME, pharmaceutical_tx_started_days_to) %>%
-        # sort by how late the treatment started
-        drop_na() %>%
-        arrange(cancer_type, bcr_patient_barcode, 
-                pharmaceutical_tx_started_days_to) %>%
-        # if a treatment was given more than once, keep the earliest it was given
-        group_by(bcr_patient_barcode, DRUG_NAME) %>%
-        slice_min(pharmaceutical_tx_started_days_to, n=1) %>%
-        ungroup() %>%
-        # for each patient, in which order was the drug given?
-        group_by(cancer_type, bcr_patient_barcode) %>%
-        mutate(tx_order = row_number(),
-               tx_order_ratio = tx_order / n(),
-               tx_mult = n()>1,
-               tx_n = n())
-    x = X %>%
-        ungroup() %>%
-        left_join(treatments_prep, by=c("bcr_patient_barcode", "DRUG_NAME", "cancer_type"))
-    x %>% filter(cancer_type=="BRCA") %>% ggscatter(x="tx_order", y="ranking_ratio", color="DRUG_NAME", size="tx_n") + stat_cor(method="spearman")# + facet_wrap(~cancer_subtype)
-    
     # combinations recommended drug cancer not tested?
+    # patients with triple negative breast cancer were not given the drug 
+    # we recommended, what would we recommend to them?
+    plts[["drug_rec-drugs_ranking_ratios-KIRC_given"]] = X %>% 
+        filter(cancer_type=="KIRC") %>% 
+        ggboxplot(x="DRUG_NAME", y="ranking_ratio", 
+                     color="DRUG_NAME", palette="Dark2") + 
+        labs(x="Drug", y="Ranking Ratio") + 
+        guides(color="none") + 
+        coord_flip()
+    
+    samples_oi = X %>% filter(cancer_type=="KIRC") %>% pull(sample)
+    plts[["drug_rec-drugs_ranking_ratios-KIRC_best"]] = drug_recs %>% 
+        filter(sample%in%samples_oi & DRUG_NAME%in%avail_drugs) %>% 
+        group_by(sample) %>% 
+        slice_min(ranking_ratio, n=1) %>%
+        ggboxplot(x="DRUG_NAME", y="ranking_ratio", 
+                  color="DRUG_NAME", palette="Dark2") + 
+        labs(x="Drug", y="Ranking Ratio") + 
+        guides(color="none") + 
+        coord_flip()
     
     return(plts)
 }
@@ -204,6 +161,7 @@ make_plots = function(drug_treatments, drug_response, metadata){
 save_plt = function(plts, plt_name, extension='.pdf', 
                     directory='', dpi=350, format=TRUE,
                     width = par("din")[1], height = par("din")[2]){
+    print(plt_name)
     plt = plts[[plt_name]]
     if (format){
         plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
@@ -215,28 +173,40 @@ save_plt = function(plts, plt_name, extension='.pdf',
 }
 
 
+make_figdata = function(drug_treatments, drug_response, metadata){
+    figdata = list(
+        "drug_recommendation" = list(
+            "drug_treatments" = drug_treatments,
+            "drug_response" = drug_response,
+            "metadata" = metadata
+        )
+    )
+    return(figdata)
+}
+
+
 save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-sample_counts_by_cancer', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-sample_counts_by_cancer_and_treatment', '.pdf', figs_dir, width=11, height=12)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=6, height=5)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=6, height=5)
-    save_plt(plts, 'drug_rec-drug_ranking_coxph', '.pdf', figs_dir, width=5, height=5)
-}
-
-
-make_figdata = function(){
-    figdata = list(
-    )
-    return(figdata)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=6, height=5)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=6, height=5)
 }
 
 
 save_figdata = function(figdata, dir){
     lapply(names(figdata), function(x){
-        filename = file.path(dir,'figdata',paste0(x,'.xlsx'))
-        dir.create(dirname(filename), recursive=TRUE)
-        write_xlsx(figdata[[x]], filename)
+        d = file.path(dir,'figdata',x)
+        dir.create(d, recursive=TRUE)
+        lapply(names(figdata[[x]]), function(nm){
+            df = figdata[[x]][[nm]]
+            filename = file.path(d, paste0(nm,'.tsv.gz'))
+            write_tsv(df, filename)
+            
+            print(filename)
+        })
     })
 }
 
@@ -249,9 +219,6 @@ main = function(){
     dir.create(figs_dir, recursive = TRUE)
     
     # load
-#     models = read_tsv(models_file) %>% 
-#         mutate(event_gene = paste0(EVENT,'_',GENE),
-#                event_type = gsub('Hsa','',gsub("[^a-zA-Z]", "",EVENT)))
     drug_targets = read_tsv(drug_targets_file) %>% 
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
         dplyr::select(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY) %>%
@@ -267,17 +234,15 @@ main = function(){
     metadata = read_tsv(metadata_file) %>%
         left_join(metadata_subtypes, by= c("sampleID", "cancer", "sample_type"))
     
-#     spldep = read_tsv(spldep_file)
-    
     # make plots
     plts = make_plots(drug_treatments, drug_response, metadata)
     
     # make figdata
-    # figdata = make_figdata(results_enrich)
+    figdata = make_figdata(drug_treatments, drug_response, metadata)
     
     # save
     save_plots(plts, figs_dir)
-    # save_figdata(figdata, figs_dir)
+    save_figdata(figdata, figs_dir)
 }
 
 

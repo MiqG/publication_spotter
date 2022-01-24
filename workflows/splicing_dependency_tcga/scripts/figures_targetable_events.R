@@ -8,6 +8,13 @@
 # 
 # Outline
 # -------
+# Targetable events
+# - find vulnerable exons that are differentially spliced in tumor samples
+# - validate that low-variant exons in CCLE cannot be differentially spliced
+# - validate how splicing dependencies vary between tissues in CCLE and TCGA
+#
+# Effect of tumor microenvironment
+# - how ranges of splicing dependencies change in tumors compared with CCLE
 
 require(tidyverse)
 require(ggpubr)
@@ -351,6 +358,7 @@ make_figdata = function(diff_result_sample,
 save_plt = function(plts, plt_name, extension='.pdf', 
                     directory='', dpi=350, format=TRUE,
                     width = par("din")[1], height = par("din")[2]){
+    print(plt_name)
     plt = plts[[plt_name]]
     if (format){
         plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
@@ -396,9 +404,15 @@ save_plots = function(plts, figs_dir){
 
 save_figdata = function(figdata, dir){
     lapply(names(figdata), function(x){
-        filename = file.path(dir,"figdata",paste0(x,".xlsx"))
-        dir.create(dirname(filename), recursive=TRUE)
-        write_xlsx(figdata[[x]], filename)
+        d = file.path(dir,'figdata',x)
+        dir.create(d, recursive=TRUE)
+        lapply(names(figdata[[x]]), function(nm){
+            df = figdata[[x]][[nm]]
+            filename = file.path(d, paste0(nm,'.tsv.gz'))
+            write_tsv(df, filename)
+            
+            print(filename)
+        })
     })
 }
 
