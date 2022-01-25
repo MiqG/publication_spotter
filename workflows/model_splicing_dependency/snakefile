@@ -60,10 +60,10 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         ## compute delta PSI
-        expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # compute normalized splicing dependency
-        # expand(os.path.join(RESULTS_DIR,'files','ENCORE','norm_spldep-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','norm_spldep-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -382,7 +382,7 @@ rule delta_psi_encore:
         delta_psi = pd.DataFrame(delta_psi)
         
         # save
-        delta_psi.reset_index().to_csv(output.psi, sep="\t", index=False, compression="gzip")
+        delta_psi.reset_index().to_csv(output.delta_psi, sep="\t", index=False, compression="gzip")
         
         
 rule normalized_splicing_dependency:
@@ -398,7 +398,7 @@ rule normalized_splicing_dependency:
         # load
         metadata = pd.read_table(input.metadata)
         spldep = pd.read_table(input.spldep, index_col=0)
-        delta_psi = pd.read_table(input.spldep, index_col=0)
+        delta_psi = pd.read_table(input.delta_psi, index_col=0)
         
         # compute ratio spldep/dpsi for the corresponding controls of each condition
         norm_spldep = {}
@@ -414,10 +414,8 @@ rule normalized_splicing_dependency:
             ctls_spldep = spldep[ctls].mean(axis=1)
             
             # normalize splicing dependency by delta psi
-            nspldep = ctls_spldep / dpsi
-            
-            norm_spldep.append(nspldep)
-            
+            norm_spldep[sample_oi] = ctls_spldep / dpsi
+                        
         norm_spldep = pd.DataFrame(norm_spldep)
         
         # save
