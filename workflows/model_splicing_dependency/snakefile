@@ -55,6 +55,16 @@ rule all:
         # Associations
         expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
+        # ENCORE
+        ## compute splicing dependencies
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
+        
+        ## compute delta PSI
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        
+        # compute normalized splicing dependency
+        # expand(os.path.join(RESULTS_DIR,'files','ENCORE','norm_spldep-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
         #os.path.join(RESULTS_DIR,'figures','validation_crispr'),
@@ -313,3 +323,103 @@ rule correlate_transcriptome_indices_ccle:
                         --padj_method={params.padj_method} \
                         --output_file={output}
         """
+
+        
+rule compute_splicing_dependency_encore:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','ENCORE-{event_type}.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
+        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}'))
+    threads: 15
+    resources:
+        runtime = 86400, # seconds = 24h = 1 day
+        memory = 30
+    params:
+        script_dir = TS_DIR,
+        log_transform = True
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --n_jobs={threads} \
+                    --log_transform={params.log_transform}
+        """
+        
+        
+rule delta_psi_encore:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        psi = os.path.join(PREP_DIR,'event_psi','ENCORE-{event_type}.tsv.gz')
+    output:
+        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz')
+    run:
+        import pandas as pd
+        import numpy as np
+        
+        metadata = pd.read_table(input.metadata)
+        psi = pd.read_table(input.psi, index_col=0)
+        
+        # delta PSI as the difference between conditions and the mean of the conditions
+        delta_psi = {}
+        for sample_oi in metadata["sampleID"]:
+            # get the controls of the sample
+            ctls = metadata.loc[metadata["sampleID"]==sample_oi, "control_samples"].values[0]
+            
+            # controls will be np.nan
+            if isinstance(ctls,str):
+                ctls = ctls.split(",")
+                dpsi = psi[sample_oi] - psi[ctls].mean(axis=1)
+                delta_psi[sample_oi] = dpsi
+        
+        delta_psi = pd.DataFrame(delta_psi)
+        
+        # save
+        delta_psi.reset_index().to_csv(output.psi, sep="\t", index=False, compression="gzip")
+        
+        
+rule normalized_splicing_dependency:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        spldep = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}','mean.tsv.gz'),
+        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz')
+    output:
+        norm_spldep = os.path.join(RESULTS_DIR,'files','ENCORE','norm_spldep-{event_type}.tsv.gz')
+    run:
+        import pandas as pd
+        
+        # load
+        metadata = pd.read_table(input.metadata)
+        spldep = pd.read_table(input.spldep, index_col=0)
+        delta_psi = pd.read_table(input.spldep, index_col=0)
+        
+        # compute ratio spldep/dpsi for the corresponding controls of each condition
+        norm_spldep = {}
+        for sample_oi in delta_psi.columns:
+            # get delta psi
+            dpsi = delta_psi[sample_oi]
+            
+            # get the controls of the sample
+            ctls = metadata.loc[metadata["sampleID"]==sample_oi, "control_samples"].values[0]
+            ctls = ctls.split(",")
+            
+            # get the average splicing dependency of the controls
+            ctls_spldep = spldep[ctls].mean(axis=1)
+            
+            # normalize splicing dependency by delta psi
+            nspldep = ctls_spldep / dpsi
+            
+            norm_spldep.append(nspldep)
+            
+        norm_spldep = pd.DataFrame(norm_spldep)
+        
+        # save
+        norm_spldep.reset_index()\
+                   .to_csv(output.norm_spldep, sep="\t", index=False, compression="gzip")
