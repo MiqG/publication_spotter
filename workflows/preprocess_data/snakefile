@@ -41,6 +41,8 @@ CANCER_TYPES = [
     'UCS'
 ]
 
+SAVE_PARAMS = {'sep':'\t', 'index':False, 'compression':'gzip'}
+
 DEPMAP_RAW = {
     'demeter2': os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
     #'genexpr_tpm': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
@@ -59,67 +61,74 @@ for c in CANCER_TYPES:
 ##### RULES #####
 rule all:
     input:
-        os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
-#         # preprocess CCLE
-#         ## metadata
-#         os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
-#         ## PSI
-#         expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-#         ## gene expression
-#         os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz'),
+        # # preprocess CCLE
+        # ## metadata
+        # os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+        # ## PSI
+        # expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # ## gene expression
+        # os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
 
-#         # preprocess DepMap data
-#         expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=['demeter2']),
+        # # preprocess DepMap data
+        # expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=['demeter2']),
 
-#         # impute CCLE PSI matrix
-#         expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # # impute CCLE PSI matrix
+        # expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
 
-#         # impute RNAi matrix
-#         os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz'),
+        # # impute RNAi matrix
+        # os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz'),
 
-#         # impute TCGA PSI matrices
-#         expand(os.path.join(PREP_DIR,'event_psi_imputed','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
+        # # impute TCGA PSI matrices
+        # expand(os.path.join(PREP_DIR,'event_psi_imputed','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
 
-#         # compute transcriptome indices
-#         os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
+        # # compute transcriptome indices
+        # os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz'),
 
-#         # count mutation frequency on genes
-#         os.path.join(PREP_DIR,'gene_mutation_freq','CCLE.tsv.gz'),
+        # # count mutation frequency on genes
+        # os.path.join(PREP_DIR,'gene_mutation_freq','CCLE.tsv.gz'),
 
-#         # count mutation frequency on exons
-#         os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv'),
-#         expand(os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
-#         expand(os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
+        # # count mutation frequency on exons
+        # os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv'),
+        # expand(os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
+        # expand(os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
+
+        # # Thomas 2020
+        # os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
+
+        # # merge metadata TCGA
+        # os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
+
+        # # Moiso 2021
+        # os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz'),
+
+        # # split GDSC platforms
+        # os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
+        # os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz'),
+
+        # # preprocess TCGA
+        # ## harmonize names drug treatments
+        # expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
+        # os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz'),
+
+        # ## clinically relevant subtypes
+        # expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES),
+
+        # # merge metadata TCGA
+        # os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz'),
+
+        # # preprocess STRINGDB
+        # os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+
+        # # preprocess GDSC drug targets
         
-#         # Thomas 2020
-#         os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
-
-#         # merge metadata TCGA
-#         os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
-
-#         # Moiso 2021
-#         os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz'),
-        
-#         # split GDSC platforms
-#         os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
-#         os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz'),
-        
-#         # preprocess TCGA
-#         ## harmonize names drug treatments
-#         expand(os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
-#         os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz'),
-        
-#         ## clinically relevant subtypes
-#         expand(os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv'), cancer=CANCER_TYPES),
-        
-#         # merge metadata TCGA
-#         os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz'),
-        
-#         # preprocess STRINGDB
-#         os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        
-#         # preprocess GDSC drug targets
-        
+        # preprocess ENCORE
+        os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','ENCORE-EX.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','ENCORE-ALTA.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','ENCORE-ALTD.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','ENCORE-INT.tsv.gz'),
+        os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz')
         
 rule prepare_metadata_ccle:
     input:
@@ -583,3 +592,110 @@ rule preprocess_gdsc_targets:
         drug_targets.to_csv(output[0], index=False, sep="\t", compression="gzip")
         
         print("Done!")
+        
+        
+rule preprocess_encore:
+    input:
+        metadata = os.path.join(RAW_DIR,'ENCODE','ENCORE','metadata','ENCORE.tsv'),
+        psi = os.path.join(RAW_DIR,'ENCODE','ENCORE','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'ENCODE','ENCORE','vast_out','TPM-hg38-1097.tab.gz')
+    output:
+        metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        psi_EX = os.path.join(PREP_DIR,'event_psi','ENCORE-EX.tsv.gz'),
+        psi_ALTA = os.path.join(PREP_DIR,'event_psi','ENCORE-ALTA.tsv.gz'),
+        psi_ALTD = os.path.join(PREP_DIR,'event_psi','ENCORE-ALTD.tsv.gz'),
+        psi_INT = os.path.join(PREP_DIR,'event_psi','ENCORE-INT.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz')
+    run:
+        import gc
+        import pandas as pd
+        import numpy as np
+        
+        # load
+        print("Loading data...")
+        metadata = pd.read_table(input.metadata)
+        psi = pd.read_table(input.psi, index_col=0)
+        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
+        
+        gc.collect()
+        
+        # metadata
+        print("Processing metadata...")
+        ## sample names
+        metadata["sampleID"] = metadata["dbxrefs"].str.replace("SRA:","")
+        ## cell lines info
+        metadata["cell_line"] = metadata["Biosample term name"]
+        depmapids = {"K562":"ACH-000551", "HepG2":"ACH-000739"}
+        metadata["DepMap_ID"] = [depmapids[c] for c in metadata["cell_line"]]
+        ## KD info
+        metadata["KD"] = metadata["Experiment target"].str.replace("-human","")
+        ## experiment
+        metadata["experiment"] = metadata["Experiment accession"]
+        
+        ## controls
+        ctls_exps = []
+        ctls_samps = []
+        for idx, row in metadata.iterrows():
+            if isinstance(row["Controlled by"], str):
+                # get file accession controls
+                accs = row["Controlled by"]\
+                        .replace("files","")\
+                        .replace("/","")\
+                        .replace(" ","")\
+                        .split(",")
+                idx = metadata["File accession"].isin(accs)
+
+                # get experiment accession
+                exps = metadata.loc[idx, "experiment"].unique()
+                
+                # get sample accession
+                samps = metadata.loc[idx, "sampleID"].unique()
+                
+                # save
+                exps = ','.join(np.sort(exps))
+                samps = ','.join(np.sort(samps))
+                ctls_exps.append(exps)
+                ctls_samps.append(samps)
+            else:
+                ctls_exps.append(np.nan)
+                ctls_samps.append(np.nan)
+        metadata["control_experiment"] = ctls_exps
+        metadata["control_samples"] = ctls_samps
+        
+        cols_oi = ['sampleID','cell_line', 'DepMap_ID', 'KD', 'experiment', 
+                   'control_experiment', 'control_samples']
+        metadata = metadata[cols_oi].drop_duplicates()
+        
+        # PSI
+        print("Processing PSI matrix...")
+        ## drop empty rows
+        is_na = psi.isnull()
+        non_missing = is_na.shape[1] - is_na.sum(1)
+        to_keep = non_missing >= 1
+        psi = psi.loc[to_keep]
+        
+        ## remove vast-tools' suffix
+        psi.columns = [c.replace('_1','') for c in psi.columns]
+        
+        ## split by event type
+        event_types = ["EX","ALTA","ALTD","INT"]
+        psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}
+        
+        # TPM
+        print("Processing TPM matrix...")
+        ## remove vast-tools' suffix
+        genexpr.columns = [c.replace('_1','') for c in genexpr.columns]
+        
+        # save
+        print("Saving...")
+        ## metadata
+        metadata.to_csv(output.metadata, **SAVE_PARAMS)
+        
+        ## PSIs
+        psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
+        psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
+        psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
+        psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
+        
+        ## TPMs
+        genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)
