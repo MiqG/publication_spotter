@@ -631,6 +631,8 @@ rule preprocess_encore:
         metadata["KD"] = metadata["Experiment target"].str.replace("-human","")
         ## experiment
         metadata["experiment"] = metadata["Experiment accession"]
+        ## replicate
+        metadata["replicate"] = metadata["Biological replicate(s)"]
         
         ## controls
         ctls_exps = []
@@ -663,7 +665,7 @@ rule preprocess_encore:
         metadata["control_samples"] = ctls_samps
         
         cols_oi = ['sampleID','cell_line', 'DepMap_ID', 'KD', 'experiment', 
-                   'control_experiment', 'control_samples']
+                   'control_experiment', 'control_samples','replicate']
         metadata = metadata[cols_oi].drop_duplicates()
         
         # PSI
