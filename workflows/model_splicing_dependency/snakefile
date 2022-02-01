@@ -62,8 +62,15 @@ rule all:
         ## compute delta PSI
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
+        ## create ontology from KDs
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','kd_gene_sets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
         # compute normalized splicing dependency
-        expand(os.path.join(RESULTS_DIR,'files','ENCORE','norm_spldep-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # Exon CRISPR screen (Thomas 2020)
+        ## compute splicing dependencies
+        expand(os.path.join(RESULTS_DIR,'files','Thomas2020','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -337,11 +344,10 @@ rule compute_splicing_dependency_encore:
         runtime = 86400, # seconds = 24h = 1 day
         memory = 30
     params:
-        script_dir = TS_DIR,
-        log_transform = True
+        script_dir = TS_DIR
     shell:
         """
-        nice python {params.script_dir}/target_spotter spldep_predict \
+        python {params.script_dir}/target_spotter spldep_predict \
                     --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
@@ -349,8 +355,7 @@ rule compute_splicing_dependency_encore:
                     --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
                     --output_dir={output} \
                     --n_jobs={threads} \
-                    --n_jobs={threads} \
-                    --log_transform={params.log_transform}
+                    --log_transform
         """
         
         
@@ -384,14 +389,54 @@ rule delta_psi_encore:
         # save
         delta_psi.reset_index().to_csv(output.delta_psi, sep="\t", index=False, compression="gzip")
         
+
+rule make_ontology:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz')
+    output:
+        ontology = os.path.join(RESULTS_DIR,'files','ENCORE','kd_gene_sets-{event_type}.tsv.gz')
+    params:
+        thresh = 10
+    run:
+        import pandas as pd
+        import numpy as np
+        from tqdm import tqdm
         
-rule normalized_splicing_dependency:
+        # load
+        metadata = pd.read_table(input.metadata)
+        delta_psi = pd.read_table(input.delta_psi)
+        
+        # make ontology
+        metadata["kd_lab"] = metadata["KD"] + "_" + metadata["cell_line"]
+        
+        ontology = []
+        for lab in tqdm(metadata["kd_lab"].unique()):
+            samples_oi = list(metadata.loc[metadata["kd_lab"]==lab,"sampleID"])
+            
+            gene_set = delta_psi[["EVENT"]+samples_oi]\
+                        .melt(id_vars=["EVENT"], var_name="sampleID")\
+                        .dropna()\
+                        .groupby(["EVENT"])["value"]\
+                        .mean().reset_index()
+            gene_set = gene_set.loc[np.abs(gene_set["value"])>params.thresh]
+            gene_set = gene_set.drop(columns=["value"])
+            gene_set["term"] = lab
+            
+            ontology.append(gene_set[["term","EVENT"]])
+            
+        ontology = pd.concat(ontology)
+        
+        ontology.to_csv(output.ontology, sep="\t", index=False, compression="gzip")
+        
+        
+rule harm_score_encore:
     input:
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
         spldep = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}','mean.tsv.gz'),
         delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz')
     output:
-        norm_spldep = os.path.join(RESULTS_DIR,'files','ENCORE','norm_spldep-{event_type}.tsv.gz')
+        harm_score = os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz')
     run:
         import pandas as pd
         
@@ -401,7 +446,7 @@ rule normalized_splicing_dependency:
         delta_psi = pd.read_table(input.delta_psi, index_col=0)
         
         # compute ratio spldep/dpsi for the corresponding controls of each condition
-        norm_spldep = {}
+        harm_score = {}
         for sample_oi in delta_psi.columns:
             # get delta psi
             dpsi = delta_psi[sample_oi]
@@ -414,10 +459,37 @@ rule normalized_splicing_dependency:
             ctls_spldep = spldep[ctls].mean(axis=1)
             
             # normalize splicing dependency by delta psi
-            norm_spldep[sample_oi] = ctls_spldep / dpsi
+            harm_score[sample_oi] = ctls_spldep * dpsi
                         
-        norm_spldep = pd.DataFrame(norm_spldep)
+        harm_score = pd.DataFrame(harm_score)
         
         # save
-        norm_spldep.reset_index()\
-                   .to_csv(output.norm_spldep, sep="\t", index=False, compression="gzip")
+        harm_score.reset_index()\
+                   .to_csv(output.harm_score, sep="\t", index=False, compression="gzip")
+
+        
+rule compute_splicing_dependency_Thomas2020:
+    input:
+        psi = os.path.join(RAW_DIR,'articles','Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'articles','Thomas2020','vast_out','TPM-hg38-2.tab.gz'),
+        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','Thomas2020','splicing_dependency-{event_type}'))
+    threads: 15
+    resources:
+        runtime = 86400, # seconds = 24h = 1 day
+        memory = 30
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """

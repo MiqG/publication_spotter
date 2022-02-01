@@ -36,10 +36,12 @@ THRESH_DPSI = 10
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # metadata_file = file.path(PREP_DIR,'metadata','ENCORE.tsv.gz')
 # ontology_file = file.path(RESULTS_DIR,'files','ENCORE','kd_gene_sets-EX.tsv.gz')
+# figs_dir = file.path(RESULTS_DIR,'figures','validation_encore')
 
 
 ##### FUNCTIONS #####
-plot_encore_validation = function(){
+plot_encore_validation = function(metadata, event_info, rnai, delta_psi, 
+                                  harm_score, selected_events, ontology){
     plts = list()
     
     cells_oi = metadata %>% pull(DepMap_ID) %>% unique()
@@ -98,9 +100,11 @@ plot_encore_validation = function(){
     
     plts[["encore_val-thresh_vs_pearsons"]] = correls %>% 
         ggscatter(x="thresh", y="correlation", palette="Set2",
-                  size="log10_pvalue", color="cell_line") + 
+                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
         labs(x="N Most Harmful Exons", y="Pearson Correlation", 
-             color="Cell Line", size="-log10(p-value)")
+             color="Cell Line", size="-log10(p-value)") +
+        scale_size(range=c(0.1,1.5)) +
+        theme(aspect.ratio=1)
     
     # the most harmful changes predict overall knockdown
     x = X %>% 
@@ -110,14 +114,17 @@ plot_encore_validation = function(){
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
     plts[["encore_val-top1-scatters"]] = x %>%
-        ggscatter(x="pred", y="demeter2", color="KD",
+        ggscatter(x="pred", y="demeter2", color="KD", size=1, alpha=0.5,
                   palette=get_palette("simpsons",length(genes_kd))) + 
-        guides(color="none") + stat_cor(method="pearson") + 
+        guides(color="none") + 
+        stat_cor(method="pearson", size=1, family="Arial") + 
         geom_smooth(method="lm", linetype="dashed", color="black") + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
-                        x %>% slice_max(demeter2*pred, n=5)) +
-        labs(x="Sum of Top Harm Scores", y="Gene Dependency")
+                        x %>% slice_max(demeter2*pred, n=5),
+                        size=1, family="Arial") +
+        labs(x="Sum of Top Harm Scores", y="Gene Dependency") +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
     
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
@@ -126,23 +133,28 @@ plot_encore_validation = function(){
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
     plts[["encore_val-top10-scatters"]] = x %>%
-        ggscatter(x="pred", y="demeter2", color="KD",
+        ggscatter(x="pred", y="demeter2", color="KD", size=1,
                   palette=get_palette("simpsons",length(genes_kd))) + 
-        guides(color="none") + stat_cor(method="pearson") + 
+        guides(color="none") + 
+        stat_cor(method="pearson", size=1, family="Arial") + 
         geom_smooth(method="lm", linetype="dashed", color="black") + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
-                        x %>% slice_max(demeter2*pred, n=5)) +
-        labs(x="Sum of Top Harm Scores", y="Gene Dependency")
+                        x %>% slice_max(demeter2*pred, n=5),
+                        size=1, family="Arial") +
+        labs(x="Sum of Top Harm Scores", y="Gene Dependency") +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
+    
+    # who are these top 10 harmful events?
     
     # correlation between cell lines gene dependencies
-    plts[["event_val-demeter2-scatter"]] = genedep %>% 
+    plts[["encore_val-demeter2-scatter"]] = genedep %>% 
         left_join(metadata %>% distinct(DepMap_ID,cell_line), by="DepMap_ID") %>% 
         pivot_wider(id_cols="KD", 
                     names_from="cell_line", 
                     values_from="demeter2") %>% 
-        ggscatter(x="K562", y="HepG2") + 
-        stat_cor(method="pearson") + 
+        ggscatter(x="K562", y="HepG2", size=1, alpha=0.5) + 
+        stat_cor(method="pearson", size=1, family="Arial") + 
         geom_smooth(method="lm", linetype="dashed", color="black")
     
     # are some events changing in KDs enriched in our selected events? No.
@@ -152,34 +164,26 @@ plot_encore_validation = function(){
           pull(EVENT) %>% unique(), 
         maxGSSize=Inf)
     
-    plts[["event_val-enrichment-KD"]] = dotplot(enrichment) + theme_pubr()
+    plts[["encore_val-enrichment-KD"]] = dotplot(enrichment) + 
+        theme_pubr() +
+        scale_size(range=c(0.1,3))
     
     return(plts)
 }
 
 
-make_plots = function(){
+make_plots = function(metadata, event_info, rnai, delta_psi, 
+                      harm_score, selected_events, ontology){
     plts = list(
+        plot_encore_validation(metadata, event_info, rnai, delta_psi, 
+                               harm_score, selected_events, ontology)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
 
-make_figdata = function(models, rnai_stats, cancer_events, 
-                        eval_pvalue, eval_corr, 
-                        enrichment, indices, spldep_stats, 
-                        gene_mut_freq, event_mut_freq,
-                        rnai, spldep, splicing, genexpr){
-    # prep enrichments
-    df_enrichs = do.call(rbind,
-        lapply(names(enrichment), function(e){
-            res = as.data.frame(enrichment[[e]])
-            res[["ontology"]] = e
-            return(res)
-        })
-    )
-    
+make_figdata = function(){
     figdata = list(
     )
     return(figdata)
@@ -202,9 +206,16 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
-    # model selection
-    ## controls
-    save_plt(plts, "model_sel-deps_sorted_vs_std_ctl_neg", ".pdf", figs_dir, width=5, height=5)
+    # correlations of predictions
+    save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=6)
+    save_plt(plts, "encore_val-top1-scatters", ".pdf", figs_dir, width=5, height=10)
+    save_plt(plts, "encore_val-top10-scatters", ".pdf", figs_dir, width=5, height=10)
+    
+    # controls
+    save_plt(plts, "encore_val-demeter2-scatter", ".pdf", figs_dir, width=5, height=5)
+    
+    # enrichment
+    save_plt(plts, "encore_val-enrichment-KD", ".pdf", figs_dir, width=5, height=6)
 }
 
 
@@ -238,14 +249,15 @@ main = function(){
     event_info = read_tsv(event_info_file)
     ontology = read_tsv(ontology_file)
     
-    plts = make_plots()
+    plts = make_plots(metadata, event_info, rnai, delta_psi, 
+                      harm_score, selected_events, ontology)
 
     # make figdata
-    figdata = make_figdata()
+    # figdata = make_figdata()
     
     # save
     save_plots(plts, figs_dir)
-    save_figdata(figdata, figs_dir)
+    # save_figdata(figdata, figs_dir)
 }
 
 
