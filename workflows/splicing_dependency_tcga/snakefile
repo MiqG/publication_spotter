@@ -591,7 +591,7 @@ rule survival_analysis_coxph:
         """
         
         
-rule correlate_transcriptome_indices_ccle:
+rule correlate_transcriptome_indices_tcga:
     input:
         spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}','mean.tsv.gz'),
         indices = os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz')
