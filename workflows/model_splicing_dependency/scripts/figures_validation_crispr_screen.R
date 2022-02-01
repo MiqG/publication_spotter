@@ -30,6 +30,7 @@ CELL_TYPES = data.frame(
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
+# psi_file = file.path(RAW_DIR,'articles','Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # spldep_file = file.path(RESULTS_DIR,'files','Thomas2020','splicing_dependency-EX','mean.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen')
@@ -58,29 +59,21 @@ plot_summary = function(crispr, selected_events){
 }
 
 
-plot_predictions = function(crispr, selected_events, spldep){
+plot_predictions = function(crispr, selected_events, harm){
     X = crispr %>% 
         filter(EVENT %in% selected_events) %>% 
-        left_join(
-            spldep %>% 
-                pivot_longer(-index, names_to="sampleID", values_to="pred") %>% 
-                drop_na() %>% 
-                left_join(CELL_TYPES, by="sampleID"), 
-                          by=c("EVENT"="index","cell_line")
-        )
+        left_join(harm, by=c("EVENT"="index","cell_line")) %>%
+        arrange(cell_line, comparison)
     
     plts = list()
     plts[["predictions-scatters"]] = X %>% 
-        ggscatter(x="fitness_score", y="pred", size=1, alpha=0.5) + 
-        facet_wrap(~cell_line+comparison, ncol=2) + 
-        stat_cor(method="pearson", size=1, family="Arial") + 
-        geom_text(aes(x=-1.35, y=-0.5, label=lab), 
-                  X %>% 
-                  drop_na(fitness_score,pred) %>% 
-                  count(cell_line,comparison) %>% 
-                  mutate(lab=paste0("n=",n)),
-                  size=1, family="Arial") +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        ggscatter(x="sign_harm", y="fitness_score", size=1, alpha=0.5) + 
+        facet_wrap(~cell_line+comparison, ncol=2, scales="free") + 
+        stat_cor(method="pearson", size=1, family="Arial") +
+        theme(strip.text.x = element_text(size=6, family="Arial"),
+              aspect.ratio=1) +
+        labs(x="Harm Score", y="Event Dependency") +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=0.5)
     
     return(plts)
 }
@@ -120,7 +113,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 save_plots = function(plts, figs_dir){
     save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=8, height=10)
-    save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=8, height=9)
+    save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=8, height=12)
 }
 
 
@@ -149,8 +142,20 @@ main = function(){
     crispr = read_tsv(crispr_file)
     selected_events = readLines(selected_events_file)
     spldep = read_tsv(spldep_file)
+    psi = read_tsv(psi_file)
     
-    plts = make_plots(crispr, selected_events, spldep)
+    # compute harm score
+    harm = spldep %>% 
+        pivot_longer(-index, names_to="sampleID", values_to="spldep") %>% 
+        left_join(psi %>% 
+                      pivot_longer(-EVENT, names_to="sampleID", values_to="psi_ctl"), 
+                  by=c("index"="EVENT","sampleID")) %>%  
+        # the amount of change upon cutting out the EVENT
+        mutate(harm_score=spldep*(-psi_ctl),
+               sign_harm=harm_score*sign(-psi_ctl)) %>%
+        left_join(CELL_TYPES, by="sampleID")
+    
+    plts = make_plots(crispr, selected_events, harm)
 
     # make figdata
     # figdata = make_figdata(crispr, selected_events, spldep)
