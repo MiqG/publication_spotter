@@ -143,6 +143,9 @@ rule all:
         # combine drug responses
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
+        # correlation transcriptome indices
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','correlation_spldep_indices-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES)
+        
         
 rule compute_splicing_dependency_tcga:
     input:
@@ -167,6 +170,7 @@ rule compute_splicing_dependency_tcga:
                     --normalize_counts={params.normalize_counts} \
                     --n_jobs={threads}
         """
+        
         
 rule combine_splicing_dependency_tcga:
     input:
@@ -584,4 +588,27 @@ rule survival_analysis_coxph:
                                     --subset_values={params.subset_values} \
                                     --padj_method={params.padj_method} \
                                     --output_file={output}
+        """
+        
+        
+rule correlate_transcriptome_indices_ccle:
+    input:
+        spldep = os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}','mean.tsv.gz'),
+        indices = os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','correlation_spldep_indices-{event_type}.tsv.gz')
+    params:
+        script_dir = os.path.join(SRC_DIR,'python'),
+        sample_col = 'index',
+        cor_method = 'spearman',
+        padj_method = 'fdr_bh'
+    shell:
+        """
+        python {params.script_dir}/correlation_exon_transcriptome_indices.py \
+                        --omic_file={input.spldep} \
+                        --sample_properties_file={input.indices} \
+                        --sample_col={params.sample_col} \
+                        --cor_method={params.cor_method} \
+                        --padj_method={params.padj_method} \
+                        --output_file={output}
         """
