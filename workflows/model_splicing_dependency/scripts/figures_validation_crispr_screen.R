@@ -13,6 +13,8 @@
 require(tidyverse)
 require(ggrepel)
 require(ggpubr)
+require(cowplot)
+require(extrafont)
 
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
@@ -29,51 +31,72 @@ CELL_TYPES = data.frame(
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
-# event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # spldep_file = file.path(RESULTS_DIR,'files','Thomas2020','splicing_dependency-EX','mean.tsv.gz')
+# figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen')
 
 
 ##### FUNCTIONS #####
 plot_summary = function(crispr, selected_events){
-    X = crispr %>% filter(EVENT %in% selected_events) %>% mutate(log10_pvalue=-log10(pvalue))
+    X = crispr %>% 
+        filter(EVENT %in% selected_events) %>% 
+        mutate(log10_pvalue=-log10(pvalue),
+               event_gene = paste0(EVENT,"_",geneName))
     
-    X %>% ggscatter(x="EVENT", y="fitness_score", size="log10_pvalue", color="cell_line") + facet_wrap(~comparison) + geom_hline(yintercept=0, linetype="dashed") + labs(x="Event & Gene", y="Fitness Score", color="Cell Line", size="-log10(p-value)") + coord_flip() 
-    
+    plts = list()
+    plts[["summary-scatters"]] = X %>% 
+        ggscatter(x="event_gene", y="fitness_score", palette="nejm",
+                  size="log10_pvalue", color="cell_line") + 
+        facet_wrap(~comparison) + 
+        geom_hline(yintercept=0, linetype="dashed") + 
+        labs(x="Event & Gene", y="Fitness ScoreS", 
+             color="Cell Line", size="-log10(p-value)") + 
+        coord_flip() +
+        theme(strip.text.x = element_text(size=6, family="Arial")) +
+        scale_size(range=c(0.5,3))
     
     return(plts)
 }
 
 
 plot_predictions = function(crispr, selected_events, spldep){
-    X = crispr %>% filter(EVENT %in% selected_events) %>% left_join(spldep %>% pivot_longer(-index, names_to="sampleID", values_to="pred") %>% drop_na() %>% left_join(CELL_TYPES, by="sampleID"), by=c("EVENT"="index","cell_line"))
+    X = crispr %>% 
+        filter(EVENT %in% selected_events) %>% 
+        left_join(
+            spldep %>% 
+                pivot_longer(-index, names_to="sampleID", values_to="pred") %>% 
+                drop_na() %>% 
+                left_join(CELL_TYPES, by="sampleID"), 
+                          by=c("EVENT"="index","cell_line")
+        )
     
-    X %>% ggscatter(x="fitness_score", y="pred") + facet_wrap(~cell_line+comparison, ncol=2) + stat_cor(method="pearson") + geom_text(aes(x=-1.35, y=-0.5, label=lab), X %>% drop_na(fitness_score,pred) %>% count(cell_line,comparison) %>% mutate(lab=paste0("n=",n)))
+    plts = list()
+    plts[["predictions-scatters"]] = X %>% 
+        ggscatter(x="fitness_score", y="pred", size=1, alpha=0.5) + 
+        facet_wrap(~cell_line+comparison, ncol=2) + 
+        stat_cor(method="pearson", size=1, family="Arial") + 
+        geom_text(aes(x=-1.35, y=-0.5, label=lab), 
+                  X %>% 
+                  drop_na(fitness_score,pred) %>% 
+                  count(cell_line,comparison) %>% 
+                  mutate(lab=paste0("n=",n)),
+                  size=1, family="Arial") +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
     
     return(plts)
 }
 
-make_plots = function(){
+
+make_plots = function(crispr, selected_events, spldep){
     plts = list(
+        plot_summary(crispr, selected_events),
+        plot_predictions(crispr, selected_events, spldep)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
 
-make_figdata = function(models, rnai_stats, cancer_events, 
-                        eval_pvalue, eval_corr, 
-                        enrichment, indices, spldep_stats, 
-                        gene_mut_freq, event_mut_freq,
-                        rnai, spldep, splicing, genexpr){
-    # prep enrichments
-    df_enrichs = do.call(rbind,
-        lapply(names(enrichment), function(e){
-            res = as.data.frame(enrichment[[e]])
-            res[["ontology"]] = e
-            return(res)
-        })
-    )
-    
+make_figdata = function(crispr, selected_events, spldep){
     figdata = list(
     )
     return(figdata)
@@ -96,9 +119,8 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
-    # model selection
-    ## controls
-    save_plt(plts, "model_sel-deps_sorted_vs_std_ctl_neg", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=8, height=10)
+    save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=8, height=9)
 }
 
 
@@ -126,17 +148,16 @@ main = function(){
     # load
     crispr = read_tsv(crispr_file)
     selected_events = readLines(selected_events_file)
-    event_info = read_tsv(event_info_file)
     spldep = read_tsv(spldep_file)
     
-    plts = make_plots()
+    plts = make_plots(crispr, selected_events, spldep)
 
     # make figdata
-    figdata = make_figdata()
+    # figdata = make_figdata(crispr, selected_events, spldep)
     
     # save
     save_plots(plts, figs_dir)
-    save_figdata(figdata, figs_dir)
+    # save_figdata(figdata, figs_dir)
 }
 
 
