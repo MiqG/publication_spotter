@@ -303,7 +303,7 @@ rule compute_transcriptome_indices_tcga:
         translate_to = 'GENE'
     shell:
         """
-        python scripts/TranscriptomeIndices.py \
+        nice python scripts/TranscriptomeIndices.py \
                         --genexpr_file={input.genexpr_file} \
                         --annotation_file={input.annotation_file} \
                         --translate_from={params.translate_from} \
@@ -349,6 +349,7 @@ rule redefine_exons_vastdb:
                     --output_file={output} \
                     --n_jobs={threads}
         """
+        
         
 rule annotate_mutations_to_events:
     input:

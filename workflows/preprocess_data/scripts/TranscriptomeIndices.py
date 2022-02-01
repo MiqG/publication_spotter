@@ -94,6 +94,7 @@ def count_to_tpm(mrna_count, gene_lengths_file):
     print(len(common_genes), mrna_count.shape, gene_lengths.shape)
     
     X = mrna_count.loc[common_genes] / gene_lengths.loc[mrna_count.loc[common_genes].index].values
+    X = X.replace([np.inf, -np.inf], np.nan)
     tpm = 1e6 * X / X.sum(axis=0)
     log_tpm = np.log2(tpm + 1)
 
