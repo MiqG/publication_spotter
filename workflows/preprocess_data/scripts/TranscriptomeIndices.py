@@ -44,6 +44,7 @@ for key in set(tp.columns) - set(char_cols):
 
 TUMORPURITY = tp.set_index("Sample.ID").copy()
 TUMORPURITY.drop(columns=["Cancer.type"], inplace=True)
+TUMORPURITY.index = TUMORPURITY.index.str[:15]
 
 # variables
 SAVE_PARAMS = {"sep": "\t", "index": False, "compression": "gzip"}
@@ -77,15 +78,41 @@ import os
 ROOT = '/home/miquel/projects/publication_splicing_dependency'
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
-genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
+genexpr_file = os.path.join(PREP_DIR,'gene_counts','BRCA.tsv')
 annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 translate_from = 'ENSEMBL'
 translate_to = 'GENE'
+normalize_counts = True
+gene_lengths_file = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
 """
 
 ##### FUNCTIONS #####
-def prepare_inputs(genexpr_file, annotation_file, translate_from, translate_to):
+def count_to_tpm(mrna_count, gene_lengths_file):
+    gene_lengths = pd.read_table(gene_lengths_file, index_col=0, header=None)
+    
+    common_genes = set(gene_lengths.index).intersection(mrna_count.index)
+    print(len(common_genes), mrna_count.shape, gene_lengths.shape)
+    
+    X = mrna_count.loc[common_genes] / gene_lengths.loc[mrna_count.loc[common_genes].index].values
+    tpm = 1e6 * X / X.sum(axis=0)
+    log_tpm = np.log2(tpm + 1)
+
+    return log_tpm
+
+
+def prepare_inputs(
+    genexpr_file,
+    normalize_counts,
+    gene_lengths_file,
+    annotation_file,
+    translate_from,
+    translate_to,
+):
     genexpr = pd.read_table(genexpr_file, index_col=0)
+
+    if normalize_counts:
+        assert gene_lengths_file is not None
+        genexpr = count_to_tpm(genexpr, gene_lengths_file)
 
     if annotation_file is not None:
         annot = pd.read_table(annotation_file)
@@ -155,7 +182,9 @@ class TranscriptomeIndices:
         """
         Requires TCGA barcode up to vial (0 to 16).
         """
-        return pd.DataFrame({}, index=samples).join(TUMORPURITY)
+        tumor_purity = pd.DataFrame({}, index=samples).join(TUMORPURITY)
+        tumor_purity = tumor_purity.loc[~tumor_purity.index.duplicated(keep="first")]
+        return tumor_purity
 
     def compute_heterogeneity_score(self, genexpr, thresh_normal=2, only_tumor=False):
         """
@@ -220,6 +249,8 @@ def parse_args():
     parser.add_argument("--translate_from", type=str, default=None)
     parser.add_argument("--translate_to", type=str, default=None)
     parser.add_argument("--output_file", type=str, default=None)
+    parser.add_argument("--normalize_counts", action="store_true")
+    parser.add_argument("--gene_lengths_file", type=str, default=None)
 
     args = parser.parse_args()
     return args
@@ -233,9 +264,18 @@ def main():
     translate_from = args.translate_from
     translate_to = args.translate_to
     output_file = args.output_file
+    normalize_counts = args.normalize_counts
+    gene_lengths_file = args.gene_lengths_file
 
     # read and prepare data
-    genexpr = prepare_inputs(genexpr_file, annotation_file, translate_from, translate_to)
+    genexpr = prepare_inputs(
+        genexpr_file,
+        normalize_counts,
+        gene_lengths_file,
+        annotation_file,
+        translate_from,
+        translate_to,
+    )
 
     # compute transcriptome indices
     ti = TranscriptomeIndices(genexpr)

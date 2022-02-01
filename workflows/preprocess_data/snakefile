@@ -128,7 +128,11 @@ rule all:
         os.path.join(PREP_DIR,'event_psi','ENCORE-ALTA.tsv.gz'),
         os.path.join(PREP_DIR,'event_psi','ENCORE-ALTD.tsv.gz'),
         os.path.join(PREP_DIR,'event_psi','ENCORE-INT.tsv.gz'),
-        os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz')
+        os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
+        
+        # compute transcriptome indices TCGA
+        expand(os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz'), cancer=CANCER_TYPES)
+        
         
 rule prepare_metadata_ccle:
     input:
@@ -284,6 +288,29 @@ rule compute_transcriptome_indices_ccle:
                         --annotation_file={input.annotation} \
                         --translate_from={params.translate_from} \
                         --translate_to={params.translate_to}
+        """
+        
+        
+rule compute_transcriptome_indices_tcga:
+    input:
+        genexpr_file = os.path.join(PREP_DIR,'gene_counts','{cancer}.tsv'),
+        annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
+        gene_lengths = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
+    output:
+        os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz')
+    params:
+        translate_from = 'ENSEMBL',
+        translate_to = 'GENE'
+    shell:
+        """
+        python scripts/TranscriptomeIndices.py \
+                        --genexpr_file={input.genexpr_file} \
+                        --annotation_file={input.annotation_file} \
+                        --translate_from={params.translate_from} \
+                        --translate_to={params.translate_to} \
+                        --output_file={output} \
+                        --normalize_counts \
+                        --gene_lengths_file={input.gene_lengths}
         """
         
         
