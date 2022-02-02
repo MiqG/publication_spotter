@@ -66,6 +66,7 @@ SIZE_CTL = 100
 # event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 # indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
+metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
@@ -797,12 +798,16 @@ plot_event_oi = function(event_oi, gene_oi, ensembl_oi,
 }
 
 
-plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr){
+plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr, metadata){
     # which events did we select from the positive set?
     events_oi = models %>% filter(is_selected) %>% pull(EVENT)
     X = cancer_events %>% mutate(is_selected=EVENT%in%events_oi) 
     X %>% count(is_ctl_pos, is_selected) %>% print()
     X %>% filter(is_selected) %>% print()
+    
+    avail_samples = intersect(colnames(rnai),colnames(splicing))
+    samples_oi = metadata %>% filter(primary_disease=="Lung Cancer") %>% pull(DepMap_ID)
+    samples_oi = intersect(samples_oi, avail_samples)
     
     # Examples from selected and not selected exons from the TP set
     plts = list(
@@ -816,7 +821,13 @@ plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr
         # not selected
         ## NUMB (not included in positive set)
         plot_event_oi("HsaEX0044216", "NUMB", "ENSG00000133961", 
-                      rnai, spldep, splicing, genexpr, "NUMB")
+                      rnai, spldep, splicing, genexpr, "NUMB"),
+        ## NUMB (only lung)
+        plot_event_oi("HsaEX0044216", "NUMB", "ENSG00000133961", 
+                      rnai[,c("index",samples_oi)], 
+                      spldep[,c("index",samples_oi)], 
+                      splicing[,c("EVENT",samples_oi)], 
+                      genexpr[,c("ID",samples_oi)], "NUMB_lung")
     )
     plts = do.call(c,plts)
     names(plts) = paste0("events_oi-",names(plts))
@@ -829,12 +840,12 @@ make_plots = function(models, rnai_stats, cancer_events,
                       eval_pvalue, eval_corr, 
                       enrichment, indices, indices_enrich, spldep_stats, 
                       gene_mut_freq, event_mut_freq,
-                      rnai, spldep, splicing, genexpr){
+                      rnai, spldep, splicing, genexpr, metadata){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
         plot_model_properties(models, enrichment, indices, indices_enrich, spldep_stats),
         plot_model_validation(models, gene_mut_freq, event_mut_freq),
-        plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr)
+        plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -946,7 +957,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_val-mutation_event_frequency-by_protein_impact", ".pdf", figs_dir, width=14, height=8)
     
     # events oi
-    genes_oi = c("KRAS","SMNDC1","NUMB")
+    genes_oi = c("KRAS","SMNDC1","NUMB","NUMB_lung")
     lapply(genes_oi, function(gene_oi){
         lapply(c("spldep_vs_rnai","genexpr_vs_rnai","genexpr_vs_splicing","splicing_vs_rnai"), 
                function(comparison){
@@ -1001,6 +1012,7 @@ main = function(){
     splicing = read_tsv(splicing_file)
     cancer_events = read_tsv(cancer_events_file)
     event_info = read_tsv(event_info_file)
+    metadata = read_tsv(metadata_file)
     
     # add info to models
     models = models %>% 
@@ -1061,7 +1073,7 @@ main = function(){
                       eval_pvalue, eval_corr, 
                       enrichment, indices, indices_enrich, spldep_stats, 
                       gene_mut_freq, event_mut_freq,
-                      rnai, spldep, splicing, genexpr)
+                      rnai, spldep, splicing, genexpr, metadata)
 
     # make figdata
     figdata = make_figdata(models, rnai_stats, cancer_events, 
