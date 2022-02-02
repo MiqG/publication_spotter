@@ -8,6 +8,8 @@
 # 
 # Outline
 # -------
+# - can we predict the proliferation effects of KDs from the changes in splicing?
+# - if we define exon sets from KDs, is any KD enriched in our selected events?
 
 require(tidyverse)
 require(ggpubr)
@@ -81,6 +83,21 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         ungroup() %>%
         mutate(sign_harm = sign(deltaPSI) * harm)
     
+    # how many selected events change in each KD?
+    plts[["encore_val-n_selected_events-violin"]] = X %>% 
+        count(cell_line, KD) %>% 
+        ggviolin(x="cell_line", y="n", trim=TRUE,
+                 fill="cell_line", color=NA, palette="Set2") + 
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        guides(fill="none") + 
+        labs(x="Cell Line", y="N. Cancer-Driver Exons in KD") +
+        geom_text(aes(y=50, label=lab),
+                  X %>% 
+                      distinct(cell_line, KD) %>% 
+                      count(cell_line) %>% 
+                      mutate(lab=paste0("n=",n)),
+                  size=1, family="Arial")
+    
     # how does correlation change summing different top maximum?
     correls = lapply(1:25, function(x){
         corr = X %>% 
@@ -146,6 +163,20 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     # who are these top 10 harmful events?
+    x = X %>% 
+        group_by(cell_line, KD, demeter2) %>% 
+        slice_max(harm, n=10) %>%
+        ungroup() %>% 
+        count(cell_line, index) %>%
+        group_by(cell_line) %>%
+        slice_max(n, n=10) %>%
+        left_join(event_annot, by=c("index"="EVENT")) %>%
+        mutate(event_gene=paste0(index,"_",GENE))
+    plts[["encore_val-top10-bars"]] = x %>% 
+        ggbarplot(x="event_gene", y="n", fill="cell_line", 
+                  color=NA, palette="Set2", position=position_dodge(0.9)) + 
+        labs(x="Event & Gene", y="N. Exon in Top 10 Harm", fill="Cell Line") + 
+        coord_flip()
     
     # correlation between cell lines gene dependencies
     plts[["encore_val-demeter2-scatter"]] = genedep %>% 
@@ -208,8 +239,10 @@ save_plt = function(plts, plt_name, extension=".pdf",
 save_plots = function(plts, figs_dir){
     # correlations of predictions
     save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=6)
+    save_plt(plts, "encore_val-n_selected_events-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-top1-scatters", ".pdf", figs_dir, width=5, height=10)
     save_plt(plts, "encore_val-top10-scatters", ".pdf", figs_dir, width=5, height=10)
+    save_plt(plts, "encore_val-top10-bars", ".pdf", figs_dir, width=5, height=6.5)
     
     # controls
     save_plt(plts, "encore_val-demeter2-scatter", ".pdf", figs_dir, width=5, height=5)
