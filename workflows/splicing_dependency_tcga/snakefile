@@ -144,7 +144,10 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # correlation transcriptome indices
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','correlation_spldep_indices-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','correlation_spldep_indices-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
+        
+        # combine correlations
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
         
         
 rule compute_splicing_dependency_tcga:
@@ -612,3 +615,29 @@ rule correlate_transcriptome_indices_tcga:
                         --padj_method={params.padj_method} \
                         --output_file={output}
         """
+        
+        
+rule merge_transcriptome_indices_tcga:
+    input:
+        corrs = [os.path.join(RESULTS_DIR,'files','{cancer}','correlation_spldep_indices-{event_type}.tsv.gz').format(cancer=c, event_type='{event_type}')
+                 for c in CANCER_TYPES]
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','correlation_spldep_indices-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        
+        dfs = []
+        for f in input.corrs:
+            
+            cancer_type = os.path.basename(os.path.dirname(f))
+            df = pd.read_table(f)
+            df["cancer_type"] = cancer_type
+            
+            print(cancer_type)
+            dfs.append(df)
+            
+            del df
+            
+        dfs = pd.concat(dfs)
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")

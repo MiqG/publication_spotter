@@ -50,7 +50,9 @@ MIN_SAMPLES = 10
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
 # spldep_stats_ccle_cancers_file = file.path(ROOT,'results','model_splicing_dependency','files','splicing_dependency_summaries-EX','primary_disease.tsv.gz')
+# indices_file = file.path(RESULTS_DIR,'files','PANCAN','correlation_spldep_indices-EX.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
+
 
 ##### FUNCTIONS #####
 prep_diff_result = function(diff_result, spldep_stats){
@@ -210,7 +212,7 @@ plot_ccle_vs_tcga = function(diff_result_sample_raw, psi_ccle){
 }
 
 
-plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
+plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle, indices){
     X = spldep_stats
     ref = spldep_stats_ccle %>% column_to_rownames("event_gene")
     n_cancers = X %>% distinct(cancer_type) %>% nrow()
@@ -283,6 +285,21 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle){
                   color=NA, palette=get_palette("Paired",n_cancers)) +
         labs(x="Event & Gene", y="Count", fill="Cancer Type") +
         coord_flip()
+    
+    X = indices %>% 
+        filter(index%in%selected_events) %>% 
+        left_join(annot %>% distinct(GENE,EVENT), 
+                  by=c("index"="EVENT")) %>% 
+        mutate(event_gene=paste0(index,"_",GENE)) %>% 
+        group_by(index_name,event_gene) %>% 
+        summarize(med=median(correlation))
+        
+    plts[["tumorigenesis-median_corr_estimate"]] = X %>% 
+        ggviolin(x="index_name", y="med", fill="bisque3", color=NA) + 
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        geom_text_repel(aes(label=event_gene), X %>% slice_max(abs(med), n=10),
+                        size=1, family="Arial", segment.size=0.1) +
+        labs(x="Index", y="median(Spearman Correlation)")
     
     return(plts)
 }
@@ -395,6 +412,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'tumorigenesis-diff_medians', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'tumorigenesis-diff_ranges', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'tumorigenesis-top_diff_ranges', '.pdf', figs_dir, width=6, height=8)
+    save_plt(plts, 'tumorigenesis-median_corr_estimate', '.pdf', figs_dir, width=5, height=5)
     
     # splicing dependency distributions
     save_plt(plts, 'spldep_distrs-ccle-heat', '.pdf', figs_dir, width=8, height=8)
@@ -443,6 +461,7 @@ main = function(){
         filter(index %in% selected_events) 
     spldep_stats_ccle_cancers = read_tsv(spldep_stats_ccle_cancers_file) %>% 
         filter(EVENT %in% selected_events) 
+    indices = read_tsv(indices_file) %>% filter(index_name=="ESTIMATE")
     
     # add event gene
     spldep_stats = spldep_stats %>%

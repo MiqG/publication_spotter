@@ -142,6 +142,34 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
 }
 
 
+run_enrichments_indices = function(indices, selected_events, event_info){
+    X = indices %>% 
+        left_join(event_info %>% distinct(EVENT,GENE), by=c("index"="EVENT")) %>% 
+        filter(index%in%selected_events) %>%
+        mutate(corr_sign = ifelse(sign(correlation)>0,"positive","negative"),
+               corr_sign = ifelse(sign(correlation)==0,NA,corr_sign))
+    
+    index_names = indices %>% pull(index_name) %>% unique()
+    results = lapply(index_names, function(index_oi){
+        result = lapply(c("positive","negative"), function(sign_oi){
+            genes = X %>% filter(corr_sign==sign_oi & index_name==index_oi) %>% pull(GENE) %>% unique()
+            universe = X %>% filter(index_name==index_oi) %>% pull(GENE) %>% unique()
+            res = enricher(genes, TERM2GENE=ontologies[["GO_BP"]], universe=universe)
+            res = res %>% 
+                as.data.frame() %>% 
+                mutate(corr_sign=sign_oi, 
+                       index_name=index_oi, 
+                       Cluster=paste0(index_oi,"\n&\n",corr_sign))
+            return(res)
+        })
+        result = do.call(rbind, result)
+        return(result)
+    })
+    results = do.call(rbind, results)
+    return(results)
+}
+
+
 thresh_eval_pvalue = function(models, ctl_neg, ctl_pos){
     # find the threshold for the p-value
     threshs = c(
@@ -389,7 +417,7 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
 }
 
 
-plot_model_properties = function(models, enrichment, indices, spldep_stats){
+plot_model_properties = function(models, enrichment, indices, indices_enrich, spldep_stats){
     plts=list()
     
     # - exon inclusion variation    
@@ -495,29 +523,23 @@ plot_model_properties = function(models, enrichment, indices, spldep_stats){
     
     plts[["model_prop-indices-violin"]] = X %>% 
         ggplot(aes(x=index_name, y=correlation, 
-                   group=interaction(index_name,is_selected))) + 
+                   group=interaction(index_name,is_selected,corr_sign))) + 
         geom_violin(aes(fill=is_selected), color=NA) + 
         geom_boxplot(fill=NA, outlier.size=0.1, 
-                     width=0.2, position=position_dodge(0.9)) +
+                     width=0.1, position=position_dodge(0.9)) +
+        facet_wrap(~corr_sign, scales="free_y") + 
         stat_compare_means(aes(group=is_selected), method="wilcox.test", 
-                           label="p.signif", size=2) + 
+                           label="p.signif", size=2, family="Arial") + 
         fill_palette("npg") + 
         geom_hline(yintercept=0, linetype="dashed") + 
         theme_pubr() + 
-        labs(x="Transcriptomic Index", y="Spearman Correlation")
-    
-    plts[["model_prop-indices-scatter"]] = X %>% 
-        pivot_wider(id_cols=c("EVENT","is_selected"), 
-                    names_from="index_name", 
-                    values_from="correlation") %>% 
-        ggplot(aes(x=mitotic_index, y=stemness)) + 
-        geom_scattermore(alpha=0.7, pointsize=8, pixels=c(1000,1000)) + 
-        geom_density_2d_filled(alpha=0.5) +
-        stat_cor(method="pearson") + 
-        theme_pubr() +
-        facet_wrap(~is_selected) +
+        labs(x="Transcriptomic Index", y="Spearman Correlation", fill="Is Selected")  +
         theme(strip.text.x = element_text(size=6, family="Arial"))
-        
+    
+    res = new("compareClusterResult", compareClusterResult = indices_enrich)
+    plts[["model_prop-indices-enrichment-GO_BP-dotplot"]] = res %>% 
+        dotplot() + 
+        scale_size(range=c(0.5,3))
     
     plts[["model_prop-indices-top_pos"]] = X %>% 
         filter(is_selected) %>%
@@ -546,7 +568,6 @@ plot_model_properties = function(models, enrichment, indices, spldep_stats){
         scale_x_reordered() +
         labs(x="Event & Gene", y="Spearman Correlation") +
         coord_flip()
-    
     
     # - tumorigenesis
     #     there are exons with different behaviors dependencing 
@@ -806,12 +827,12 @@ plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr
 
 make_plots = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
-                      enrichment, indices, spldep_stats, 
+                      enrichment, indices, indices_enrich, spldep_stats, 
                       gene_mut_freq, event_mut_freq,
                       rnai, spldep, splicing, genexpr){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
-        plot_model_properties(models, enrichment, indices, spldep_stats),
+        plot_model_properties(models, enrichment, indices, indices_enrich, spldep_stats),
         plot_model_validation(models, gene_mut_freq, event_mut_freq),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr)
     )
@@ -822,7 +843,7 @@ make_plots = function(models, rnai_stats, cancer_events,
 
 make_figdata = function(models, rnai_stats, cancer_events, 
                         eval_pvalue, eval_corr, 
-                        enrichment, indices, spldep_stats, 
+                        enrichment, indices, indices_enrich, spldep_stats, 
                         gene_mut_freq, event_mut_freq,
                         rnai, spldep, splicing, genexpr){
     # prep enrichments
@@ -851,6 +872,7 @@ make_figdata = function(models, rnai_stats, cancer_events,
         "model_properties" = list(
             "gsea_selected" = df_enrichs,
             "correlations_transcriptomic_indices" = indices,
+            "gsea_corrs_transcriptomic_indices" = indices_enrich,
             "splicing_dependecy_stats" = spldep_stats
         ),
         "model_validation" = list(
@@ -908,8 +930,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=10.5, height=8)
     save_plt(plts, "model_prop-enrichment-GO_BP-cnetplot", ".pdf", figs_dir, width=20, height=20)
     ## transcriptomic indices
-    save_plt(plts, "model_prop-indices-violin", ".pdf", figs_dir, width=6, height=6)
-    save_plt(plts, "model_prop-indices-scatter", ".pdf", figs_dir, width=12, height=6)
+    save_plt(plts, "model_prop-indices-violin", ".pdf", figs_dir, width=8, height=6)
+    save_plt(plts, "model_prop-indices-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=11, height=6)
     save_plt(plts, "model_prop-indices-top_pos", ".pdf", figs_dir, width=10, height=6)
     save_plt(plts, "model_prop-indices-top_neg", ".pdf", figs_dir, width=10, height=6)
     ## tumorigenesis
@@ -991,6 +1013,8 @@ main = function(){
         left_join(event_info %>% distinct(EVENT,LE_o), by="EVENT") %>%
         left_join(ontologies[["protein_impact"]], by="EVENT")
     
+    selected_events = models %>% filter(is_selected) %>% pull(EVENT)
+    
     # prep for plotting
     ## model selection
     rnai_stats = get_rnai_stats(rnai, models)
@@ -1029,18 +1053,20 @@ main = function(){
     )
     enrichment = run_enrichment(genes_oi, events_oi, universe, ontologies)
     enrichment[sapply(enrichment, nrow)<1] = NULL
+    ## GSEA of selected events correlating with transcriptomic indices
+    indices_enrich = run_enrichments_indices(indices, selected_events, event_info)
     
     # plot
     plts = make_plots(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
-                      enrichment, indices, spldep_stats, 
+                      enrichment, indices, indices_enrich, spldep_stats, 
                       gene_mut_freq, event_mut_freq,
                       rnai, spldep, splicing, genexpr)
 
     # make figdata
     figdata = make_figdata(models, rnai_stats, cancer_events, 
                            eval_pvalue, eval_corr, 
-                           enrichment, indices, spldep_stats, 
+                           enrichment, indices, indices_enrich, spldep_stats, 
                            gene_mut_freq, event_mut_freq,
                            rnai, spldep, splicing, genexpr)
     
