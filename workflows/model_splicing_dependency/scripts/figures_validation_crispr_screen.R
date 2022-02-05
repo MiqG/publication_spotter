@@ -152,7 +152,7 @@ main = function(){
                   by=c("index"="EVENT","sampleID")) %>%  
         # the amount of change upon cutting out the EVENT
         mutate(harm_score=spldep*(-psi_ctl),
-               sign_harm=harm_score*sign(-psi_ctl)) %>%
+               sign_harm=(-1)*harm_score) %>%
         left_join(CELL_TYPES, by="sampleID")
     
     plts = make_plots(crispr, selected_events, harm)

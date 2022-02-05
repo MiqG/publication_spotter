@@ -81,7 +81,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         summarize(deltaPSI = mean(deltaPSI),
                   harm = mean(harm)) %>%
         ungroup() %>%
-        mutate(sign_harm = sign(deltaPSI) * harm)
+        mutate(sign_harm = (-1) * harm)
     
     # how many selected events change in each KD?
     plts[["encore_val-n_selected_events-violin"]] = X %>% 
@@ -98,11 +98,13 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                       mutate(lab=paste0("n=",n)),
                   size=1, family="Arial")
     
+    # TODO distribution of Demeter2 scores in RBPs
+    
     # how does correlation change summing different top maximum?
     correls = lapply(1:25, function(x){
         corr = X %>% 
             group_by(cell_line, KD, demeter2) %>% 
-            slice_max(harm, n=x) %>% 
+            slice_min(sign_harm, n=x) %>% 
             summarize(pred = sum(sign_harm),
                       nobs = n()) %>% 
             ungroup() %>% 
@@ -126,7 +128,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     # the most harmful changes predict overall knockdown
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
-        slice_max(harm, n=1) %>% 
+        slice_min(sign_harm, n=1) %>% 
         summarize(pred=sum(sign_harm)) %>%
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
@@ -145,7 +147,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
-        slice_max(harm, n=10) %>% 
+        slice_min(sign_harm, n=10) %>% 
         summarize(pred=sum(sign_harm)) %>%
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
@@ -165,7 +167,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     # who are these top 10 harmful events?
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
-        slice_max(harm, n=10) %>%
+        slice_min(sign_harm, n=10) %>%
         ungroup() %>% 
         count(cell_line, index) %>%
         group_by(cell_line) %>%
@@ -198,6 +200,8 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     plts[["encore_val-enrichment-KD"]] = dotplot(enrichment) + 
         theme_pubr() +
         scale_size(range=c(0.1,3))
+    
+    # TODO upset plot of enriched exon sets
     
     return(plts)
 }
