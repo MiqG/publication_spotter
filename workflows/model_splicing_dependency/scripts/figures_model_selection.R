@@ -66,7 +66,7 @@ SIZE_CTL = 100
 # event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 # indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
-metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
+# metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
@@ -504,7 +504,8 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
     plts_enrichment = lapply(names(enrichment), function(e_name){
         res = enrichment[[e_name]]
         plts = list()
-        plts[["dotplot"]] = dotplot(res)
+        plts[["dotplot"]] = dotplot(res) + 
+            scale_size(range=c(0.5,3))
         plts[["cnetplot"]] = cnetplot(res, cex_label_category=0.5, cex_label_gene=0.5)
         names(plts) = sprintf("%s-%s",e_name,names(plts))
         return(plts)
@@ -523,18 +524,17 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         drop_na(correlation, is_selected)
     
     plts[["model_prop-indices-violin"]] = X %>% 
-        ggplot(aes(x=index_name, y=correlation, 
+        ggplot(aes(x=corr_sign, y=correlation, 
                    group=interaction(index_name,is_selected,corr_sign))) + 
         geom_violin(aes(fill=is_selected), color=NA) + 
         geom_boxplot(fill=NA, outlier.size=0.1, 
                      width=0.1, position=position_dodge(0.9)) +
-        facet_wrap(~corr_sign, scales="free_y") + 
-        stat_compare_means(aes(group=is_selected), method="wilcox.test", 
+        stat_compare_means(method="wilcox.test", 
                            label="p.signif", size=2, family="Arial") + 
         fill_palette("npg") + 
         geom_hline(yintercept=0, linetype="dashed") + 
         theme_pubr() + 
-        labs(x="Transcriptomic Index", y="Spearman Correlation", fill="Is Selected")  +
+        labs(x="Correlation Sign", y="Spearman Correlation", fill="Is Selected")  +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     res = new("compareClusterResult", compareClusterResult = indices_enrich)
@@ -941,13 +941,13 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=10.5, height=8)
     save_plt(plts, "model_prop-enrichment-GO_BP-cnetplot", ".pdf", figs_dir, width=20, height=20)
     ## transcriptomic indices
-    save_plt(plts, "model_prop-indices-violin", ".pdf", figs_dir, width=8, height=6)
-    save_plt(plts, "model_prop-indices-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=11, height=6)
-    save_plt(plts, "model_prop-indices-top_pos", ".pdf", figs_dir, width=10, height=6)
-    save_plt(plts, "model_prop-indices-top_neg", ".pdf", figs_dir, width=10, height=6)
+    save_plt(plts, "model_prop-indices-violin", ".pdf", figs_dir, width=6, height=6)
+    save_plt(plts, "model_prop-indices-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=12, height=6)
+    save_plt(plts, "model_prop-indices-top_pos", ".pdf", figs_dir, width=5.5, height=5)
+    save_plt(plts, "model_prop-indices-top_neg", ".pdf", figs_dir, width=5.5, height=5)
     ## tumorigenesis
     save_plt(plts, "model_prop-tumorigenesis-scatter", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "model_prop-tumorigenesis_vs_indices", ".pdf", figs_dir, width=8, height=5)
+    save_plt(plts, "model_prop-tumorigenesis_vs_indices", ".pdf", figs_dir, width=5, height=5)
     
     # model validation
     save_plt(plts, "model_val-mutation_gene_count", ".pdf", figs_dir, width=8, height=8)
@@ -1002,7 +1002,7 @@ main = function(){
     # load
     models = read_tsv(models_file)
     ccle_stats = read_tsv(ccle_stats_file)
-    indices = read_tsv(indices_file) %>% filter(index_name %in% c("stemness","mitotic_index"))
+    indices = read_tsv(indices_file) %>% filter(index_name %in% c("stemness"))
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% dplyr::rename(GENE=Hugo_Symbol)
     event_mut_freq = read_tsv(event_mut_freq_file)
     ontologies = load_ontologies(msigdb_dir, protein_impact_file)

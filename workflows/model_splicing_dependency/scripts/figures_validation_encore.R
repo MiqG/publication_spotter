@@ -19,12 +19,16 @@ require(ggrepel)
 require(extrafont)
 require(tidytext)
 require(clusterProfiler)
+require(ComplexHeatmap)
+require(ggplotify)
+require(gridExtra)
 
 ROOT = here::here()
 source(file.path(ROOT,"src","R","utils.R"))
 
 # vaiables 
-THRESH_DPSI = 10
+THRESH_DPSI = 0
+RANDOM_SEED = 1234
 
 # Development
 # -----------
@@ -62,7 +66,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     dpsi = delta_psi %>%
         filter(EVENT%in%selected_events) %>%
         pivot_longer(-EVENT, names_to="sampleID", values_to="deltaPSI") %>%
-        filter(abs(deltaPSI)>THRESH_DPSI) %>%
+        # filter(abs(deltaPSI)>THRESH_DPSI) %>%
         rename(index=EVENT) %>%
         drop_na()
     
@@ -90,19 +94,27 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                  fill="cell_line", color=NA, palette="Set2") + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
-        labs(x="Cell Line", y="N. Cancer-Driver Exons in KD") +
-        geom_text(aes(y=50, label=lab),
+        labs(x="Cell Line", y="N. Cancer-Driver Exons in KD")
+    
+    # distribution of Demeter2 scores in RBPs
+    plts[["encore_val-demeter2-violin"]] = X %>% 
+        distinct(cell_line, KD, demeter2) %>% 
+        ggviolin(x="cell_line", y="demeter2", fill="cell_line", 
+                 color=NA, palette="Set2", trim=TRUE) + 
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        guides(fill="none") + 
+        labs(x="Cell Line", y="Gene Dependency")  +
+        geom_text(aes(y=0.5, label=lab),
                   X %>% 
                       distinct(cell_line, KD) %>% 
                       count(cell_line) %>% 
                       mutate(lab=paste0("n=",n)),
                   size=1, family="Arial")
     
-    # TODO distribution of Demeter2 scores in RBPs
-    
     # how does correlation change summing different top maximum?
+    set.seed(RANDOM_SEED)
     correls = lapply(1:25, function(x){
-        corr = X %>% 
+        corr_real = X %>% 
             group_by(cell_line, KD, demeter2) %>% 
             slice_min(sign_harm, n=x) %>% 
             summarize(pred = sum(sign_harm),
@@ -112,7 +124,25 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
             summarize(correlation = cor(demeter2, pred, method="pearson"), 
                       pvalue=cor.test(demeter2, pred, method="pearson")[["p.value"]],
                       log10_pvalue = -log10(pvalue),
-                      thresh = x)
+                      thresh = x,
+                      dataset = "real")
+        
+        corr_null = X %>% 
+            group_by(cell_line, KD, demeter2) %>% 
+            slice_sample(n=x) %>% 
+            slice_min(sign_harm, n=x) %>% 
+            summarize(pred = sum(sign_harm),
+                      nobs = n()) %>% 
+            ungroup() %>% 
+            group_by(cell_line) %>% 
+            summarize(correlation = cor(demeter2, pred, method="pearson"), 
+                      pvalue = cor.test(demeter2, pred, method="pearson")[["p.value"]],
+                      log10_pvalue = -log10(pvalue),
+                      thresh = x,
+                      dataset = "random")
+        
+        corr = rbind(corr_real, corr_null)
+        
         return(corr)
     })
     correls = do.call(rbind, correls)
@@ -123,7 +153,10 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         labs(x="N Most Harmful Exons", y="Pearson Correlation", 
              color="Cell Line", size="-log10(p-value)") +
         scale_size(range=c(0.1,1.5)) +
-        theme(aspect.ratio=1)
+        theme(aspect.ratio=1) + 
+        facet_wrap(~dataset, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
+        
     
     # the most harmful changes predict overall knockdown
     x = X %>% 
@@ -190,18 +223,39 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         stat_cor(method="pearson", size=1, family="Arial") + 
         geom_smooth(method="lm", linetype="dashed", color="black")
     
-    # are some events changing in KDs enriched in our selected events? No.
+    # are some events changing in KDs enriched in our selected events?
     enrichment = enricher(
         selected_events, TERM2GENE=ontology, 
         universe=event_annot %>%  filter(str_detect(EVENT,"EX")) %>% 
           pull(EVENT) %>% unique(), 
-        maxGSSize=Inf)
+        maxGSSize=Inf) %>%
+        as.data.frame() %>%
+        rowwise() %>%
+        mutate(gene_ratio = eval(parse(text=GeneRatio))) %>%
+        ungroup()
     
-    plts[["encore_val-enrichment-KD"]] = dotplot(enrichment) + 
-        theme_pubr() +
-        scale_size(range=c(0.1,3))
+    plts[["encore_val-enrichment-KD-dot"]] = enrichment %>%
+        slice_max(gene_ratio, n=10) %>%
+        arrange(gene_ratio) %>%
+        ggscatter(x="Description", y="gene_ratio", 
+                  size="Count", color="p.adjust") +
+        gradient_color(c("blue", "red")) +
+        scale_size(range=c(0.5,3)) +
+        labs(x="Gene Set", y="Gene Ratio") +
+        coord_flip()
     
-    # TODO upset plot of enriched exon sets
+    # upset plot of enriched exon sets
+    events_oi = enrichment %>% slice_max(gene_ratio, n=10) %>% pull(geneID) %>% str_split("/")
+    names(events_oi) = enrichment %>% slice_max(gene_ratio, n=10) %>% pull(Description)
+    
+    m = events_oi %>% 
+        list_to_matrix() %>% 
+        make_comb_mat()
+    plts[["encore_val-enrichment-KD-upset"]] = m %>%
+        UpSet(comb_order = order(comb_size(m))) %>%
+        draw() %>%
+        grid.grabExpr() %>%
+        as.ggplot()
     
     return(plts)
 }
@@ -242,8 +296,9 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 save_plots = function(plts, figs_dir){
     # correlations of predictions
-    save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=6)
+    save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=8)
     save_plt(plts, "encore_val-n_selected_events-violin", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "encore_val-demeter2-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-top1-scatters", ".pdf", figs_dir, width=5, height=10)
     save_plt(plts, "encore_val-top10-scatters", ".pdf", figs_dir, width=5, height=10)
     save_plt(plts, "encore_val-top10-bars", ".pdf", figs_dir, width=5, height=6.5)
@@ -252,7 +307,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "encore_val-demeter2-scatter", ".pdf", figs_dir, width=5, height=5)
     
     # enrichment
-    save_plt(plts, "encore_val-enrichment-KD", ".pdf", figs_dir, width=5, height=6)
+    save_plt(plts, "encore_val-enrichment-KD-dot", ".pdf", figs_dir, width=5, height=6)
+    save_plt(plts, "encore_val-enrichment-KD-upset", ".pdf", figs_dir, width=12, height=12)
 }
 
 
