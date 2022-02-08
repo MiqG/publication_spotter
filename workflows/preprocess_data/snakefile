@@ -556,7 +556,7 @@ rule preprocess_gdsc_targets:
     input:
         raw_drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
         Goncalves2020 = os.path.join(SUPPORT_DIR,'msb199405-sup-0003-datasetev2.xlsx'),
-        symbol_checker = os.path.join(SUPPORT_DIR,'hgnc-symbol-check-drug_targets-hand.csv')
+        symbol_checker = os.path.join(SUPPORT_DIR,'hgnc-symbol-check-drug_targets.csv')
     output:
         os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
     run:
