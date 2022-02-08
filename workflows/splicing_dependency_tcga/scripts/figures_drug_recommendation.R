@@ -126,7 +126,8 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     # combinations recommended drug cancer not tested?
     # patients with triple negative breast cancer were not given the drug 
     # we recommended, what would we recommend to them?
-    x = X %>% filter(cancer_type=="KIRC")
+    cancer_oi = "KIRC"
+    x = X %>% filter(cancer_type==cancer_oi)
     plts[["drug_rec-drugs_ranking_ratios-KIRC_given"]] = x %>% 
         ggboxplot(x="DRUG_NAME", y="ranking_ratio", 
                   color="DRUG_NAME", 
@@ -135,16 +136,38 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         guides(color="none") + 
         coord_flip()
     
-    samples_oi = X %>% filter(cancer_type=="KIRC") %>% pull(sample)
-    plts[["drug_rec-drugs_ranking_ratios-KIRC_best"]] = drug_recs %>% 
-        filter(sample%in%samples_oi & DRUG_NAME%in%avail_drugs) %>% 
-        group_by(sample) %>% 
-        slice_min(ranking_ratio, n=1) %>%
-        ggboxplot(x="DRUG_NAME", y="ranking_ratio", 
-                  color="DRUG_NAME", palette="Dark2") + 
+    samples_oi = X %>% filter(cancer_type==cancer_oi) %>% pull(sample)
+    x = lapply(1:16, function(nn){
+          res = drug_recs %>%
+            filter(sample%in%samples_oi & DRUG_NAME%in%avail_drugs) %>% 
+            group_by(sample) %>% 
+            arrange(ranking_ratio) %>%
+            slice(nn) %>%
+            ungroup()
+        return(res)
+    })
+    x = do.call(rbind,x)
+    x = x %>% 
+        group_by(sample, DRUG_NAME) %>%
+        slice_min(ranking, n=1) %>%
+        ungroup() %>%
+        group_by(sample) %>%
+        arrange(ranking_ratio) %>%
+        mutate(ranking=row_number())
+    
+    n_drugs = x %>% pull(DRUG_NAME) %>% unique() %>% length()
+    drugs_given = treatments_clean %>% filter(cancer_type==cancer_oi) %>% pull(DRUG_NAME) %>% unique()
+    drugs_recommended = x %>% pull(DRUG_NAME) %>% unique()
+    new_recs = setdiff(drugs_recommended, drugs_given)
+    plts[["drug_rec-drugs_ranking_ratios-KIRC_best"]] = x %>%
+        mutate(lab = ifelse(DRUG_NAME %in% new_recs, paste0("*",DRUG_NAME), DRUG_NAME)) %>%
+        ggboxplot(x="lab", y="ranking_ratio", outlier.size=0.1,
+                  color="lab", palette=get_palette("Dark2", n_drugs)) + 
         labs(x="Drug", y="Ranking Ratio") + 
         guides(color="none") + 
-        coord_flip()
+        coord_flip() +
+        facet_wrap(~ranking) +
+        theme(strip.text.x = element_text(size=6, family='Arial'))
     
     return(plts)
 }
@@ -193,7 +216,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=6, height=5)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=6, height=5)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=5, height=5)
-    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=7, height=10)
 }
 
 

@@ -147,7 +147,16 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','correlation_spldep_indices-{event_type}.tsv.gz'), cancer=CANCER_TYPES, event_type=EVENT_TYPES),
         
         # combine correlations
-        expand(os.path.join(RESULTS_DIR,'files','PANCAN','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # Personalization
+        ## compute splicing dependency
+        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
+        ## compute one sample differential analysis
+        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','onediff-{event_type}'), event_type=EVENT_TYPES),
+        ## drug recommendations
+        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS),
+        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
         
         
 rule compute_splicing_dependency_tcga:
@@ -640,4 +649,72 @@ rule merge_transcriptome_indices_tcga:
             del df
             
         dfs = pd.concat(dfs)
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+        
+rule compute_splicing_dependency_Seryakov2021:
+    input:
+        psi = os.path.join(RAW_DIR,'articles','Seryakov2021','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'articles','Seryakov2021','vast_out','TPM-hg38-1.tab.gz'),
+        coefs_dir = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','Seryakov2021','splicing_dependency-{event_type}'))
+    threads: 15
+    resources:
+        runtime = 86400, # seconds = 24h = 1 day
+        memory = 30
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """
+        
+        
+rule compute_onesample_diff_Seryakov2021:
+    input:
+        psi = os.path.join(RAW_DIR,'articles','Seryakov2021','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','Seryakov2021','onediff-{event_type}'))
+    params:
+        script_dir = TS_DIR,
+        cancer_ref = "UCEC"
+    threads: 10
+    shell:
+        """
+        python {params.script_dir}/target_spotter onediff_predict \
+                --data_file={input.psi} \
+                --cancer_type={params.cancer_ref} \
+                --n_jobs={threads} \
+                --output_dir={output}
+        """
+        
+rule combine_drug_rankings_Seryakov2021:
+    input:
+        [os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response-{drug_screen}-{event_type}').format(drug_screen=drug_screen, event_type='{event_type}') for drug_screen in DRUG_SCREENS]
+    output:
+        os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response_by_drug-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for d in input:
+            cancer_type = os.path.basename(os.path.dirname(d))
+            drug_screen = os.path.basename(d).replace('estimated_drug_response-','')[:5]
+            print(drug_screen, cancer_type)
+            filename = os.path.join(d,'estimated_drug_response_by_drug.tsv.gz')
+            df = pd.read_table(filename)
+            df["cohort"] = cancer_type
+            df["drug_screen"] = drug_screen
+            dfs.append(df)
+            
+        dfs = pd.concat(dfs)    
         dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")

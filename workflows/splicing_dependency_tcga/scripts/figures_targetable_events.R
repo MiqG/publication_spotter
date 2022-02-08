@@ -52,7 +52,7 @@ MIN_SAMPLES = 10
 # spldep_stats_ccle_cancers_file = file.path(ROOT,'results','model_splicing_dependency','files','splicing_dependency_summaries-EX','primary_disease.tsv.gz')
 # indices_file = file.path(RESULTS_DIR,'files','PANCAN','correlation_spldep_indices-EX.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
-
+# ontology_file = file.path(ROOT,"results","model_splicing_dependency",'files','ENCORE','kd_gene_sets-EX.tsv.gz')
 
 ##### FUNCTIONS #####
 prep_diff_result = function(diff_result, spldep_stats){
@@ -150,14 +150,31 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         labs(x='Event & Gene', y='Delta PSI', fill='Cancer Type') +
         coord_flip()
     
+    plts[['top_samples-dpsi_vs_spldep-candidates_harm']] = X %>% 
+        mutate(harm_score = ifelse(mean<0,
+                                   (-1) * mean * (0-`psi__condition_a-median`), # remove
+                                   (-1) * mean * (100-`psi__condition_a-median`)) # include
+               
+               ) %>%
+        filter(cancer_type %in% cancers_oi) %>%
+        filter(psi__is_significant & 
+               ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>%
+        arrange(-mean) %>%
+        ggbarplot(x='event_gene', y='harm_score', 
+                  fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
+                  palette=get_palette('Paired',length(unique(X[['cancer_type']])))) + 
+        geom_hline(yintercept=0, linetype='dashed') +
+        labs(x='Event & Gene', y='Harm Score', fill='Cancer Type') +
+        coord_flip()
+    
     x = X %>% 
         filter(cancer_type %in% cancers_oi) %>%
         filter(psi__is_significant & 
                ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0)))
-    a = x %>% dplyr::select(c("event_gene","psi__condition_a-median",
+    a = x %>% dplyr::select(c("EVENT","event_gene","psi__condition_a-median",
                               "psi__condition_a-mad","psi__condition_a"))
     colnames(a) = gsub("_a","",colnames(a))
-    b = x %>% dplyr::select(c("event_gene","psi__condition_b-median",
+    b = x %>% dplyr::select(c("EVENT","event_gene","psi__condition_b-median",
                               "psi__condition_b-mad","psi__condition_b"))
     colnames(b) = gsub("_b","",colnames(b))
     x = bind_rows(a,b)
@@ -176,6 +193,27 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         theme(strip.text.x = element_text(size=6, family='Arial'))
         
     names(plts) = paste0(patt,names(plts))
+    
+    # enrichment ENCORE
+    events_oi = x %>% pull(EVENT) %>% unique()
+    universe = X %>% pull(EVENT) %>% unique()
+    enrichment = enricher(
+        events_oi, TERM2GENE=ontology, universe=universe, maxGSSize=Inf
+        ) %>%
+        as.data.frame() %>%
+        rowwise() %>%
+        mutate(gene_ratio = eval(parse(text=GeneRatio))) %>%
+        ungroup()
+    
+    plts[["encore_val-enrichment-KD-dot"]] = enrichment %>%
+        slice_max(gene_ratio, n=10) %>%
+        arrange(gene_ratio) %>%
+        ggscatter(x="Description", y="gene_ratio", 
+                  size="Count", color="p.adjust") +
+        gradient_color(c("blue", "red")) +
+        scale_size(range=c(0.5,3)) +
+        labs(x="Gene Set", y="Gene Ratio") +
+        coord_flip()
     
     return(plts)
 }
@@ -224,7 +262,7 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle, indices){
             pixels = c(1000,1000), 
             pointsize = 8,
             color='black') +
-        labs(x='0.05 Quantile', y='0.95 Quantile') +
+        labs(x='0.25 Quantile', y='0.75 Quantile') +
         geom_hline(yintercept=0, linetype='dashed') +
         geom_vline(xintercept=0, linetype='dashed') +
         geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial",
@@ -274,13 +312,13 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle, indices){
     
     plts[['tumorigenesis-top_diff_ranges']] = diffs %>% 
         group_by(cancer_type) %>% 
-        filter(range_diff>0.05) %>% # only higher than 0.05
+        filter(range_diff>0.01) %>% # only higher than 0.05
         count(event_gene) %>%
         ungroup() %>%
         group_by(event_gene) %>%
         mutate(total=sum(n)) %>%
         arrange(total) %>%
-        filter(total>1) %>%
+        filter(total>5) %>%
         ggbarplot(x="event_gene", y="n", fill="cancer_type", 
                   color=NA, palette=get_palette("Paired",n_cancers)) +
         labs(x="Event & Gene", y="Count", fill="Cancer Type") +
@@ -345,12 +383,12 @@ plot_spldep_distrs = function(spldep_stats_ccle_cancers, spldep_stats){
 make_plots = function(diff_result_sample, 
                       diff_result_subtypes, 
                       diff_result_sample_raw, psi_ccle, 
-                      spldep_stats, spldep_stats_ccle){
+                      spldep_stats, spldep_stats_ccle, indices){
     plts = list(
         plot_top_candidates_sample_type(diff_result_sample),
         plot_top_candidates_sample_type(diff_result_subtypes, 'subtypes-'),
         plot_ccle_vs_tcga(diff_result_sample_raw, psi_ccle),
-        plot_tumorigenesis(spldep_stats, spldep_stats_ccle),
+        plot_tumorigenesis(spldep_stats, spldep_stats_ccle, indices),
         plot_spldep_distrs(spldep_stats_ccle_cancers, spldep_stats)
     )
     plts = do.call(c,plts)
@@ -394,6 +432,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=8, height=11)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=6, height=11)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=6, height=11)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=18, height=30)
     
     # top candidates sample type (cancer subtypes)
@@ -462,6 +501,7 @@ main = function(){
     spldep_stats_ccle_cancers = read_tsv(spldep_stats_ccle_cancers_file) %>% 
         filter(EVENT %in% selected_events) 
     indices = read_tsv(indices_file) %>% filter(index_name=="ESTIMATE")
+    ontology = read_tsv(ontology_file)
     
     # add event gene
     spldep_stats = spldep_stats %>%
@@ -505,7 +545,7 @@ main = function(){
     plts = make_plots(diff_result_sample, 
                       diff_result_subtypes, 
                       diff_result_sample_raw, psi_ccle, 
-                      spldep_stats, spldep_stats_ccle)
+                      spldep_stats, spldep_stats_ccle, indices)
     
     # make figdata
     figdata = make_figdata(diff_result_sample, 
