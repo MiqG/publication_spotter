@@ -463,6 +463,18 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
         theme(strip.text.x = element_text(size=6, family="Arial")) +
         labs(x="Drug", y="Combined Ranking", color="Drug Screen")
     
+    
+    ## top rankings with HsaEX0034998_KRAS, known event-drug synergy
+    event_oi = "HsaEX0034998_KRAS"
+    x = rankings %>% filter(event_gene==event_oi) 
+    plts[["rankings-event_oi-KRAS"]] = x %>%
+        ggbarplot(x="DRUG_NAME", y="index", fill="event_gene", 
+                  position=position_dodge(0.9), color="drug_screen", 
+                  palette=get_palette("Dark2",length(unique(x[["DRUG_NAME"]])))) + 
+        color_palette(c("black","white")) +
+        coord_flip() +
+        labs(x="Drug", y="Combined Ranking", color="Drug Screen")
+    
     return(plts)
 }
 
@@ -698,6 +710,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "rankings-index_vs_paths_known_best", ".pdf", figs_dir, width=5, height=7)
     save_plt(plts, "rankings-index_vs_paths_unknown_best", ".pdf", figs_dir, width=6, height=5)
     save_plt(plts, "rankings-index_vs_paths_unknown_top", ".pdf", figs_dir, width=14, height=10)
+    save_plt(plts, "rankings-event_oi-KRAS", ".pdf", figs_dir, width=5, height=7)
     
     # predictions
     n_ = 1
