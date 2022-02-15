@@ -102,9 +102,11 @@ rule all:
         # # Moiso 2021
         # os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz'),
 
-        # # split GDSC platforms
-        # os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
-        # os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz'),
+        # split GDSC platforms
+        os.path.join(PREP_DIR,'drug_screens','train','GDSC1.tsv.gz'),
+        os.path.join(PREP_DIR,'drug_screens','train','GDSC2.tsv.gz'),
+        os.path.join(PREP_DIR,'drug_screens','test','GDSC1.tsv.gz'),
+        os.path.join(PREP_DIR,'drug_screens','test','GDSC2.tsv.gz'),
 
         # # preprocess TCGA
         # ## harmonize names drug treatments
@@ -480,19 +482,41 @@ rule combine_drug_treatments:
 
 rule preprocess_gdsc:
     input:
-        os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv')
+        drug_screen = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
+        demeter2 = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
     output:
-        gdsc1 = os.path.join(PREP_DIR,'drug_screens','GDSC1.tsv.gz'),
-        gdsc2 = os.path.join(PREP_DIR,'drug_screens','GDSC2.tsv.gz')
+        gdsc1_train = os.path.join(PREP_DIR,'drug_screens','train','GDSC1.tsv.gz'),
+        gdsc1_test = os.path.join(PREP_DIR,'drug_screens','test','GDSC1.tsv.gz'),
+        gdsc2_train = os.path.join(PREP_DIR,'drug_screens','train','GDSC2.tsv.gz'),
+        gdsc2_test = os.path.join(PREP_DIR,'drug_screens','test','GDSC2.tsv.gz'),
     run:
         import pandas as pd
-        drug_response = pd.read_csv(input[0])
+        SAVE_KWS = {"sep":"\t", "index":False, "compression":"gzip"}
+        drug_response = pd.read_csv(input.drug_screen)
+        demeter2_samples = list(pd.read_table(input.demeter2, index_col=0, nrows=0).columns)
+        
+        # generate unique drug id to avoid duplicates
+        # as there are drugs screend with different concentrations
+        # in both screens
+        drug_response["ID"] = drug_response["DRUG_ID"].astype(str) + "_" +\
+                              drug_response["MIN_CONC"].astype(str) + "_" +\ 
+                              drug_response["MAX_CONC"].astype(str)
+        
+        # mark if cell line was also screened in Demeter2
+        # (we want to train only with unseen cell lines)
+        drug_response["in_demeter2"] = drug_response["ARXSPAN_ID"].isin(demeter2_samples)
+        
         # GDSC1
-        idx = drug_response["DATASET"] == "GDSC1"
-        drug_response.loc[idx].to_csv(output.gdsc1, sep='\t', index=False, compression="gzip")
+        idx_train = (drug_response["DATASET"] == "GDSC1") & (~drug_response["in_demeter2"])
+        idx_test = (drug_response["DATASET"] == "GDSC1") & (drug_response["in_demeter2"])
+        drug_response.loc[idx_train].to_csv(output.gdsc1_train, **SAVE_KWS)
+        drug_response.loc[idx_test].to_csv(output.gdsc1_test, **SAVE_KWS)
+        
         # GDSC2
-        idx = drug_response["DATASET"] == "GDSC2"
-        drug_response.loc[idx].to_csv(output.gdsc2, sep='\t', index=False, compression="gzip")
+        idx_train = (drug_response["DATASET"] == "GDSC2") & (~drug_response["in_demeter2"])
+        idx_test = (drug_response["DATASET"] == "GDSC2") & (drug_response["in_demeter2"])
+        drug_response.loc[idx_train].to_csv(output.gdsc2_train, **SAVE_KWS)
+        drug_response.loc[idx_test].to_csv(output.gdsc2_test, **SAVE_KWS)
         
 
 rule prep_cancer_subtypes:
