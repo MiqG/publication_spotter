@@ -24,6 +24,8 @@ CELL_TYPES = data.frame(
     sampleID = c("SRR7946515_1", "SRR7946516_1")
 )
 
+COMPARISONS_OI = c("0d-vs-14d","0d-vs-8d")
+
 # Development
 # -----------
 # RAW_DIR = file.path(ROOT,"data","raw")
@@ -68,7 +70,7 @@ plot_predictions = function(crispr, selected_events, harm){
     plts = list()
     plts[["predictions-scatters"]] = X %>% 
         ggscatter(x="sign_harm", y="fitness_score", size=1, alpha=0.5) + 
-        facet_wrap(~cell_line+comparison, ncol=2, scales="free") + 
+        facet_wrap(~comparison+cell_line, ncol=2) + 
         stat_cor(method="pearson", size=1, family="Arial") +
         theme(strip.text.x = element_text(size=6, family="Arial"),
               aspect.ratio=1) +
@@ -143,6 +145,9 @@ main = function(){
     selected_events = readLines(selected_events_file)
     spldep = read_tsv(spldep_file)
     psi = read_tsv(psi_file)
+    
+    # subset experiments of interest
+    crispr = crispr %>% filter(comparison %in% COMPARISONS_OI)
     
     # compute harm score
     harm = spldep %>% 
