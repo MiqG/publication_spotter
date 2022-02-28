@@ -114,8 +114,8 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=8, height=10)
-    save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=8, height=12)
+    save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=8, height=7)
+    save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=8, height=8)
 }
 
 

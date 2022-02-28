@@ -23,7 +23,7 @@ RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
-EVENT_TYPES = ['EX','ALTA','ALTD','INT']
+EVENT_TYPES = ["EX"] # ['EX','ALTA','ALTD','INT']
 
 ##### RULES #####
 rule all:
@@ -61,12 +61,17 @@ rule all:
         
         ## compute delta PSI
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi_rel-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        ## compute delta Spl. Dep.
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_spldep-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         ## create ontology from KDs
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','kd_gene_sets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-        # compute normalized splicing dependency
+        # compute normalized splicing dependency (harm score)
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score_rel-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Exon CRISPR screen (Thomas 2020)
         ## compute splicing dependencies
@@ -364,7 +369,8 @@ rule delta_psi_encore:
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
         psi = os.path.join(PREP_DIR,'event_psi','ENCORE-{event_type}.tsv.gz')
     output:
-        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz')
+        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'),
+        delta_psi_rel = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi_rel-{event_type}.tsv.gz')
     run:
         import pandas as pd
         import numpy as np
@@ -374,6 +380,7 @@ rule delta_psi_encore:
         
         # delta PSI as the difference between conditions and the mean of the conditions
         delta_psi = {}
+        delta_psi_rel = {}
         for sample_oi in metadata["sampleID"]:
             # get the controls of the sample
             ctls = metadata.loc[metadata["sampleID"]==sample_oi, "control_samples"].values[0]
@@ -381,13 +388,65 @@ rule delta_psi_encore:
             # controls will be np.nan
             if isinstance(ctls,str):
                 ctls = ctls.split(",")
-                dpsi = psi[sample_oi] - psi[ctls].mean(axis=1)
+                psi_ctls = psi[ctls].mean(axis=1)
+                
+                # compute delta PSI
+                dpsi = psi[sample_oi] - psi_ctls
+                
+                # compute Glass' delta PSI
+                pseudocount = psi[ctls].std(axis=1).mean()
+                rel_dpsi = dpsi / (psi[ctls].std(axis=1) + pseudocount)
+                
                 delta_psi[sample_oi] = dpsi
+                delta_psi_rel[sample_oi] = rel_dpsi
+                
+                del dpsi, rel_dpsi, psi_ctls, ctls
+                
         
         delta_psi = pd.DataFrame(delta_psi)
+        delta_psi_rel = pd.DataFrame(delta_psi_rel)
         
         # save
         delta_psi.reset_index().to_csv(output.delta_psi, sep="\t", index=False, compression="gzip")
+        delta_psi_rel.reset_index().to_csv(output.delta_psi_rel, sep="\t", index=False, compression="gzip")
+        
+
+rule delta_spldep_encore:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        spldep = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}','mean.tsv.gz')
+    output:
+        delta_spldep = os.path.join(RESULTS_DIR,'files','ENCORE','delta_spldep-{event_type}.tsv.gz'),
+    run:
+        import pandas as pd
+        import numpy as np
+        
+        metadata = pd.read_table(input.metadata)
+        spldep = pd.read_table(input.spldep, index_col=0)
+        
+        # delta Spl. Dep. as the difference between conditions and the mean of the conditions
+        delta_spldep = {}
+        for sample_oi in metadata["sampleID"]:
+            # get the controls of the sample
+            ctls = metadata.loc[metadata["sampleID"]==sample_oi, "control_samples"].values[0]
+            
+            # controls will be np.nan
+            if isinstance(ctls,str):
+                ctls = ctls.split(",")
+                spldep_ctls = spldep[ctls].mean(axis=1)
+                
+                # compute delta PSI (Glass' delta)
+                dspldep = (spldep[sample_oi] - spldep_ctls) / spldep[ctls].std(axis=1)
+                
+                delta_spldep[sample_oi] = dspldep
+                
+                del dspldep, spldep_ctls, ctls
+                
+        
+        delta_spldep = pd.DataFrame(delta_spldep)
+        
+        # save
+        delta_spldep.reset_index().to_csv(output.delta_spldep, sep="\t", index=False, compression="gzip")
         
 
 rule make_ontology:
@@ -434,22 +493,31 @@ rule harm_score_encore:
     input:
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
         spldep = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}','mean.tsv.gz'),
-        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz')
+        delta_spldep = os.path.join(RESULTS_DIR,'files','ENCORE','delta_spldep-{event_type}.tsv.gz'),
+        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'),
+        delta_psi_rel = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi_rel-{event_type}.tsv.gz')
     output:
-        harm_score = os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz')
+        harm_score = os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz'),
+        harm_score_rel = os.path.join(RESULTS_DIR,'files','ENCORE','harm_score_rel-{event_type}.tsv.gz')
     run:
         import pandas as pd
+        import numpy as np
         
         # load
         metadata = pd.read_table(input.metadata)
         spldep = pd.read_table(input.spldep, index_col=0)
+        delta_spldep = pd.read_table(input.delta_spldep, index_col=0)
         delta_psi = pd.read_table(input.delta_psi, index_col=0)
+        delta_psi_rel = pd.read_table(input.delta_psi_rel, index_col=0)
         
         # compute ratio spldep/dpsi for the corresponding controls of each condition
         harm_score = {}
+        harm_score_rel = {}
         for sample_oi in delta_psi.columns:
-            # get delta psi
+            # get deltas
+            dspldep = delta_spldep[sample_oi]
             dpsi = delta_psi[sample_oi]
+            dpsi_rel = delta_psi_rel[sample_oi]
             
             # get the controls of the sample
             ctls = metadata.loc[metadata["sampleID"]==sample_oi, "control_samples"].values[0]
@@ -459,13 +527,17 @@ rule harm_score_encore:
             ctls_spldep = spldep[ctls].mean(axis=1)
             
             # normalize splicing dependency by delta psi
-            harm_score[sample_oi] = ctls_spldep * dpsi
+            harm_score[sample_oi] = dpsi * ctls_spldep
+            harm_score_rel[sample_oi] = dpsi_rel * ctls_spldep
                         
         harm_score = pd.DataFrame(harm_score)
+        harm_score_rel = pd.DataFrame(harm_score_rel)
         
         # save
         harm_score.reset_index()\
                    .to_csv(output.harm_score, sep="\t", index=False, compression="gzip")
+        harm_score_rel.reset_index()\
+                   .to_csv(output.harm_score_rel, sep="\t", index=False, compression="gzip")
 
         
 rule compute_splicing_dependency_Thomas2020:

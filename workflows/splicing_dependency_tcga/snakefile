@@ -317,7 +317,7 @@ rule predict_drug_response:
         script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/target_spotter drugassoc_predict \
+        nice python {params.script_dir}/target_spotter drugassoc_predict \
                     --splicing_dependency_file={input.spldep} \
                     --model_summaries_file={input.fitted_dir}/model_summaries.tsv.gz \
                     --fitted_growth_rates_file={input.fitted_dir}/growth_rates.tsv.gz \

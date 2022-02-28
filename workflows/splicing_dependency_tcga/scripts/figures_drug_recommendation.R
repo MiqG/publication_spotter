@@ -22,20 +22,19 @@ require(writexl)
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
 
-# variables
-THRESH_LR_FDR = 0.1
-
 # Development
 # ----------- 
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RAW_DIR = file.path(ROOT,'data','raw')
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
+# MODELS_DIR = file.path(ROOT,"results","splicing_dependency_drugs")
 # drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 # metadata_file = file.path(PREP_DIR,'metadata','PANCAN.tsv.gz')
 # drug_treatments_file = file.path(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','drug_recommendation')
 # drug_response_file = file.path(RESULTS_DIR,'files','PANCAN','estimated_drug_response_by_drug-EX.tsv.gz')
 # metadata_subtypes_file = file.path(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
+# selected_drugs_file = file.path(MODELS_DIR,'files','selected_models-EX.txt')
 
 ##### FUNCTIONS #####
 plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
@@ -62,7 +61,7 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
             by=c('bcr_patient_barcode','cancer_type','DRUG_NAME')) %>%
         drop_na() %>%
         distinct(drug_screen, cancer_type, sample, ranking, bcr_patient_barcode,
-                 ranking_ratio, predicted_ic50, DRUG_NAME) %>% 
+                 ranking_ratio, predicted_ic50, DRUG_NAME, DRUG_NAME_CLEAN) %>% 
         group_by(cancer_type, sample) %>% 
         # only consider the best case scenario
         slice_min(order_by=ranking_ratio, n=1) %>%
@@ -83,11 +82,11 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     
     plts[['drug_rec-sample_counts_by_cancer_and_treatment']] = X %>% 
         ungroup() %>% 
-        group_by(cancer_type, DRUG_NAME) %>% 
+        group_by(cancer_type, DRUG_NAME_CLEAN) %>% 
         summarize(n = n()) %>%
         mutate(perc = n / sum(n)) %>%
         # filter(DRUG_NAME %in% X[["DRUG_NAME"]]) %>%
-        ggballoonplot(x="cancer_type", y="DRUG_NAME", size="perc", fill="perc") +
+        ggballoonplot(x="cancer_type", y="DRUG_NAME_CLEAN", size="perc", fill="perc") +
         gradient_fill("red") +
         scale_size(range=c(0.5,3)) +
         labs(x="Cancer Type", y="Drug")
@@ -129,15 +128,15 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     cancer_oi = "KIRC"
     x = X %>% filter(cancer_type==cancer_oi)
     plts[["drug_rec-drugs_ranking_ratios-KIRC_given"]] = x %>% 
-        ggboxplot(x="DRUG_NAME", y="ranking_ratio", 
-                  color="DRUG_NAME", 
-                  palette=get_palette("Dark2",length(unique(x[["DRUG_NAME"]])))) + 
+        ggboxplot(x="DRUG_NAME_CLEAN", y="ranking_ratio", outlier.size=0.1,
+                  color="DRUG_NAME_CLEAN", 
+                  palette=get_palette("Dark2",length(unique(x[["DRUG_NAME_CLEAN"]])))) + 
         labs(x="Drug", y="Ranking Ratio") + 
         guides(color="none") + 
         coord_flip()
     
     samples_oi = X %>% filter(cancer_type==cancer_oi) %>% pull(sample)
-    x = lapply(1:16, function(nn){
+    x = lapply(1:9, function(nn){
           res = drug_recs %>%
             filter(sample%in%samples_oi & DRUG_NAME%in%avail_drugs) %>% 
             group_by(sample) %>% 
@@ -148,19 +147,20 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     })
     x = do.call(rbind,x)
     x = x %>% 
-        group_by(sample, DRUG_NAME) %>%
+        group_by(sample, DRUG_NAME_CLEAN) %>%
         slice_min(ranking, n=1) %>%
         ungroup() %>%
         group_by(sample) %>%
         arrange(ranking_ratio) %>%
         mutate(ranking=row_number())
     
-    n_drugs = x %>% pull(DRUG_NAME) %>% unique() %>% length()
+    n_drugs = x %>% pull(DRUG_NAME_CLEAN) %>% unique() %>% length()
     drugs_given = treatments_clean %>% filter(cancer_type==cancer_oi) %>% pull(DRUG_NAME) %>% unique()
     drugs_recommended = x %>% pull(DRUG_NAME) %>% unique()
     new_recs = setdiff(drugs_recommended, drugs_given)
     plts[["drug_rec-drugs_ranking_ratios-KIRC_best"]] = x %>%
-        mutate(lab = ifelse(DRUG_NAME %in% new_recs, paste0("*",DRUG_NAME), DRUG_NAME)) %>%
+        mutate(lab = ifelse(DRUG_NAME %in% new_recs, 
+                            paste0("*",DRUG_NAME_CLEAN), DRUG_NAME_CLEAN)) %>%
         ggboxplot(x="lab", y="ranking_ratio", outlier.size=0.1,
                   color="lab", palette=get_palette("Dark2", n_drugs)) + 
         labs(x="Drug", y="Ranking Ratio") + 
@@ -215,7 +215,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-drugs_ranking_ratios', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=6, height=5)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=6, height=5)
-    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=5, height=5)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=7, height=5)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=7, height=10)
 }
 
@@ -252,11 +252,21 @@ main = function(){
         left_join(drug_targets, by="DRUG_NAME") %>% ## there's an overlap of 44
         mutate(pharmaceutical_tx_started_days_to = as.numeric(pharmaceutical_tx_started_days_to))
     drug_response = read_tsv(drug_response_file) %>%
-        left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
+        mutate(DRUG_ID=as.numeric(gsub("_.*","",ID))) %>%
+        left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID") %>%
+        mutate(DRUG_NAME_CLEAN = ID) %>%
+        separate(DRUG_NAME_CLEAN, c("drug_id","min_conc","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc))
+        
     metadata_subtypes = read_tsv(metadata_subtypes_file) %>% 
         mutate(cancer_subtype=paste0(cancer,"_",cancer_subtype))
     metadata = read_tsv(metadata_file) %>%
         left_join(metadata_subtypes, by= c("sampleID", "cancer", "sample_type"))
+    
+    selected_drugs = readLines(selected_drugs_file)
+    
+    # subset for selected drugs
+    drug_response = drug_response %>% filter(ID %in% selected_drugs)
     
     # make plots
     plts = make_plots(drug_treatments, drug_response, metadata)

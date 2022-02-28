@@ -92,8 +92,8 @@ plot_patient_clusters = function(embedding, metadata){
 }
 
 
-plot_personalization_example = function(diff_result, harm, drug_response, 
-                                        drug_targets, event_annot){
+plot_personalization_example = function(diff_result, harm, 
+                                        drug_response, event_annot){
     
     plts = list()
     
@@ -123,25 +123,28 @@ plot_personalization_example = function(diff_result, harm, drug_response,
     
     # drug recommendation
     X = drug_response %>%
-        left_join(drug_targets %>% distinct(DRUG_NAME,DRUG_ID), by="DRUG_ID") %>%
-        group_by(DRUG_NAME) %>%
+        group_by(DRUG_NAME_CLEAN) %>%
         slice_min(predicted_ic50, n=1) %>%
         ungroup()
     
     # ifosfamide (not in GDSC), DOXORUBICIN, PAZOPANIB did not work for the patient
+    # oncobox recommended 
     drugs_oi = c("PAZOPANIB","DOXORUBICIN")
     x = X %>%
         arrange(predicted_ic50) %>%
-        head(15) %>%
+        head(10) %>%
+        mutate(dataset="top10") %>%
         bind_rows(
-            X %>% filter(DRUG_NAME%in%drugs_oi)
+            X %>% filter(DRUG_NAME%in%drugs_oi) %>% mutate(dataset="treated")
         ) %>%
-        distinct() %>%
-        mutate(lab=ifelse(DRUG_NAME%in%drugs_oi, paste0("*",DRUG_NAME), DRUG_NAME))
+        mutate(lab=ifelse(DRUG_NAME%in%drugs_oi, 
+                          paste0("*",DRUG_NAME_CLEAN), DRUG_NAME_CLEAN))
     
     plts[["pers-drug_rec-bars"]] = x %>%
         ggbarplot(x="lab", y="predicted_ic50", 
                   fill="#9BC1BC", color="drug_screen") +
+        facet_wrap(~dataset) + 
+        theme(strip.text.x = element_text(size=6, family='Arial')) +
         color_palette(c("black","white")) +
         labs(x="Drug", y="Predicted IC50") +
         coord_flip()
@@ -150,9 +153,12 @@ plot_personalization_example = function(diff_result, harm, drug_response,
 }
 
 
-make_plots = function(embedding, metadata){
+make_plots = function(embedding, metadata, diff_result, harm, 
+                      drug_response, event_annot){
     plts = list(
-        plot_patient_clusters(embedding, metadata)
+        plot_patient_clusters(embedding, metadata),
+        plot_personalization_example(diff_result, harm, 
+                                     drug_response, event_annot)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -194,7 +200,7 @@ save_plots = function(plts, figs_dir){
     # example of personalization
     save_plt(plts, 'pers-diffpsi-scatter', '.pdf', figs_dir, width=5.5, height=7)
     save_plt(plts, 'pers-harm-bars', '.pdf', figs_dir, width=10, height=7)
-    save_plt(plts, 'pers-drug_rec-bars', '.pdf', figs_dir, width=5, height=7)
+    save_plt(plts, 'pers-drug_rec-bars', '.pdf', figs_dir, width=9, height=7)
 }
 
 
@@ -233,6 +239,13 @@ main = function(){
     drug_targets = read_tsv(drug_targets_file)
     
     # prep
+    drug_response = drug_response %>%
+        mutate(DRUG_ID=as.numeric(gsub("_.*","",ID))) %>%
+        left_join(drug_targets %>% distinct(DRUG_NAME,DRUG_ID), by="DRUG_ID") %>%
+        mutate(DRUG_NAME_CLEAN = ID) %>%
+        separate(DRUG_NAME_CLEAN, c("drug_id","min_conc","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc))
+    
     harm = pers_spldep %>%
         rename(spldep = SRR13664572_1) %>%
         left_join(pers_psi %>% rename(psi = SRR13664572_1), by=c("index"="EVENT")) %>%
@@ -250,7 +263,8 @@ main = function(){
         mutate(event_gene=paste0(EVENT,"_",GENE))
     
     # plot
-    plts = make_plots(embedding, metadata)
+    plts = make_plots(embedding, metadata, diff_result, harm, 
+                      drug_response, event_annot)
 
     # make figdata
     figdata = make_figdata(embedding)

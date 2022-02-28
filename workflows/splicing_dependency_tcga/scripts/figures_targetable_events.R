@@ -53,6 +53,7 @@ MIN_SAMPLES = 10
 # indices_file = file.path(RESULTS_DIR,'files','PANCAN','correlation_spldep_indices-EX.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
 # ontology_file = file.path(ROOT,"results","model_splicing_dependency",'files','ENCORE','kd_gene_sets-EX.tsv.gz')
+# cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 
 ##### FUNCTIONS #####
 prep_diff_result = function(diff_result, spldep_stats){
@@ -70,7 +71,7 @@ prep_diff_result = function(diff_result, spldep_stats){
 }
 
 
-plot_top_candidates_sample_type = function(diff_result, patt=''){
+plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
     
     plts = list()
 
@@ -98,7 +99,9 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
     X = diff_result %>%
         filter(cancer_type %in% cancers_oi) %>%
         mutate(sign_dpsi = sign(psi__median_diff),
-               sign_spldep = sign(mean))
+               sign_spldep = sign(mean),
+               event_gene = ifelse(EVENT%in%cancer_events[["EVENT"]], 
+                                   paste0("*",event_gene), event_gene))
     
     plts[['top_samples-dpsi_vs_spldep-scatter']] = X %>%
         ggplot(aes(x=psi__median_diff, 
@@ -192,11 +195,13 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         coord_flip() +
         theme(strip.text.x = element_text(size=6, family='Arial'))
         
-    names(plts) = paste0(patt,names(plts))
-    
     # enrichment ENCORE
     events_oi = x %>% pull(EVENT) %>% unique()
     universe = X %>% pull(EVENT) %>% unique()
+    
+    events_oi %>% length() %>% print()
+    events_oi %in% ontology[["EVENT"]] %>% sum() %>% print()
+    
     enrichment = enricher(
         events_oi, TERM2GENE=ontology, universe=universe, maxGSSize=Inf
         ) %>%
@@ -205,15 +210,17 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         mutate(gene_ratio = eval(parse(text=GeneRatio))) %>%
         ungroup()
     
-    plts[["encore_val-enrichment-KD-dot"]] = enrichment %>%
+    plts[["top_samples-enrichment-KD-dot"]] = enrichment %>%
         slice_max(gene_ratio, n=10) %>%
         arrange(gene_ratio) %>%
         ggscatter(x="Description", y="gene_ratio", 
                   size="Count", color="p.adjust") +
         gradient_color(c("blue", "red")) +
         scale_size(range=c(0.5,3)) +
-        labs(x="Gene Set", y="Gene Ratio") +
+        labs(x="Event Set", y="Event Ratio") +
         coord_flip()
+    
+    names(plts) = paste0(patt,names(plts))
     
     return(plts)
 }
@@ -383,10 +390,11 @@ plot_spldep_distrs = function(spldep_stats_ccle_cancers, spldep_stats){
 make_plots = function(diff_result_sample, 
                       diff_result_subtypes, 
                       diff_result_sample_raw, psi_ccle, 
-                      spldep_stats, spldep_stats_ccle, indices){
+                      spldep_stats, spldep_stats_ccle, indices,
+                      cancer_events){
     plts = list(
-        plot_top_candidates_sample_type(diff_result_sample),
-        plot_top_candidates_sample_type(diff_result_subtypes, 'subtypes-'),
+        plot_top_candidates_sample_type(diff_result_sample, cancer_events),
+        plot_top_candidates_sample_type(diff_result_subtypes, cancer_events, 'subtypes-'),
         plot_ccle_vs_tcga(diff_result_sample_raw, psi_ccle),
         plot_tumorigenesis(spldep_stats, spldep_stats_ccle, indices),
         plot_spldep_distrs(spldep_stats_ccle_cancers, spldep_stats)
@@ -430,19 +438,22 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'top_samples-sample_counts_cancer', '.pdf', figs_dir, width=8, height=5)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-scatter', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=8, height=11)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=6, height=11)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=6, height=11)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=6, height=12)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=6, height=12)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=6, height=12)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=18, height=30)
+    save_plt(plts, 'top_samples-enrichment-KD-dot', '.pdf', figs_dir, width=5, height=7)
     
     # top candidates sample type (cancer subtypes)
     save_plt(plts, 'subtypes-top_samples-sample_counts_cancer', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-scatter', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
-    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=8, height=9)
-    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=8, height=9)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=6, height=9)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=6, height=9)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=6, height=9)
     save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=15, height=15)
-    
+    save_plt(plts, 'subtypes-top_samples-enrichment-KD-dot', '.pdf', figs_dir, width=5, height=7)
+
     # CCLE vs TCGA
     save_plt(plts, 'ccle_vs_tcga-std_ccle_vs_dpsi', '.pdf', figs_dir, width=10, height=10)
     
@@ -502,6 +513,7 @@ main = function(){
         filter(EVENT %in% selected_events) 
     indices = read_tsv(indices_file) %>% filter(index_name=="ESTIMATE")
     ontology = read_tsv(ontology_file)
+    cancer_events = read_tsv(cancer_events_file)
     
     # add event gene
     spldep_stats = spldep_stats %>%
@@ -545,7 +557,8 @@ main = function(){
     plts = make_plots(diff_result_sample, 
                       diff_result_subtypes, 
                       diff_result_sample_raw, psi_ccle, 
-                      spldep_stats, spldep_stats_ccle, indices)
+                      spldep_stats, spldep_stats_ccle, indices,
+                      cancer_events)
     
     # make figdata
     figdata = make_figdata(diff_result_sample, 

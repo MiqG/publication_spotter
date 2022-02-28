@@ -47,6 +47,7 @@ source(file.path(ROOT,"src","R","utils.R"))
 # variables
 THRESH_FDR = 0.1
 THRESH_PVALUE = 0.05
+THRESH_NOBS = 20
 RANDOM_SEED = 1234
 
 # Development
@@ -60,7 +61,7 @@ RANDOM_SEED = 1234
 # figs_dir = file.path(RESULTS_DIR,"figures","model_drug_screens")
 # embedding_file = file.path(RESULTS_DIR,"files","embedded_drug_associations-EX.tsv.gz")
 # estimated_response_file = file.path(RESULTS_DIR,"files","estimated_drug_response_by_drug-EX.tsv.gz")
-# drug_screen_file = file.path(RAW_DIR,"DepMap","gdsc","sanger-dose-response.csv")
+# drug_screens_dir = file.path(PREP_DIR,'drug_screens')
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # clusters_file = file.path(RESULTS_DIR,"files","cluster_estimated_drug_response-merged-EX.tsv.gz")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
@@ -69,13 +70,28 @@ RANDOM_SEED = 1234
 # paths_random_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-random.tsv.gz")
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
 
-
 ##### FUNCTIONS #####
+load_drug_screens = function(drug_screens_dir){
+    filenames = cbind(
+        drug_screens_dir,
+        expand_grid(c("train","test"),c("GDSC1.tsv.gz","GDSC2.tsv.gz")
+                   )
+    )
+    dfs = apply(filenames, 1, function(x){
+        x = as.vector(x)
+        f = file.path(x[1],x[2],x[3])
+        df = read_tsv(f)
+        return(df)
+    })
+    dfs = do.call(rbind,dfs)
+    return(dfs)
+}
+
 compute_rankings = function(models, drug_targets){
     rankings = models %>% 
-        filter(lr_padj<THRESH_FDR) %>% 
-        group_by(DRUG_ID) %>% 
-        arrange(DRUG_ID, -spldep_coefficient) %>% 
+        filter(lr_padj<THRESH_FDR  & n_obs>THRESH_NOBS) %>% 
+        group_by(ID) %>% 
+        arrange(ID, -spldep_coefficient) %>% 
         mutate(ranking = row_number(), 
                ranking_ratio = ranking/n(), 
                ranking_drug = ranking_ratio) %>% 
@@ -86,12 +102,15 @@ compute_rankings = function(models, drug_targets){
                ranking_ratio = ranking/n(), 
                ranking_event = ranking_ratio) %>%
         ungroup() %>%
-        dplyr::select(event_gene, EVENT, GENE, DRUG_ID, spldep_coefficient,
-                      drug_screen, ranking_drug, ranking_event) %>%
+        dplyr::select(event_gene, EVENT, GENE, ID, DRUG_ID, spldep_coefficient,
+                      drug_screen, ranking_drug, ranking_event, n_obs) %>%
         mutate(combined_ranking = ranking_event + ranking_drug) %>% 
         arrange(combined_ranking) %>%
         mutate(index = row_number()) %>%
-        left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
+        left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID") %>%
+        mutate(DRUG_NAME_CLEAN = ID) %>%
+        separate(DRUG_NAME_CLEAN, c("drug_id","min_conc","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc))
     
     return(rankings)
 }
@@ -148,53 +167,13 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
 }
 
 
-prepare_shortest_paths = function(paths_real, paths_random){
-    # for each drug and its targets,
-    # what is the probability of shortest path lengths of each significant association
-    drugs = paths_real %>% pull(DRUG_ID) %>% unique()
-    probs = lapply(drugs, function(drug_oi){
-        targets = paths_real %>% 
-            filter(DRUG_ID==drug_oi) %>% 
-            pull(target) %>% 
-            unique()
-        probs_bytarget = lapply(targets, function(target_oi){
-            null = paths_random %>% 
-                filter(target==target_oi) %>% 
-                pull(shortest_path_length)
-            
-            df = paths_real %>% 
-                filter(DRUG_ID==drug_oi & target==target_oi) %>% 
-                group_by(source) %>%
-                mutate(prob = sum(shortest_path_length < null) / length(null),
-                       pvalue = 1 - prob) %>%
-                ungroup()
-            
-            return(df)
-        })
-        probs_bytarget = do.call(rbind,probs_bytarget)
-        return(probs_bytarget)
-    })
-    probs = do.call(rbind,probs)
-    
-    # when a drug has multiple targets, we should keep the shortest 
-    # shortest path length to any of its targets
-    probs = probs %>%
-        group_by(DRUG_ID, source) %>%
-        slice_min(shortest_path_length, n=1) %>%
-        slice_min(pvalue, n=1) %>% # for those cases with equal shortest path
-        ungroup() %>%
-        group_by(DRUG_ID) %>%
-        mutate(padj = p.adjust(pvalue, method="fdr")) %>%
-        ungroup()
-    
-    return(probs)
-}
-
-
 plot_associations = function(models, spldep_ccle, drug_screen){
     top_n = 25
     X = models %>% 
-        left_join(drug_screen %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID")
+        left_join(drug_screen %>% distinct(DRUG_ID,DRUG_NAME) %>% drop_na(), by="DRUG_ID") %>%
+        mutate(DRUG_NAME_CLEAN = ID) %>%
+        separate(DRUG_NAME_CLEAN, c("drug_id","min_conc","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc))
     
     plts = list()
     
@@ -211,32 +190,41 @@ plot_associations = function(models, spldep_ccle, drug_screen){
                    linetype="dashed") +
         labs(x="LR Test FDR")
     
+    # how do number of observations relate to association coefficient?
+    plts[["associations-nobs_vs_coef"]] = X %>% 
+        filter(lr_padj < THRESH_FDR) %>% 
+        ggplot(aes(x=n_obs, y=spldep_coefficient)) + 
+        geom_scattermore(pixels=c(1000,1000), pointsize=2, alpha=0.5) + 
+        theme_pubr() + 
+        geom_vline(xintercept=THRESH_NOBS, linetype="dashed") + 
+        labs(x="N. Observations", y="Assoc. Coefficient")
+    
     # how many drugs and events are significantly associated?
     plts[["associations-drug_counts"]] = X %>% 
-        filter(lr_padj < THRESH_FDR) %>% 
-        count(drug_screen, DRUG_NAME) %>% 
-        group_by(DRUG_NAME) %>%
+        filter(lr_padj < THRESH_FDR & n_obs > THRESH_NOBS) %>% 
+        count(drug_screen, DRUG_NAME_CLEAN) %>% 
+        group_by(DRUG_NAME_CLEAN) %>%
         mutate(total=sum(n)) %>%
         arrange(total) %>%
-        ggbarplot(x="DRUG_NAME", y="n", fill="drug_screen", palette="jco", color=NA) + 
+        ggbarplot(x="DRUG_NAME_CLEAN", y="n", fill="drug_screen", palette="jco", color=NA) + 
         labs(x="Drug", y="N. Significant Associations")
     
     plts[["associations-top_drug_counts"]] = X %>% 
-        filter(lr_padj < THRESH_FDR) %>% 
-        count(drug_screen, DRUG_NAME) %>% 
-        group_by(DRUG_NAME) %>%
+        filter(lr_padj < THRESH_FDR & n_obs > THRESH_NOBS) %>% 
+        count(drug_screen, DRUG_NAME_CLEAN) %>% 
+        group_by(DRUG_NAME_CLEAN) %>%
         mutate(total=sum(n)) %>%
         arrange(-total) %>%
         ungroup() %>%
-        mutate(index=as.numeric(factor(DRUG_NAME, levels=unique(DRUG_NAME)))) %>%
+        mutate(index=as.numeric(factor(DRUG_NAME_CLEAN, levels=unique(DRUG_NAME_CLEAN)))) %>%
         filter(index <= top_n) %>%
-        ggbarplot(x="DRUG_NAME", y="n", fill="drug_screen", palette="jco", color=NA) + 
+        ggbarplot(x="DRUG_NAME_CLEAN", y="n", fill="drug_screen", palette="jco", color=NA) + 
         labs(x="Drug", y="N. Significant Associations", 
              title=sprintf("Top %s", top_n)) +
         coord_flip()
     
     plts[["associations-spldep_counts"]] = X %>% 
-        filter(lr_padj < THRESH_FDR) %>% 
+        filter(lr_padj < THRESH_FDR & n_obs > THRESH_NOBS) %>% 
         count(drug_screen, event_gene) %>% 
         group_by(event_gene) %>%
         mutate(total=sum(n)) %>%
@@ -245,7 +233,7 @@ plot_associations = function(models, spldep_ccle, drug_screen){
         labs(x="Event & Gene", y="N. Significant Associations")
     
     plts[["associations-top_spldep_counts"]] = X %>% 
-        filter(lr_padj < THRESH_FDR) %>% 
+        filter(lr_padj < THRESH_FDR & n_obs > THRESH_NOBS) %>% 
         count(drug_screen, event_gene) %>% 
         group_by(event_gene) %>%
         mutate(total=sum(n)) %>%
@@ -260,48 +248,28 @@ plot_associations = function(models, spldep_ccle, drug_screen){
     
     # - agreement within GDSC1 and GDSC2
     drugs_oi = X %>%
-        distinct(DRUG_ID, DRUG_NAME, drug_screen) %>%
-        count(DRUG_NAME, drug_screen) %>%
+        distinct(DRUG_ID, DRUG_NAME_CLEAN, drug_screen) %>%
+        count(DRUG_NAME_CLEAN, drug_screen) %>%
         filter(n>1)
     correls = drugs_oi %>% 
-        left_join(X, by=c("DRUG_NAME","drug_screen")) %>% 
-        group_by(DRUG_NAME) %>% 
+        left_join(X, by=c("DRUG_NAME_CLEAN","drug_screen")) %>% 
+        group_by(DRUG_NAME_CLEAN) %>% 
         mutate(replicate = paste0("rep",as.numeric(factor(DRUG_ID)))) %>% 
-        pivot_wider(id_cols=c("DRUG_NAME","drug_screen","event_gene"), 
+        pivot_wider(id_cols=c("DRUG_NAME_CLEAN","drug_screen","event_gene"), 
                     names_from="replicate", 
                     values_from="spldep_coefficient") %>% 
-        group_by(drug_screen,DRUG_NAME) %>%
+        group_by(drug_screen,DRUG_NAME_CLEAN) %>%
         summarize(correl=cor(rep1,rep2,method="pearson",use="pairwise.complete.obs"))
     
     plts[["associations-agreement_within"]] = correls %>%
         ggviolin(x="drug_screen", y="correl", trim=TRUE,
                  color=NA, fill="drug_screen", palette="jco") + 
         geom_boxplot(width=0.1, outlier.size=0.1) +
-        geom_text_repel(aes(label=DRUG_NAME), correls, size=1, family="Arial") +
-        geom_text(aes(y=1, label=n), correls %>% count(drug_screen)) +
+        geom_text_repel(aes(label=DRUG_NAME_CLEAN), correls, size=1, family="Arial") +
+        geom_text(aes(y=1, label=n), correls %>% count(drug_screen), size=1, family="Arial") +
         guides(fill="none") +
         labs(x="Drug Screen", y="Pearson Correlation")
-        
-    
-    # - agreement between GDSC1 and GDSC2
-    ## drugs characterized in both screens
-    drugs_oi = X %>% 
-        distinct(DRUG_NAME, drug_screen) %>% 
-        count(DRUG_NAME) %>% 
-        filter(n>1)
-    
-    correls = drugs_oi %>% 
-        left_join(X, by=c("DRUG_NAME")) %>% 
-        group_by(DRUG_NAME) %>% 
-        pivot_wider(id_cols=c("DRUG_NAME","event_gene"), 
-                    names_from="drug_screen", 
-                    values_from="spldep_coefficient",
-                    values_fn=median) %>% 
-        summarize(correl=cor(GDSC1,GDSC2,method="pearson",use="pairwise.complete.obs"))
-    plts[["associations-agreement_between"]] = correls %>%
-        gghistogram(x="correl", fill="darkblue", color=NA) +
-        labs(x="Pearson Correlation", y="Count")
-    
+            
     # - overlaps with cell lines used to model splicing dependency
     # - overlaps with cell lines used in GDSC1 and GDSC2
     samples_oi = list(
@@ -351,21 +319,22 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
              title=sprintf("n = %s", nrow(ranking_real %>% filter(is_target))))
 
     X = shortest_paths %>% 
-        dplyr::select(source, shortest_path_length, padj, DRUG_ID) %>% 
+        dplyr::select(source, shortest_path_length, DRUG_ID) %>% 
         left_join(rankings, by=c("source"="GENE", "DRUG_ID")) %>%
-        mutate(is_close=padj<0.2) %>%
-        left_join(models %>% distinct(DRUG_ID, drug_screen, event_gene, lr_padj), 
-                  by=c("DRUG_ID","event_gene","drug_screen"))
+        left_join(models %>% distinct(ID, drug_screen, event_gene, 
+                                      lr_padj, pearson_correlation), 
+                  by=c("ID","event_gene","drug_screen"))
     
     best_scores = X %>% 
-        group_by(DRUG_ID) %>%
+        group_by(DRUG_NAME_CLEAN) %>%
         slice_min(combined_ranking, n=1) %>%
         mutate(is_best=TRUE) %>%
-        distinct(DRUG_ID, event_gene, combined_ranking, is_best) %>%
+        distinct(ID, DRUG_ID, event_gene, combined_ranking, is_best) %>%
         ungroup()
 
     X = X %>%
-        left_join(best_scores, by=c("DRUG_ID","event_gene","combined_ranking")) %>%
+        left_join(best_scores, by=c("DRUG_NAME_CLEAN","ID","DRUG_ID",
+                                    "event_gene","combined_ranking")) %>%
         mutate(is_best=replace_na(is_best,FALSE)) %>%
         distinct()
     
@@ -374,18 +343,22 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
         pull(index) %>% 
         median()
     
+    X = X %>%
+        separate(ID, c("drug_id","min_conc","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc))
+    
     # when significant event-drug association with drug targets,
     # there can also be other good associations of non-targets
     plts[["rankings-index_vs_paths_all"]] = X %>%
-        group_by(DRUG_ID) %>%
+        group_by(DRUG_NAME_CLEAN) %>%
         filter(any(shortest_path_length==0)) %>%
         ungroup() %>%
         ggplot(aes(x=as.factor(shortest_path_length), y=index)) +
         geom_violin(color=NA, width=1.2, fill="darkred") + 
         geom_boxplot(width=0.1, outlier.color=NA) + 
-        geom_text(aes(x=as.factor(shortest_path_length), y=19000, label=n), 
+        geom_text(aes(x=as.factor(shortest_path_length), y=13000, label=n), 
                   X %>%
-                    group_by(DRUG_ID) %>%
+                    group_by(DRUG_NAME_CLEAN) %>%
                     filter(any(shortest_path_length==0)) %>%
                     ungroup() %>%
                     count(shortest_path_length),
@@ -396,12 +369,17 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
     
     # some indirect associations are better than those with target
     x = X %>%
-        group_by(DRUG_ID) %>%
-        filter(any(shortest_path_length==0)) %>%
-        ungroup() %>%
-        filter(is_best)
+        group_by(DRUG_NAME) %>%
+        filter(any(shortest_path_length==0) & is_best) %>%
+        ungroup() %>% 
+        ## when drug has multiple targets, 
+        ## consider only shortest path length to one of them
+        group_by(DRUG_ID, source) %>% 
+        slice_min(shortest_path_length, n=1) %>%
+        ungroup()
+    
     plts[["rankings-index_vs_paths_known_best"]] = x %>%
-        ggbarplot(x="DRUG_NAME", y="index", fill="event_gene", 
+        ggbarplot(x="DRUG_NAME_CLEAN", y="index", fill="event_gene", 
                   color="drug_screen", palette="Dark3",
                   position=position_dodge(0.9)) + 
         geom_text(aes(y=2, label=event_gene), x, size=1, family="Arial") +
@@ -418,10 +396,11 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
     # for drugs whose target is not significantly associated,
     # we find events that are best associated
     x = X %>%
-        group_by(DRUG_ID) %>%
-        filter(!any(shortest_path_length==0)) %>%
-        ungroup() %>%
-        filter(is_best)
+        group_by(DRUG_NAME) %>%
+        filter(!any(shortest_path_length==0) & is_best) %>%
+        # slice_min(lr_padj, n=1) %>%
+        ungroup()
+    
     plts[["rankings-index_vs_paths_unknown_best"]] = x %>%
         ggplot(aes(x=as.factor(shortest_path_length), y=index)) +
         geom_violin(color=NA, width=1.2, fill="darkred") + 
@@ -435,19 +414,17 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
     
     ## top associations
     x = X %>%
-        group_by(DRUG_ID) %>%
+        group_by(DRUG_NAME) %>%
         filter(!any(shortest_path_length==0)) %>%
-        ungroup() %>%
         filter(is_best) %>%
         filter(index<thresh_targets) %>%
-        group_by(DRUG_NAME) %>%
         slice_min(index, n=1) %>%
         ungroup() %>%
         group_by(shortest_path_length) %>%
         ungroup() %>%
         arrange(index) %>%
-        mutate(DRUG_NAME = as.factor(DRUG_NAME),
-               name = reorder_within(DRUG_NAME, combined_ranking, 
+        mutate(DRUG_NAME_CLEAN = as.factor(DRUG_NAME_CLEAN),
+               name = reorder_within(DRUG_NAME_CLEAN, combined_ranking, 
                                      shortest_path_length))
     
     plts[["rankings-index_vs_paths_unknown_top"]] = x %>%
@@ -463,12 +440,21 @@ plot_rankings = function(shortest_paths, rankings, drug_targets, models){
         theme(strip.text.x = element_text(size=6, family="Arial")) +
         labs(x="Drug", y="Combined Ranking", color="Drug Screen")
     
+    ## sensitivity to nutlin
+    ### PUF60 splicing may indirectly control MDM2 splicing
+#     drug_screen %>% 
+#     x = splicing %>% filter(EVENT %in% c("HsaEX0038400","HsaEX0005606","HsaEX0051262")) %>% column_to_rownames("EVENT") %>% t() %>% as.data.frame() #%>% rownames_to_column("sampleID") %>% pivot_longer(cols = -sampleID, names_to = "EVENT", values_to = "spldep")
+#     x %>% ggscatter(x="HsaEX0038400", y="HsaEX0005606") + stat_cor(method="spearman")
+#     x %>% ggscatter(x="HsaEX0038400", y="HsaEX0051262") + stat_cor(method="spearman")
     
     ## top rankings with HsaEX0034998_KRAS, known event-drug synergy
     event_oi = "HsaEX0034998_KRAS"
-    x = rankings %>% filter(event_gene==event_oi) 
+    x = rankings %>% filter(event_gene==event_oi) %>%
+        separate(ID, c("drug_id","min_conc","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc))
+    
     plts[["rankings-event_oi-KRAS"]] = x %>%
-        ggbarplot(x="DRUG_NAME", y="index", fill="event_gene", 
+        ggbarplot(x="DRUG_NAME_CLEAN", y="index", fill="event_gene", 
                   position=position_dodge(0.9), color="drug_screen", 
                   palette=get_palette("Dark2",length(unique(x[["DRUG_NAME"]])))) + 
         color_palette(c("black","white")) +
@@ -485,12 +471,15 @@ plot_preds_ic50 = function(clusters, metadata, drug_screen, estimated_response, 
     # NUTLIN-3A(-), TANESPIMYCIN, DOCETAXEL
     drugs_oi = c(1047)
     X = drug_screen %>%
-        distinct(DRUG_NAME, DRUG_ID, DATASET) %>%
+        mutate(DRUG_NAME_CLEAN = ID) %>%
+        separate(DRUG_NAME_CLEAN, c("drug_id","min_conc","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc)) %>%
+        distinct(DRUG_NAME_CLEAN, DRUG_ID, DATASET) %>%
         filter(DRUG_ID%in%drugs_oi) %>%
         left_join(clusters, by=c("DRUG_ID", "DATASET"="drug_screen")) %>%
         left_join(metadata, by=c("index"="DepMap_ID")) %>%
         left_join(drug_screen, 
-                  by=c("index"="ARXSPAN_ID", "DRUG_NAME", 
+                  by=c("index"="ARXSPAN_ID", "DRUG_NAME_CLEAN", 
                        "DRUG_ID", "DATASET")) %>%
         left_join(estimated_response, 
                   by=c("DRUG_ID", "index"="sample","DATASET"="drug_screen")) %>%
@@ -501,7 +490,7 @@ plot_preds_ic50 = function(clusters, metadata, drug_screen, estimated_response, 
                   column_to_rownames("index") %>% 
                   t() %>% as.data.frame() %>% 
                   rownames_to_column("index"), by="index") %>%
-        group_by(DRUG_NAME) %>%
+        group_by(DRUG_NAME_CLEAN) %>%
         mutate(log_ic50 = scale(log_ic50),
                max_conc = as.factor(MAX_CONC))
     
@@ -509,37 +498,37 @@ plot_preds_ic50 = function(clusters, metadata, drug_screen, estimated_response, 
     plts[["preds_ic50-real_response"]] = X %>% 
         ggscatter(x="UMAP0", y="UMAP1", color="log_ic50", alpha=0.5, size=1) + 
         scale_color_gradient2(low="blue",mid="white",high="red") + 
-        facet_wrap(~DRUG_NAME) +
+        facet_wrap(~DRUG_NAME_CLEAN) +
         labs(color="Scaled log(IC50)") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     plts[["preds_ic50-unseen"]] = X %>% 
         ggscatter(x="UMAP0", y="UMAP1", color="in_training_set", alpha=0.5, size=1) + 
-        facet_wrap(~DRUG_NAME) +
+        facet_wrap(~DRUG_NAME_CLEAN) +
         labs(color="In Training Set") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     plts[["preds_ic50-leiden"]] = X %>% 
         ggscatter(x="UMAP0", y="UMAP1", color="leiden_labels", palette="Dark3", alpha=0.5) + 
-        facet_wrap(~DRUG_NAME) +
+        facet_wrap(~DRUG_NAME_CLEAN) +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
      plts[["preds_ic50-primary_disease"]] = X %>% 
         ggscatter(x="UMAP0", y="UMAP1", color="primary_disease", alpha=0.5, size=1, 
                   palette=get_palette("Paired", length(unique(X[["primary_disease"]])))) + 
-        facet_wrap(~DRUG_NAME) + 
+        facet_wrap(~DRUG_NAME_CLEAN) + 
         labs(color="Primary Disease") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     plts[["preds_ic50-drug_screen"]] = X %>% 
         ggscatter(x="UMAP0", y="UMAP1", color="DATASET", palette="jco", size=1, alpha=0.5) + 
-        facet_wrap(~DRUG_NAME) +
+        facet_wrap(~DRUG_NAME_CLEAN) +
         labs(color="Drug Screen") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     plts[["preds_ic50-max_conc"]] = X %>% 
         ggscatter(x="UMAP0", y="UMAP1", color="max_conc", alpha=0.5, size=1) + 
-        facet_wrap(~DRUG_NAME) +
+        facet_wrap(~DRUG_NAME_CLEAN) +
         labs(color="Max. Conc.") +
         theme(strip.text.x = element_text(size=6, family="Arial"))
         
@@ -572,31 +561,59 @@ plot_moa_clusters = function(embedding, enrichment){
 }
 
 
-plot_drug_rec = function(estimated_response, drug_screen, embedding){
-    X = estimated_response %>%
+plot_drug_rec = function(estimated_response, drug_screen, models){
+    
+    # all models
+    models_oi = models %>%
+        filter(lr_padj<THRESH_FDR  & n_obs>THRESH_NOBS) %>% 
+        distinct(ID)
+    
+    X = models_oi %>%
+        left_join(estimated_response, by="ID") %>%
         left_join(drug_screen %>% mutate(real_ic50 = log(IC50_PUBLISHED)), 
-                  by=c("drug_screen"="DATASET","DRUG_ID", "sample"="ARXSPAN_ID")) %>%
+                  by=c("drug_screen"="DATASET", "in_demeter2",
+                       "DRUG_ID","ID", "sample"="ARXSPAN_ID")) %>%
         drop_na(real_ic50, predicted_ic50)
     
     corrs = X %>% 
-        group_by(drug_screen, sample) %>%
-        summarize(correlation = cor(real_ic50, predicted_ic50, method="spearman"))
+        group_by(drug_screen, sample, in_demeter2) %>%
+        summarize(n_pos = n(), # number of possible associations
+                  correlation = cor(real_ic50, predicted_ic50, method="pearson")) %>%
+        ungroup()
     
     plts = list()
-    plts[["drug_rec-spearmans"]] = corrs %>% 
-        ggviolin(x="drug_screen", y="correlation", trim=TRUE,
-                 color=NA, fill="drug_screen", palette="jco") +
-        geom_boxplot(width=0.1, outlier.size=0.1) +
-        geom_hline(yintercept=0, linetype="dashed") +
-        guides(fill="none") + 
-        labs(x="Drug Screen", y="Spearman Correlation") +
-        geom_text(aes(y=1, label=n), 
-                  corrs %>% count(drug_screen), 
-                  size=1, family="Arial")
+    plts[["drug_rec-n_screens"]] = X %>% 
+        count(drug_screen, sample, in_demeter2) %>%
+        gghistogram(x="n") +
+        facet_wrap(~drug_screen+in_demeter2) +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
     
+    plts[["drug_rec-correlations"]] = corrs %>% 
+        ggplot(aes(x=drug_screen, y=correlation, 
+                   group=interaction(drug_screen,in_demeter2))) +
+        geom_violin(aes(fill=in_demeter2), color=NA) +
+        geom_boxplot(width=0.1, outlier.size=0.1, position=position_dodge(0.9)) +
+        geom_hline(yintercept=0, linetype="dashed") +
+        labs(x="Drug Screen", y="Pearson Correlation", fill="In Demeter2") +
+        geom_text(aes(y=1.00, label=n), 
+                  corrs %>% count(in_demeter2, drug_screen), 
+                  position=position_dodge(0.9),
+                  size=1, family="Arial") +
+        theme_pubr() +
+        fill_palette("Dark3")
+    
+    plts[["drug_rec-npos_vs_corrs"]] = corrs %>% 
+        ggscatter(x="n_pos", y="correlation", alpha=0.5, size=1,
+                  color="in_demeter2", palette="Dark3") + 
+        facet_wrap(~drug_screen+in_demeter2, scales="free_x") +
+        labs(x="N. Associations per Sample", y="Pearson Correlation") +
+        guides(color="none") +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
+
     # best and worse correlations
     samples_oi = corrs %>% 
         group_by(drug_screen) %>%
+        drop_na(correlation) %>%
         arrange(correlation) %>% 
         filter(row_number()==1 | row_number()==n()) %>%
         left_join(X, by=c("drug_screen","sample"))
@@ -604,29 +621,9 @@ plot_drug_rec = function(estimated_response, drug_screen, embedding){
     plts[["drug_rec-best_worse"]] = samples_oi %>% 
         ggscatter(x="real_ic50", y="predicted_ic50", size=0.5) + 
         facet_wrap(drug_screen~sample, scales="free") +
-        stat_cor(method="spearman", size=2) + 
-        geom_abline(intercept=0, slope=1, linetype="dashed") +
+        stat_cor(method="pearson", size=2) + 
         labs(x="Real log(IC50)", y="Predicted log(IC50)") + 
         theme_pubr(border=TRUE) +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
-    
-    # influence of pathway in ranking capacity?
-    corrs_bypath = X %>%
-        left_join(embedding %>% distinct(index, leiden_labels), 
-                  by=c("DRUG_ID"="index")) %>% 
-        group_by(drug_screen, sample, leiden_labels) %>%
-        summarize(correlation = cor(real_ic50, predicted_ic50, method="spearman"))
-    
-    plts[["drug_rec-spearmans_by_leiden"]] = corrs_bypath %>%
-        drop_na() %>%
-        arrange(leiden_labels) %>%
-        ggboxplot(x="leiden_labels", y="correlation", outlier.size=0.1,
-                  fill="leiden_labels") + 
-        ylim(-1,1) + 
-        facet_wrap(~drug_screen) +
-        labs(x="Leiden Cluster", y="Spearman Correlation") +
-        guides(fill="none") + 
-        coord_flip() +
         theme(strip.text.x = element_text(size=6, family="Arial"))
     
     return(plts)
@@ -640,9 +637,9 @@ make_plots = function(models, spldep_ccle, drug_screen,
     plts = list(
         plot_associations(models, spldep_ccle, drug_screen),
         plot_rankings(shortest_paths, rankings, drug_targets, models),
-        plot_preds_ic50(clusters, metadata, drug_screen, estimated_response, spldep_ccle),
+        #plot_preds_ic50(clusters, metadata, drug_screen, estimated_response, spldep_ccle),
         plot_moa_clusters(embedding, enrichment),
-        plot_drug_rec(estimated_response, drug_screen, embedding)
+        plot_drug_rec(estimated_response, drug_screen, models)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -696,39 +693,39 @@ save_plots = function(plts, figs_dir){
     # drug-event associations
     save_plt(plts, "associations-lr_pvalues", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "associations-lr_fdr", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "associations-nobs_vs_coef", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "associations-drug_counts", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "associations-top_drug_counts", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "associations-spldep_counts", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "associations-top_spldep_counts", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "associations-agreement_within", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "associations-agreement_between", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "associations-overlaps_screens-upset", ".pdf", figs_dir, width=8, height=8)
     
     # rankings
     save_plt(plts, "rankings-index_vs_known_targets", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "rankings-index_vs_paths_all", ".pdf", figs_dir, width=6, height=5)
-    save_plt(plts, "rankings-index_vs_paths_known_best", ".pdf", figs_dir, width=5, height=7)
+    save_plt(plts, "rankings-index_vs_paths_known_best", ".pdf", figs_dir, width=7, height=7)
     save_plt(plts, "rankings-index_vs_paths_unknown_best", ".pdf", figs_dir, width=6, height=5)
     save_plt(plts, "rankings-index_vs_paths_unknown_top", ".pdf", figs_dir, width=14, height=10)
-    save_plt(plts, "rankings-event_oi-KRAS", ".pdf", figs_dir, width=5, height=7)
+    save_plt(plts, "rankings-event_oi-KRAS", ".pdf", figs_dir, width=7, height=5)
     
     # predictions
-    n_ = 1
-    save_plt(plts, "preds_ic50-real_response", ".pdf", figs_dir, width=4*n_, height=6)
-    save_plt(plts, "preds_ic50-unseen", ".pdf", figs_dir, width=4*n_, height=5.5)
-    save_plt(plts, "preds_ic50-leiden", ".pdf", figs_dir, width=4*n_, height=7)
-    save_plt(plts, "preds_ic50-primary_disease", ".pdf", figs_dir, width=4*n_, height=8.5)
-    save_plt(plts, "preds_ic50-drug_screen", ".pdf", figs_dir, width=4*n_, height=5.5)
-    save_plt(plts, "preds_ic50-max_conc", ".pdf", figs_dir, width=4*n_, height=5.5)
+#     n_ = 1
+#     save_plt(plts, "preds_ic50-real_response", ".pdf", figs_dir, width=4*n_, height=6)
+#     save_plt(plts, "preds_ic50-unseen", ".pdf", figs_dir, width=4*n_, height=5.5)
+#     save_plt(plts, "preds_ic50-leiden", ".pdf", figs_dir, width=4*n_, height=7)
+#     save_plt(plts, "preds_ic50-primary_disease", ".pdf", figs_dir, width=4*n_, height=8.5)
+#     save_plt(plts, "preds_ic50-drug_screen", ".pdf", figs_dir, width=4*n_, height=5.5)
+#     save_plt(plts, "preds_ic50-max_conc", ".pdf", figs_dir, width=4*n_, height=5.5)
     
     # MoA
     save_plt(plts, "moa_clusters-leiden-umap", ".pdf", figs_dir, width=10, height=10)
     save_plt(plts, "moa_clusters-leiden-enrichment-GO_BP", ".pdf", figs_dir, width=18, height=15)
     
     # drug recommendations
-    save_plt(plts, "drug_rec-spearmans", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "drug_rec-best_worse", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "drug_rec-spearmans_by_leiden", ".pdf", figs_dir, width=8, height=6)
+    save_plt(plts, "drug_rec-correlations", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "drug_rec-npos_vs_corrs", ".pdf", figs_dir, width=7, height=8)
+    save_plt(plts, "drug_rec-best_worse", ".pdf", figs_dir, width=7, height=8)
 }
 
 
@@ -766,26 +763,27 @@ main = function(){
     drug_targets = read_tsv(drug_targets_file) %>% 
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
         distinct(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY)
-    embedding = read_tsv(embedding_file)
+    embedding = read_tsv(embedding_file) %>% mutate(DRUG_ID=as.numeric(gsub("_.*","",index)))
     estimated_response = read_tsv(estimated_response_file)
-    drug_screen = read_csv(drug_screen_file)
+    drug_screen = load_drug_screens(drug_screens_dir)
     ontologies = load_ontologies(msigdb_dir)
     clusters = read_tsv(clusters_file)
     spldep_ccle = read_tsv(spldep_ccle_file) %>%
         filter(index %in% unique(models[["EVENT"]]))
     paths_real = read_tsv(paths_real_file) %>% drop_na()
-    paths_random = read_tsv(paths_random_file) %>% drop_na()
     rnai = read_tsv(rnai_file)
     
     # prep inputs
     rankings = compute_rankings(models, drug_targets)
-    shortest_paths = prepare_shortest_paths(paths_real, paths_random)
+    shortest_paths = paths_real
+    estimated_response = estimated_response %>% mutate(in_demeter2 = sample %in% colnames(rnai))
+    
     ## GSEA
     gene_sets = embedding %>%
         left_join(
             drug_targets %>%
             distinct(DRUG_ID,TARGET),
-          by=c("index"="DRUG_ID")) %>%
+          by="DRUG_ID") %>%
         distinct(leiden_labels,TARGET) %>%
         get_sets("leiden_labels","TARGET")
     universe = unique(unlist(gene_sets))

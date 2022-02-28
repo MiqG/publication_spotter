@@ -27,7 +27,7 @@ ROOT = here::here()
 source(file.path(ROOT,"src","R","utils.R"))
 
 # vaiables 
-THRESH_DPSI = 0
+# THRESH_DPSI = 5
 RANDOM_SEED = 1234
 
 # Development
@@ -37,17 +37,19 @@ RANDOM_SEED = 1234
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
 # delta_psi_file = file.path(RESULTS_DIR,'files','ENCORE','delta_psi-EX.tsv.gz')
+# spldep_file = file.path(RESULTS_DIR,'files','ENCORE','splicing_dependency-EX','mean.tsv.gz')
 # harm_score_file = file.path(RESULTS_DIR,"files","ENCORE","harm_score-EX.tsv.gz")
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # metadata_file = file.path(PREP_DIR,'metadata','ENCORE.tsv.gz')
 # ontology_file = file.path(RESULTS_DIR,'files','ENCORE','kd_gene_sets-EX.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_encore')
-
+# crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
 
 ##### FUNCTIONS #####
 plot_encore_validation = function(metadata, event_info, rnai, delta_psi, 
-                                  harm_score, selected_events, ontology){
+                                  harm_score, selected_events, ontology,
+                                  events_crispr, spldep){
     plts = list()
     
     cells_oi = metadata %>% pull(DepMap_ID) %>% unique()
@@ -66,8 +68,13 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     dpsi = delta_psi %>%
         filter(EVENT%in%selected_events) %>%
         pivot_longer(-EVENT, names_to="sampleID", values_to="deltaPSI") %>%
-        # filter(abs(deltaPSI)>THRESH_DPSI) %>%
+        #filter(abs(deltaPSI)>THRESH_DPSI) %>%
         rename(index=EVENT) %>%
+        drop_na()
+    
+    spd = spldep %>%
+        filter(index%in%selected_events) %>%
+        pivot_longer(-index, names_to="sampleID", values_to="spldep") %>%
         drop_na()
     
     X = harm_score %>% 
@@ -75,17 +82,26 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         pivot_longer(-index, names_to="sampleID", values_to="harm") %>%
         filter(is.finite(harm) & harm>0) %>% # only positive harm score
         left_join(dpsi, by=c("index","sampleID")) %>%
+        left_join(spd, by=c("index","sampleID")) %>%
         left_join(
-            metadata %>% mutate(lab=paste0(KD,"_",replicate)) %>% distinct(sampleID,DepMap_ID,KD,cell_line),
+            metadata %>% 
+                mutate(lab=paste0(KD,"_",replicate)) %>% 
+                distinct(sampleID,DepMap_ID,KD,cell_line,lab),
             by="sampleID"
         ) %>%
         left_join(genedep, by=c("KD","DepMap_ID")) %>% 
         drop_na(deltaPSI, demeter2) %>%
+        # summarize replicates
         group_by(cell_line, KD, demeter2, index) %>%
         summarize(deltaPSI = mean(deltaPSI),
-                  harm = mean(harm)) %>%
+                  spldep = mean(spldep),
+                  harm = (-1) * mean(harm)) %>%
+                  # harm = (-1) * sign(deltaPSI) * spldep) %>%
         ungroup() %>%
-        mutate(sign_harm = (-1) * harm)
+        group_by(cell_line, KD) %>%
+        arrange(cell_line, KD, harm) %>%
+        mutate(harm_rank = row_number()) %>%
+        ungroup()
     
     # how many selected events change in each KD?
     plts[["encore_val-n_selected_events-violin"]] = X %>% 
@@ -113,11 +129,11 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     
     # how does correlation change summing different top maximum?
     set.seed(RANDOM_SEED)
-    correls = lapply(1:25, function(x){
+    correls = lapply(seq(1,100,2), function(x){
         corr_real = X %>% 
+            filter(harm_rank <= x) %>% 
             group_by(cell_line, KD, demeter2) %>% 
-            slice_min(sign_harm, n=x) %>% 
-            summarize(pred = sum(sign_harm),
+            summarize(pred = sum(harm),
                       nobs = n()) %>% 
             ungroup() %>% 
             group_by(cell_line) %>% 
@@ -127,11 +143,24 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                       thresh = x,
                       dataset = "real")
         
+        corr_rev = X %>% 
+            group_by(cell_line, KD, demeter2) %>% 
+            slice_min(-harm, n=x) %>% # less harmful changes
+            summarize(pred = sum(harm),
+                      nobs = n()) %>% 
+            ungroup() %>% 
+            group_by(cell_line) %>% 
+            summarize(correlation = cor(demeter2, pred, method="pearson"), 
+                      pvalue=cor.test(demeter2, pred, method="pearson")[["p.value"]],
+                      log10_pvalue = -log10(pvalue),
+                      thresh = x,
+                      dataset = "reversed")
+        
         corr_null = X %>% 
             group_by(cell_line, KD, demeter2) %>% 
             slice_sample(n=x) %>% 
-            slice_min(sign_harm, n=x) %>% 
-            summarize(pred = sum(sign_harm),
+            slice_min(harm, n=x) %>% 
+            summarize(pred = sum(harm),
                       nobs = n()) %>% 
             ungroup() %>% 
             group_by(cell_line) %>% 
@@ -141,7 +170,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                       thresh = x,
                       dataset = "random")
         
-        corr = rbind(corr_real, corr_null)
+        corr = rbind(corr_real, corr_rev, corr_null)
         
         return(corr)
     })
@@ -150,19 +179,98 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     plts[["encore_val-thresh_vs_pearsons"]] = correls %>% 
         ggscatter(x="thresh", y="correlation", palette="Set2",
                   size="log10_pvalue", color="cell_line", alpha=0.5) + 
-        labs(x="N Most Harmful Exons", y="Pearson Correlation", 
+        labs(x="N Harmful Exons", y="Pearson Correlation", 
              color="Cell Line", size="-log10(p-value)") +
         scale_size(range=c(0.1,1.5)) +
         theme(aspect.ratio=1) + 
         facet_wrap(~dataset, ncol=1) +
         theme(strip.text.x = element_text(size=6, family="Arial"))
         
+    # evaluate predictions with different dynamic ranges
+    plts[["encore_val-harm-hist"]] = X %>% 
+        gghistogram(x="harm_rank", fill="cell_line", palette="Set2", color=NA) + 
+        facet_wrap(~cell_line) + 
+        labs(x="Harm Score Rank", y="Count") + 
+        guides(fill="none") +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
+    
+    correls = lapply(seq(0,150,10), function(range_min){
+        corr_higher = X %>% 
+            filter(harm_rank > range_min) %>% 
+            group_by(cell_line, KD, demeter2) %>% 
+            summarize(pred = sum(harm),
+                      nobs = n()) %>% 
+            ungroup() %>% 
+            group_by(cell_line) %>% 
+            summarize(correlation = cor(demeter2, pred, method="pearson"), 
+                      pvalue=cor.test(demeter2, pred, method="pearson")[["p.value"]],
+                      log10_pvalue = -log10(pvalue),
+                      dyn_range = paste0(">",as.character(range_min)),
+                      dataset = "higher")
+        
+        w_size = 10
+        range_name = sprintf("(%s,%s]", 
+                             as.character(range_min), as.character(range_min+w_size))
+        corr_windows = X %>% 
+            filter(harm_rank > range_min & harm_rank <= (range_min + w_size)) %>% 
+            group_by(cell_line, KD, demeter2) %>% 
+            summarize(pred = sum(harm),
+                      nobs = n()) %>% 
+            ungroup() %>% 
+            group_by(cell_line) %>% 
+            summarize(correlation = cor(demeter2, pred, method="pearson"), 
+                      pvalue=cor.test(demeter2, pred, method="pearson")[["p.value"]],
+                      log10_pvalue = -log10(pvalue),
+                      dyn_range = range_name,
+                      dataset = "windows")
+        
+        corr = rbind(corr_higher, corr_windows)
+        return(corr)
+    })
+    correls = do.call(rbind, correls)
+    
+    plts[["encore_val-ranges_vs_pearsons"]] = correls %>% 
+        ggscatter(x="dyn_range", y="correlation", palette="Set2",
+                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
+        labs(x="Harm Score Rank Range", y="Pearson Correlation", 
+             color="Cell Line", size="-log10(p-value)") +
+        scale_size(range=c(0.1,1.5)) +
+        theme(aspect.ratio=1) + 
+        theme_pubr(x.text.angle = 70) +
+        facet_wrap(~dataset, scales="free_x") +
+        theme(strip.text.x = element_text(size=6, family="Arial")) +
+        ylim(0,0.4)
+    
+    # what influences harm score rankings? DeltaPSI or Spl. Dep.?
+    x = X %>% 
+        mutate(bin=cut(harm_rank, breaks=seq(0,100,10))) %>% 
+        drop_na(bin)
+    
+    plts[["encore_val-harm_rank_vs_dpsi"]] = x %>%
+        ggboxplot(x="bin", y="deltaPSI", outlier.size=0.1) +
+        labs(x="Harm Score Rank", y="Delta PSI") +
+        theme_pubr(x.text.angle=70) +
+        facet_wrap(~cell_line, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
+    
+    plts[["encore_val-harm_rank_vs_spldep"]] = x %>%
+        ggboxplot(x="bin", y="spldep", outlier.size=0.1) +
+        labs(x="Harm Score Rank", y="Splicing Dependency") +
+        theme_pubr(x.text.angle=70) +
+        facet_wrap(~cell_line, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
+    
+    plts[["encore_val-dpsi_vs_spldep"]] = x %>%
+        ggscatter(x="spldep", y="deltaPSI", size=0.1, alpha=0.5) +
+        labs(x="Splicing Dependency", y="Delta PSI") +
+        facet_wrap(~cell_line, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family="Arial"))
     
     # the most harmful changes predict overall knockdown
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
-        slice_min(sign_harm, n=1) %>% 
-        summarize(pred=sum(sign_harm)) %>%
+        slice_min(harm, n=1) %>% 
+        summarize(pred=sum(harm)) %>%
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
     plts[["encore_val-top1-scatters"]] = x %>%
@@ -180,8 +288,8 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
-        slice_min(sign_harm, n=10) %>% 
-        summarize(pred=sum(sign_harm)) %>%
+        slice_min(harm, n=10) %>% 
+        summarize(pred=sum(harm)) %>%
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
     plts[["encore_val-top10-scatters"]] = x %>%
@@ -200,7 +308,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     # who are these top 10 harmful events?
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
-        slice_min(sign_harm, n=10) %>%
+        slice_min(harm, n=10) %>%
         ungroup() %>% 
         count(cell_line, index) %>%
         group_by(cell_line) %>%
@@ -211,6 +319,16 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         ggbarplot(x="event_gene", y="n", fill="cell_line", 
                   color=NA, palette="Set2", position=position_dodge(0.9)) + 
         labs(x="Event & Gene", y="N. Exon in Top 10 Harm", fill="Cell Line") + 
+        coord_flip()
+    
+    # harm scores of Thomas 2020 exons?
+    plts[["encore_val-harm-thomas2020"]] = X %>% 
+        filter(index %in% events_crispr) %>%
+        left_join(event_annot, by=c("index"="EVENT")) %>%
+        mutate(event_gene=paste0(index,"_",GENE)) %>%
+        ggboxplot(x="event_gene", y="harm_rank", fill="cell_line", 
+                  palette="Set2", outlier.size=0.1) + 
+        labs(x="Event & Gene", y="Harm Score Rank", fill="Cell Line") +    
         coord_flip()
     
     # correlation between cell lines gene dependencies
@@ -241,7 +359,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                   size="Count", color="p.adjust") +
         gradient_color(c("blue", "red")) +
         scale_size(range=c(0.5,3)) +
-        labs(x="Gene Set", y="Gene Ratio") +
+        labs(x="Event Set", y="Event Ratio") +
         coord_flip()
     
     # upset plot of enriched exon sets
@@ -262,10 +380,12 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
 
 
 make_plots = function(metadata, event_info, rnai, delta_psi, 
-                      harm_score, selected_events, ontology){
+                      harm_score, selected_events, ontology,
+                      events_crispr, spldep){
     plts = list(
         plot_encore_validation(metadata, event_info, rnai, delta_psi, 
-                               harm_score, selected_events, ontology)
+                               harm_score, selected_events, ontology,
+                               events_crispr, spldep)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -296,18 +416,28 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 save_plots = function(plts, figs_dir){
     # correlations of predictions
-    save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=8)
+    save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=12)
     save_plt(plts, "encore_val-n_selected_events-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-demeter2-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-top1-scatters", ".pdf", figs_dir, width=5, height=10)
     save_plt(plts, "encore_val-top10-scatters", ".pdf", figs_dir, width=5, height=10)
     save_plt(plts, "encore_val-top10-bars", ".pdf", figs_dir, width=5, height=6.5)
     
+    save_plt(plts, "encore_val-harm-hist", ".pdf", figs_dir, width=6, height=4)
+    save_plt(plts, "encore_val-ranges_vs_pearsons", ".pdf", figs_dir, width=9, height=7)
+    
+    save_plt(plts, "encore_val-harm_rank_vs_dpsi", ".pdf", figs_dir, width=5, height=8)
+    save_plt(plts, "encore_val-harm_rank_vs_spldep", ".pdf", figs_dir, width=5, height=8)
+    save_plt(plts, "encore_val-dpsi_vs_spldep", ".pdf", figs_dir, width=5, height=8)
+    
+    # harm scores in Thomas 2020?
+    save_plt(plts, "encore_val-harm-thomas2020", ".pdf", figs_dir, width=6, height=8)
+    
     # controls
     save_plt(plts, "encore_val-demeter2-scatter", ".pdf", figs_dir, width=5, height=5)
     
     # enrichment
-    save_plt(plts, "encore_val-enrichment-KD-dot", ".pdf", figs_dir, width=5, height=6)
+    save_plt(plts, "encore_val-enrichment-KD-dot", ".pdf", figs_dir, width=4, height=6)
     save_plt(plts, "encore_val-enrichment-KD-upset", ".pdf", figs_dir, width=12, height=12)
 }
 
@@ -335,15 +465,20 @@ main = function(){
     
     # load
     metadata = read_tsv(metadata_file)
+    spldep = read_tsv(spldep_file)
     delta_psi = read_tsv(delta_psi_file)
     rnai = read_tsv(rnai_file)
     harm_score = read_tsv(harm_score_file)
     selected_events = readLines(selected_events_file)
     event_info = read_tsv(event_info_file)
     ontology = read_tsv(ontology_file)
+    crispr = read_tsv(crispr_file)
+    
+    events_crispr = crispr %>% pull(EVENT) %>% unique()
     
     plts = make_plots(metadata, event_info, rnai, delta_psi, 
-                      harm_score, selected_events, ontology)
+                      harm_score, selected_events, ontology,
+                      events_crispr, spldep)
 
     # make figdata
     # figdata = make_figdata()
