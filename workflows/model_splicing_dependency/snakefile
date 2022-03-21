@@ -77,6 +77,9 @@ rule all:
         ## compute splicing dependencies
         expand(os.path.join(RESULTS_DIR,'files','Thomas2020','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
+        # Achilles Gene dependencies
+        expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES)
+        
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
         #os.path.join(RESULTS_DIR,'figures','validation_crispr'),
@@ -564,4 +567,32 @@ rule compute_splicing_dependency_Thomas2020:
                     --output_dir={output} \
                     --n_jobs={threads} \
                     --log_transform
+        """
+        
+        
+rule model_gene_dependency_achilles:
+    input:
+        splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
+        genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        gene_dependency_file = os.path.join(PREP_DIR,'achilles','CCLE_comparable.tsv.gz'),
+        mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'))
+    threads: 16
+    resources:
+        runtime = 604800, # seconds = 168h = 7 days
+        memory = 30
+    params:
+        script_dir = TS_DIR,
+        n_iterations = 500
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_fit \
+                    --gene_dependency_file={input.gene_dependency_file} \
+                    --splicing_file={input.splicing_file} \
+                    --genexpr_file={input.genexpr_file} \
+                    --mapping_file={input.mapping_file} \
+                    --output_dir={output} \
+                    --n_iterations={params.n_iterations} \
+                    --n_jobs={threads}
         """

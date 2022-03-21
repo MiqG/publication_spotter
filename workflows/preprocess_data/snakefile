@@ -45,6 +45,7 @@ SAVE_PARAMS = {'sep':'\t', 'index':False, 'compression':'gzip'}
 
 DEPMAP_RAW = {
     'demeter2': os.path.join(RAW_DIR,'DepMap','demeter2','D2_combined_gene_dep_scores.csv'),
+    'achilles': os.path.join(RAW_DIR,'DepMap','achilles_ccle','Achilles_gene_effect_transposed.tsv.gz')
     #'genexpr_tpm': os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_expression_transposed.tsv.gz')
 }
 
@@ -70,8 +71,8 @@ rule all:
         # ## gene expression
         # os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
 
-        # # preprocess DepMap data
-        # expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=['demeter2']),
+        # preprocess DepMap data
+        expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=DEPMAP_RAW.keys()),
 
         # # impute CCLE PSI matrix
         # expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
@@ -133,7 +134,10 @@ rule all:
         os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
         
         # compute transcriptome indices TCGA
-        expand(os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz'), cancer=CANCER_TYPES)
+        expand(os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
+        
+        # make Achilles comparable to Demeter2
+        os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz")
         
         
 rule prepare_metadata_ccle:
@@ -203,7 +207,7 @@ rule preprocess_depmap:
         metadata_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv')
     shell:
         """
-        python scripts/preprocess_achilles.py \
+        python scripts/preprocess_depmap.py \
                     --raw_achilles_file={input} \
                     --raw_metadata_file={params.metadata_file} \
                     --prep_achilles_file={output}
@@ -499,7 +503,6 @@ rule preprocess_gdsc:
         # as there are drugs screend with different concentrations
         # in both screens
         drug_response["ID"] = drug_response["DRUG_ID"].astype(str) + "_" +\
-                              drug_response["MIN_CONC"].astype(str) + "_" +\ 
                               drug_response["MAX_CONC"].astype(str)
         
         # mark if cell line was also screened in Demeter2
@@ -753,3 +756,30 @@ rule preprocess_encore:
         
         ## TPMs
         genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)
+        
+        
+rule make_achilles_comparable_to_demeter2:
+    input:
+        demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        achilles = os.path.join(PREP_DIR,"achilles","CCLE.tsv.gz")
+    output:
+        achilles = os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz")
+    run:
+        import numpy as np
+        import pandas as pd
+        
+        demeter2 = pd.read_table(input.demeter2, index_col=0)
+        achilles = pd.read_table(input.achilles, index_col=0)
+        
+        # subset samples and genes
+        common_samples = set(demeter2.columns).intersection(achilles.columns)
+        common_genes = set(demeter2.index).intersection(achilles.index)
+        demeter2 = demeter2.loc[common_genes,common_samples].copy()
+        achilles = achilles.loc[common_genes,common_samples].copy()
+        
+        # replicate missing values
+        is_missing = demeter2.isnull().values
+        achilles.values[is_missing] = np.nan
+        
+        # save 
+        achilles.reset_index().to_csv(output.achilles, sep="\t", index=False, compression="gzip")
