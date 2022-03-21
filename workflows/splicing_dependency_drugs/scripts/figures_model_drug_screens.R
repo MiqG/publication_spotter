@@ -65,10 +65,12 @@ RANDOM_SEED = 1234
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # clusters_file = file.path(RESULTS_DIR,"files","cluster_estimated_drug_response-merged-EX.tsv.gz")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
+# spldep_models_file = file.path(MODELS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz")
 # spldep_ccle_file = file.path(MODELS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 # paths_real_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-EX.tsv.gz")
 # paths_random_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-random.tsv.gz")
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
+
 
 ##### FUNCTIONS #####
 load_drug_screens = function(drug_screens_dir){
@@ -290,8 +292,21 @@ plot_associations = function(models, spldep_ccle, drug_screen){
 }
 
 
-plot_rankings = function(shortest_paths, rankings, drug_targets, models){
+plot_rankings = function(shortest_paths, rankings, drug_targets, models, spldep_models){
     plts = list()
+    
+    # to extract mechanisms, we may only want to focus on drug-exon associations
+    # in which splicing is more associated than gene expression
+    spldep_models %>% ggscatter(x="event_coefficient_mean", y="gene_coefficient_mean", alpha=0.5)
+    spldep_models %>% 
+        mutate(event_coefficient_mean = abs(event_coefficient_mean),
+               gene_coefficient_mean = abs(gene_coefficient_mean)) %>%
+        ggscatter(x="event_coefficient_mean", y="gene_coefficient_mean", alpha=0.5)
+    
+    spldep_models %>% 
+        mutate(diff = abs(event_coefficient_mean) - abs(gene_coefficient_mean)) %>%
+        gghistogram(x="diff")
+    
     
     # do significantly associated events in gene targets rank to the top of
     # the association effect size?
@@ -772,6 +787,8 @@ main = function(){
         filter(index %in% unique(models[["EVENT"]]))
     paths_real = read_tsv(paths_real_file) %>% drop_na()
     rnai = read_tsv(rnai_file)
+    spldep_models = read_tsv(spldep_models_file) %>%
+        filter(EVENT %in% unique(models[["EVENT"]]))
     
     # prep inputs
     rankings = compute_rankings(models, drug_targets)

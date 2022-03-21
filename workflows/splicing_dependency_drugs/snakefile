@@ -49,18 +49,18 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         
         # embed association coefficients
-        expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz'), event_type=EVENT_TYPES),
-        expand(os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz'), event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # split, embed and cluster estimated drug effects of significant associations
         ## split
-        expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
+        # expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
         ## impute
-        [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
+        # [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
         ## embed
-        [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
+        # [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
         ## combine
-        expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # Shortest path lengths in PPIs between drug targets and associations
         ## real
