@@ -34,7 +34,7 @@ require(extrafont)
 ROOT = here::here()
 source(file.path(ROOT,"src","R","utils.R"))
 
-
+# formatting
 PAL_SINGLE_ACCENT = "orange"
 PAL_SINGLE_LIGHT = "#6AC2BF"
 PAL_SINGLE_DARK = "#716454"
@@ -47,58 +47,79 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
-PREP_DIR = file.path(ROOT,"data","prep")
-RAW_DIR = file.path(ROOT,"data","raw")
-RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
-models_file = file.path(RESULTS_DIR,"files","achilles","models_gene_dependency-EX","model_summaries.tsv.gz")
-cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
-figs_dir = file.path(RESULTS_DIR,"figures","validation_achilles")
+# PREP_DIR = file.path(ROOT,"data","prep")
+# RAW_DIR = file.path(ROOT,"data","raw")
+# RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
+# models_achilles_file = file.path(RESULTS_DIR,"files","achilles","models_gene_dependency-EX","model_summaries.tsv.gz")
+# models_file = file.path(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz")
+# cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
+# figs_dir = file.path(RESULTS_DIR,"figures","validation_achilles")
 
-
-# ccle_stats_file = file.path(PREP_DIR,"stats","CCLE.tsv.gz")
-# rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
-# genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
-# splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
-# spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
-# msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
-# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
-# gene_mut_freq_file = file.path(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz")
-# event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
-# indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
-# metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
-# event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 
 ##### FUNCTIONS #####
-plot_model_selection = function(models, cancer_events){
+plot_model_selection = function(models, models_achilles, cancer_events){
     plts = list()         
     
+    X = models %>%
+        bind_rows(models_achilles) %>%
+        mutate(is_ctl_pos = EVENT %in% ctl_pos_events,
+               lab = sprintf("%s & %s", is_ctl_pos, model_type))
+    
+    comparisons = list(
+        c("TRUE & KO (CRISPR/Cas9)","TRUE & KD (shRNA)"),
+        c("FALSE & KO (CRISPR/Cas9)","TRUE & KO (CRISPR/Cas9)"),
+        c("FALSE & KD (shRNA)","TRUE & KD (shRNA)")    
+    )
+    
     ctl_pos_events = cancer_events %>% pull(EVENT) %>% unique()
-    plts[["model_sel-lr_pvalue_ctl_pos"]] = models %>%
+    plts[["model_sel-lr_pvalue_ctl_pos_all"]] = X %>%
+        ggplot(aes(x=lab, y=lr_pvalue)) +
+        geom_violin(aes(fill=is_ctl_pos, color=model_type), trim=TRUE) +
+        geom_boxplot(width=0.1, outlier.size=0.1) +
+        fill_palette(PAL_DUAL) +
+        color_palette(c("white","black")) +
+        theme_pubr(x.text.angle=30) +
+        stat_compare_means(method="wilcox.test", comparisons=comparisons, 
+                           size=FONT_SIZE, family=FONT_FAMILY) + 
+        labs(x="Is Positive Control & Dependency Type", y="LR Test p-value")
+    
+    
+    plts[["model_sel-lr_pvalue_ctl_pos"]] = models_achilles %>%
         mutate(is_ctl_pos = EVENT %in% ctl_pos_events) %>%
         ggviolin(x="is_ctl_pos", y="lr_pvalue", trim = TRUE, 
-                 fill="is_ctl_pos", color=NA, palette = c("grey","darkgreen")) + 
+                 fill="is_ctl_pos", color=NA, palette = PAL_DUAL) + 
         geom_boxplot(width=0.1) +
-        stat_compare_means(method="wilcox.test", size=FONT_SIZE, family=FONT_FAMILY) +
+        stat_compare_means(method="wilcox.test", family=FONT_FAMILY, size=FONT_SIZE) +
         guides(fill="none") + 
         labs(x="Is Positive Control", y="LR Test p-value")
+    
+    models_achilles %>%
+        mutate(is_ctl_pos = EVENT %in% ctl_pos_events) %>%
+        group_by(is_ctl_pos) %>%
+        summarize(median(lr_pvalue, na.rm=TRUE))
+    
+    models %>%
+        mutate(is_ctl_pos = EVENT %in% ctl_pos_events) %>%
+        group_by(is_ctl_pos) %>%
+        summarize(median(lr_pvalue, na.rm=TRUE))
     
     return(plts)
 }
 
 
-make_plots = function(models, cancer_events){
+make_plots = function(models, models_achilles, cancer_events){
     plts = list(
-        plot_model_selection(models, cancer_events)
+        plot_model_selection(models, models_achilles, cancer_events)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
 
-make_figdata = function(models, cancer_events){
+make_figdata = function(models_achilles, cancer_events){
     figdata = list(
         "model_selection" = list(
-            "model_summaries"= models,
+            "model_summaries" = models_achilles,
             "cancer_events" = cancer_events,
         )
     )
@@ -108,8 +129,7 @@ make_figdata = function(models, cancer_events){
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
-                    width = par("din")
-                    3[1], height = par("din")[2]){
+                    width = par("din")[1], height = par("din")[2]){
     print(plt_name)
     plt = plts[[plt_name]]
     if (format){
@@ -123,6 +143,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
+    save_plt(plts, "model_sel-lr_pvalue_ctl_pos_all", ".pdf", figs_dir, width=5, height=7)
     save_plt(plts, "model_sel-lr_pvalue_ctl_pos", ".pdf", figs_dir, width=4, height=4)
 }
 
@@ -152,19 +173,27 @@ main = function(){
     
     # load
     models = read_tsv(models_file)
+    models_achilles = read_tsv(models_achilles_file)
     cancer_events = read_tsv(cancer_events_file)
     
     # add info to models
     models = models %>% 
         mutate(event_gene = paste0(EVENT,"_",GENE),
                event_type = gsub("Hsa","",gsub("[^a-zA-Z]", "",EVENT))) %>% 
-        dplyr::select(-c(event_mean,event_std,gene_mean,gene_std))
+        dplyr::select(-c(event_mean,event_std,gene_mean,gene_std)) %>%
+        mutate(model_type="KD (shRNA)")
+    
+    models_achilles = models_achilles %>% 
+        mutate(event_gene = paste0(EVENT,"_",GENE),
+               event_type = gsub("Hsa","",gsub("[^a-zA-Z]", "",EVENT))) %>% 
+        dplyr::select(-c(event_mean,event_std,gene_mean,gene_std)) %>%
+        mutate(model_type="KO (CRISPR/Cas9)")
     
     # plot
-    plts = make_plots(models, cancer_events)
+    plts = make_plots(models, models_achilles, cancer_events)
 
     # make figdata
-    figdata = make_figdata(models, cancer_events)
+    figdata = make_figdata(models_achilles, cancer_events)
     
     # save
     save_plots(plts, figs_dir)
