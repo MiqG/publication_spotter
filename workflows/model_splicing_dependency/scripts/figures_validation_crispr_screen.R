@@ -24,7 +24,17 @@ CELL_TYPES = data.frame(
     sampleID = c("SRR7946515_1", "SRR7946516_1")
 )
 
-COMPARISONS_OI = c("0d-vs-14d","0d-vs-8d")
+COMPARISONS_OI = c("0d-vs-14d")
+
+# formatting
+PAL_SINGLE_ACCENT = "orange"
+PAL_SINGLE_LIGHT = "#6AC2BF"
+PAL_SINGLE_DARK = "#716454"
+PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+LINE_SIZE = 0.25
+
+FONT_SIZE = 2 # for additional labels
+FONT_FAMILY = "Arial"
 
 # Development
 # -----------
@@ -47,14 +57,14 @@ plot_summary = function(crispr, selected_events){
     
     plts = list()
     plts[["summary-scatters"]] = X %>% 
-        ggscatter(x="event_gene", y="fitness_score", palette="nejm",
+        ggscatter(x="event_gene", y="fitness_score", palette=PAL_DUAL,
                   size="log10_pvalue", color="cell_line") + 
         facet_wrap(~comparison) + 
-        geom_hline(yintercept=0, linetype="dashed") + 
-        labs(x="Event & Gene", y="Fitness ScoreS", 
+        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
+        labs(x="Event & Gene", y="Event Dependency", 
              color="Cell Line", size="-log10(p-value)") + 
         coord_flip() +
-        theme(strip.text.x = element_text(size=6, family="Arial")) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         scale_size(range=c(0.5,3))
     
     return(plts)
@@ -69,13 +79,13 @@ plot_predictions = function(crispr, selected_events, harm){
     
     plts = list()
     plts[["predictions-scatters"]] = X %>% 
-        ggscatter(x="sign_harm", y="fitness_score", size=1, alpha=0.5) + 
+        ggscatter(x="sign_harm", y="fitness_score", size=1, color="cell_line", palette=PAL_DUAL) + 
         facet_wrap(~comparison+cell_line, ncol=2) + 
-        stat_cor(method="pearson", size=1, family="Arial") +
-        theme(strip.text.x = element_text(size=6, family="Arial"),
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
               aspect.ratio=1) +
         labs(x="Harm Score", y="Event Dependency") +
-        geom_smooth(method="lm", linetype="dashed", color="black", size=0.5)
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
     
     return(plts)
 }
@@ -105,8 +115,8 @@ save_plt = function(plts, plt_name, extension=".pdf",
     plt = plts[[plt_name]]
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
-                    font.x=8, font.y=8, font.legend=8,
-                    font.tickslab=6, font.family="Arial")    
+                    font.x=8, font.y=8, font.legend=6,
+                    font.tickslab=6, font.family=FONT_FAMILY)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
@@ -114,7 +124,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=8, height=7)
+    save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=5.75, height=7)
     save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=8, height=8)
 }
 

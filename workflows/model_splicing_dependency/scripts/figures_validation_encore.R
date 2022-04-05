@@ -289,7 +289,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                   palette=PAL_DUAL) + 
         guides(color="none") + 
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
-        geom_smooth(method="lm", linetype="dashed", color="black") + 
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
                         x %>% slice_max(demeter2*pred, n=5),
@@ -308,7 +308,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                   palette=PAL_DUAL) + 
         guides(color="none") + 
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
-        geom_smooth(method="lm", linetype="dashed", color="black") + 
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
                         x %>% slice_max(demeter2*pred, n=5),
@@ -350,7 +350,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                     values_from="demeter2") %>% 
         ggscatter(x="K562", y="HepG2", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
-        geom_smooth(method="lm", linetype="dashed", color="black")
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
     
     # are some events changing in KDs enriched in our selected events?
     ## number of events available in the ontology?
@@ -426,7 +426,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     plt = plts[[plt_name]]
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
-                    font.x=8, font.y=8, font.legend=8,
+                    font.x=8, font.y=8, font.legend=6,
                     font.tickslab=6, font.family=FONT_FAMILY)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
