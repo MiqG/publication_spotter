@@ -49,6 +49,16 @@ THRESH_LR_PVALUE = 0.025
 THRESH_CORR = 0.2
 SIZE_CTL = 100
 
+# formatting
+PAL_SINGLE_ACCENT = "orange"
+PAL_SINGLE_LIGHT = "#6AC2BF"
+PAL_SINGLE_DARK = "#716454"
+PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+LINE_SIZE = 0.25
+
+FONT_SIZE = 2 # for additional labels
+FONT_FAMILY = "Arial"
+
 # Development
 # -----------
 # PREP_DIR = file.path(ROOT,"data","prep")
@@ -313,7 +323,7 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
         mutate(index=row_number(), 
                is_ctl=GENE %in% ctl_pos_genes) %>%
         ggscatter(x="index", y="rnai_std", color="is_ctl", 
-                  size="is_ctl", palette=c("grey","darkgreen")) +
+                  size="is_ctl", palette=PAL_DUAL) +
         scale_size_discrete(range=c(0.5,1)) +
         labs(x="Index", y="Gene Std. Demeter2", 
              color="In Positive Control", size="In Positive Control", 
@@ -323,27 +333,22 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
     plts[["model_sel-deps_med_vs_std_ctl_pos"]] = rnai_stats %>% 
         mutate(is_ctl=GENE %in% ctl_pos_genes) %>%
         ggplot(aes(x=rnai_med, y=rnai_std, color=is_ctl)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=8) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5) +
         theme_pubr() +
-        color_palette(palette = c("grey","darkgreen")) +
+        color_palette(palette = PAL_DUAL) +
         labs(x="Gene Median Demeter2", y="Gene Std. Demeter2", 
              title=sprintf("Total Control Genes = %s", length(ctl_pos_genes)),
              color="In Positive Control") +
         theme(aspect.ratio=1)
+
     
-    ctl_pos = rnai_stats %>% 
-        filter(GENE %in% ctl_pos_genes) %>% 
-        slice_max(order_by=rnai_std, n=SIZE_CTL) %>% 
-        left_join(cancer_events, by="GENE") %>%
-        pull(EVENT) %>%
-        unique()
-    
+    ctl_pos_events = cancer_events %>% pull(EVENT) %>% unique()
     plts[["model_sel-lr_pvalue_ctl_pos"]] = models %>%
-        mutate(is_ctl_pos = EVENT %in% ctl_pos) %>%
+        mutate(is_ctl_pos = EVENT %in% ctl_pos_events) %>%
         ggviolin(x="is_ctl_pos", y="lr_pvalue", trim = TRUE, 
-                 fill="is_ctl_pos", color=NA, palette = c("grey","darkgreen")) + 
+                 fill="is_ctl_pos", color=NA, palette = PAL_DUAL) + 
         geom_boxplot(width=0.1) +
-        stat_compare_means(method="wilcox.test") +
+        stat_compare_means(method="wilcox.test", family=FONT_FAMILY, size=FONT_SIZE) +
         guides(fill="none") + 
         labs(x="Is Positive Control", y="LR Test p-value")
     
@@ -358,7 +363,7 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
         mutate(index=row_number(), 
                is_ctl=GENE %in% ctl_neg) %>%
         ggscatter(x="index", y="rnai_std", color="is_ctl", 
-                  size="is_ctl", palette=c("grey","brown")) +
+                  size="is_ctl", palette=PAL_DUAL) +
         scale_size_discrete(range=c(0.5,1)) +
         labs(x="Index", y="Gene Std. Demeter2", 
              title=sprintf("Total Control Genes = %s", length(ctl_neg)),
@@ -368,9 +373,9 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
     plts[["model_sel-deps_med_vs_std_ctl_neg"]] = rnai_stats %>% 
         mutate(is_ctl=GENE %in% ctl_neg) %>%
         ggplot(aes(x=rnai_med, y=rnai_std, color=is_ctl)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=8) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5) +
         theme_pubr() +
-        color_palette(palette = c("grey","brown")) +
+        color_palette(palette = PAL_DUAL) +
         labs(x="Gene Median Demeter2", y="Gene Std. Demeter2", 
              title=sprintf("Total Control Genes = %s", length(ctl_neg)),
              color="In Negative Control") +
@@ -379,47 +384,50 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
     # we selected the ensemble of models by their ability to rank dependencies
     # using likelihood ratio tests" p-values as thresholds
     plts[["model_sel-lr_pvalue"]] = models %>%
-        gghistogram(x="lr_pvalue", bins=100, fill="grey", color=NA) +
+        gghistogram(x="lr_pvalue", bins=100, fill=PAL_SINGLE_LIGHT, color=NA) +
         geom_vline(xintercept=median(models[["lr_pvalue"]], na.rm=TRUE),
-                   linetype="dashed") +
+                   linetype="dashed", size=LINE_SIZE) +
         labs(x="LR Test p-value", y="Count")
     
     # - TPR vs FDR with p-value thresholds
     plts[["model_sel-tpr_vs_fpr"]] = eval_pvalue %>% 
-        ggbarplot(x="thresh", y="cumsums", fill="lightblue", color=NA) +
+        ggbarplot(x="thresh", y="cumsums", fill=PAL_SINGLE_LIGHT, color=NA) +
         labs(x="Thresholds LR Test p-value", y="CumSum(TPR - FPR)") +
-        geom_text(aes(y=0.10, label=total_events), size=1, family="Arial", color="#994F00") +
-        geom_text(aes(y=0.08, label=total_genes), size=1, family="Arial", color="#006CD1")
+        geom_text(aes(y=0.10, label=total_events), 
+                  size=FONT_SIZE, family=FONT_FAMILY, color="black") +
+        geom_text(aes(y=0.08, label=total_genes), 
+                  size=FONT_SIZE, family=FONT_FAMILY, color="black")
     
     # - Spearman correlation with Pearson threshold
     # find the threshold for the mean pearson correlation
     plts[["model_sel-pearson_corr"]] = models %>%
-        gghistogram(x="pearson_correlation_mean", bins=100, fill="darkred", color=NA) +
+        gghistogram(x="pearson_correlation_mean", bins=100, fill=PAL_SINGLE_LIGHT, color=NA) +
         geom_vline(xintercept=median(models[["pearson_correlation_mean"]], na.rm=TRUE),
-                   linetype="dashed") +
+                   linetype="dashed", size=LINE_SIZE) +
         labs(x="Pearson Correlation Mean (Test Set)", y="Count")
     
     plts[["model_sel-pearson_corr_vs_spearman"]] = eval_corr %>%
-        ggviolin(x="thresh_fct", y="corr", fill="orange", color=NA, trim=TRUE) + 
+        ggviolin(x="thresh_fct", y="corr", fill=PAL_SINGLE_LIGHT, color=NA, trim=TRUE) + 
         geom_boxplot(fill=NA, outlier.size=0.1, width=0.2) +
         labs(x="Thresholds Single-Model Avg. Pearson Correlation", y="Spearman Correlation") +
         theme_pubr(x.text.angle=70) +
         geom_text(
-            aes(x=thresh_fct, y=1.04, label=total_events), 
+            aes(x=thresh_fct, y=1.03, label=total_events), 
             eval_corr %>% 
                 distinct(thresh_fct,total_events), 
-            size=1, color="#994F00", family="Arial") +
+            size=FONT_SIZE, color="black", family=FONT_FAMILY) +
         geom_text(
             aes(x=thresh_fct, y=1.01, label=total_genes), 
             eval_corr %>% 
                 distinct(thresh_fct,total_genes), 
-            size=1, color="#006CD1", family="Arial")
+            size=FONT_SIZE, color="black", family=FONT_FAMILY)
     
     return(plts)
 }
 
 
 plot_model_properties = function(models, enrichment, indices, indices_enrich, spldep_stats){
+    
     plts=list()
     
     # - exon inclusion variation    
@@ -430,18 +438,18 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
     ## selected models come from variant events
     plts[["model_prop-selected_vs_event_std"]] = X %>%
         ggviolin(x="is_selected", y="event_std", color=NA, trim=TRUE,
-                 fill="is_selected", palette="npg") +
+                 fill="is_selected", palette=PAL_DUAL) +
         geom_boxplot(fill=NA, outlier.size = 0.1) +
-        stat_compare_means(method="wilcox.test") +
+        stat_compare_means(method="wilcox.test", size=FONT_SIZE, family=FONT_FAMILY) +
         guides(color="none", fill="none") +
         labs(x="Selected Model", y="Event Std.")
     
     # - exon length distribution
     plts[["model_prop-selected_vs_event_length"]] = X %>%
         ggviolin(x="is_selected", y="LE_o", color=NA, trim=TRUE,
-                 fill="is_selected", palette="npg") +
+                 fill="is_selected", palette=PAL_DUAL) +
         geom_boxplot(fill=NA, outlier.size = 0.1) +
-        stat_compare_means(method="wilcox.test") +
+        stat_compare_means(method="wilcox.test", size=FONT_SIZE, family=FONT_FAMILY) +
         guides(color="none", fill="none") +
         labs(x="Selected Model", y="log10(Event Length)") +
         geom_text(aes(y=10e3, label=lab), 
@@ -449,9 +457,15 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
                       group_by(is_selected) %>% 
                       summarize(med=median(LE_o, na.rm=TRUE)) %>% 
                       mutate(lab=paste0('med=',med)), 
-                  size=1, family="Arial") +
+                  size=FONT_SIZE, family=FONT_FAMILY) +
         yscale("log10", .format=TRUE)
     
+    # - n. selected exons per gene
+    plts[["model_prop-n_exons_gene"]] = X %>%
+        count(is_selected, GENE) %>%
+        gghistogram(x="n", fill="is_selected", color="NA", palette=PAL_DUAL, alpha=0.9) + 
+        labs(x="N. Exons per Gene", y="Count")
+           
     # protein impact of selected exons/genes
     prot_imp = models
     
@@ -460,8 +474,8 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         group_by(is_selected,term) %>% 
         summarize(n=n()) %>% 
         arrange(n) %>%
-        ggbarplot(x="term", y="n", label=TRUE, lab.size=2,
-                  fill="is_selected", color=NA, palette="npg") + 
+        ggbarplot(x="term", y="n", label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
+                  fill="is_selected", color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
         labs(x="Protein Impact", y="Count")
@@ -473,7 +487,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         mutate(freq=n/sum(n)) %>%
         filter(is_selected) %>%
         ggbarplot(x="term", y="freq", fill="is_selected", 
-                  color=NA, palette="npg") + 
+                  color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
         labs(x="Protein Impact", y="Proportion")
@@ -484,8 +498,8 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         summarize(n=n()) %>%
         arrange(n) %>%
         drop_na() %>%
-        ggbarplot(x="term_clean", y="n", label=TRUE, lab.size=2,
-                  fill="is_selected", color=NA, palette="npg") + 
+        ggbarplot(x="term_clean", y="n", label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
+                  fill="is_selected", color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
         labs(x="Protein Impact", y="Count")
@@ -496,7 +510,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         mutate(freq=n/sum(n)) %>%
         filter(is_selected) %>%
         ggbarplot(x="term_clean", y="freq", fill="is_selected", color=NA,
-                  palette="npg") + 
+                  palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
         labs(x="Selected Model", y="Proportion")
@@ -506,8 +520,14 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         res = enrichment[[e_name]]
         plts = list()
         plts[["dotplot"]] = dotplot(res) + 
-            scale_size(range=c(0.5,3))
-        plts[["cnetplot"]] = cnetplot(res, cex_label_category=0.5, cex_label_gene=0.5)
+            scale_size(range=c(0.5,3)) + 
+            scale_color_continuous(
+                low=PAL_SINGLE_LIGHT, high=PAL_SINGLE_DARK, 
+                name="FDR", guide=guide_colorbar(reverse=TRUE)) +
+            theme_pubr()
+        
+        plts[["cnetplot"]] = cnetplot(res, cex_label_category=0.5, 
+                                      cex_label_gene=0.5)
         names(plts) = sprintf("%s-%s",e_name,names(plts))
         return(plts)
     })
@@ -515,9 +535,6 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
     names(plts_enrichment) = sprintf("model_prop-enrichment-%s",
                                      names(plts_enrichment))
     plts = c(plts, plts_enrichment)
-    plts[["model_prop-enrichment-GO_BP-dotplot"]] = plts[["model_prop-enrichment-GO_BP-dotplot"]] + 
-        theme_pubr() + 
-        scale_size(range=c(0.5,3))
     
     # are selected exons associated with transcriptomic indices?
     X = models %>%
@@ -532,18 +549,21 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         geom_violin(aes(fill=is_selected), color=NA) + 
         geom_boxplot(fill=NA, outlier.size=0.1, 
                      width=0.1, position=position_dodge(0.9)) +
-        #stat_compare_means(method="wilcox.test", 
-        #                   label="p.signif", size=2, family="Arial") + 
-        fill_palette("#4DBBD5FF") + 
-        geom_hline(yintercept=c(-0.4,0,0.4), linetype="dashed") + 
+        fill_palette(PAL_SINGLE_LIGHT) + 
+        geom_hline(yintercept=c(-0.4,0,0.4), linetype="dashed", size=LINE_SIZE) + 
         theme_pubr() + 
         labs(x="Correlation Sign", y="Spearman Correlation", fill="Is Selected")  +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     res = new("compareClusterResult", compareClusterResult = indices_enrich)
     plts[["model_prop-indices-enrichment-GO_BP-dotplot"]] = res %>% 
         dotplot() + 
-        scale_size(range=c(0.5,3))
+        scale_size(range=c(0.5,3)) + 
+            scale_size(range=c(0.5,3)) + 
+            scale_color_continuous(
+                low=PAL_SINGLE_LIGHT, high=PAL_SINGLE_DARK, 
+                name="FDR", guide=guide_colorbar(reverse=TRUE)) +
+            theme_pubr()
     
     plts[["model_prop-indices-top_pos"]] = X %>% 
         filter(is_selected) %>%
@@ -552,9 +572,9 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         ungroup() %>%
         mutate(event_gene = as.factor(event_gene),
                name = reorder_within(event_gene, correlation, index_name)) %>%
-        ggbarplot(x="name", y="correlation", fill="#4DBBD5FF", color=NA) +
+        ggbarplot(x="name", y="correlation", fill=PAL_SINGLE_LIGHT, color=NA) +
         facet_wrap(~index_name, scales="free") +
-        theme(strip.text.x = element_text(size=6, family="Arial")) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         scale_x_reordered() +
         labs(x="Event & Gene", y="Spearman Correlation") +
         coord_flip()
@@ -566,9 +586,9 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         ungroup() %>%
         mutate(event_gene = as.factor(event_gene),
                name = reorder_within(event_gene, correlation, index_name)) %>%
-        ggbarplot(x="name", y="correlation", fill="#4DBBD5FF", color=NA) +
+        ggbarplot(x="name", y="correlation", fill=PAL_SINGLE_LIGHT, color=NA) +
         facet_wrap(~index_name, scales="free") +
-        theme(strip.text.x = element_text(size=6, family="Arial")) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         scale_x_reordered() +
         labs(x="Event & Gene", y="Spearman Correlation") +
         coord_flip()
@@ -584,27 +604,32 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
 
     plts[["model_prop-tumorigenesis-scatter"]] = X %>% 
         ggplot(aes(x=q25, y=q75)) +
-        geom_scattermore(pointsize=8, pixels=c(1000,1000)) +
+        geom_scattermore(pointsize=5, pixels=c(1000,1000), 
+                         alpha=0.5, color=PAL_SINGLE_DARK) +
         theme_pubr() +
-        geom_hline(yintercept=0, linetype="dashed") + 
-        geom_vline(xintercept=0, linetype="dashed") +
+        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
+        geom_vline(xintercept=0, linetype="dashed", size=LINE_SIZE) +
         labs(x="0.25 Quantile", y="0.75 Quantile") +
-        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial", 
+        geom_text_repel(aes(label=event_gene), size=FONT_SIZE, 
+                        segment.size=0.1, family=FONT_FAMILY, 
                         X %>% slice_max(order_by=abs(q25*q75), n=10), max.overlaps=50)
     
     X = X %>% 
         left_join(indices, by=c("EVENT"="index"))
     
     plts[["model_prop-tumorigenesis_vs_indices"]] = X %>% 
-        ggscatter(x="correlation", y="med", alpha=0.5, size=1) + 
-        stat_cor(method="spearman", label.y.npc = "bottom") + 
-        geom_hline(yintercept=0, linetype="dashed") + 
-        geom_vline(xintercept=0, linetype="dashed") +
+        ggscatter(x="correlation", y="med", alpha=0.5, size=1, color=PAL_SINGLE_DARK) + 
+        stat_cor(method="spearman", label.y.npc = "bottom", 
+                 size=FONT_SIZE, family=FONT_FAMILY) + 
+        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
+        geom_vline(xintercept=0, linetype="dashed", size=LINE_SIZE) +
         facet_wrap(~index_name) +
-        theme(strip.text.x = element_text(size=6, family="Arial")) + 
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) + 
         geom_text_repel(aes(label=event_gene),
-                        X %>% group_by(index_name) %>% slice_max(abs(correlation)*abs(med), n=5),
-                        size=1, family="Arial", segment.size=0.1) +
+                        X %>% 
+                            group_by(index_name) %>% 
+                            slice_max(abs(correlation)*abs(med), n=5),
+                        size=FONT_SIZE, family=FONT_FAMILY, segment.size=0.1) +
         labs(x="Spearman Correlation", y="Median(Spl. Dep.)")
     
     return(plts)
@@ -626,8 +651,9 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
     plts[["model_val-mutation_gene_count"]] = X %>% 
         count(Variant_Classification, is_selected) %>%
         ggbarplot(x="Variant_Classification", y="n", 
-                  label=TRUE, lab.size=2, palette="npg",
-                  fill="is_selected", color=NA, position=position_dodge(0.9)) + 
+                  label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY, 
+                  palette=PAL_DUAL, fill="is_selected", color=NA, 
+                  position=position_dodge(0.9)) + 
         yscale("log10", .format=TRUE) + 
         labs(x="Mutation Effect", y="No. Genes", 
              fill="Selected Model") +
@@ -639,9 +665,9 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
                      position=position_dodge(0.7)) +
         stat_compare_means(aes(group=is_selected), method="wilcox.test", 
-                           label="p.signif", size=2) +
+                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
         yscale("log10", .format=TRUE) + 
-        fill_palette("npg") +
+        fill_palette(PAL_DUAL) +
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", 
              fill="Selected Model") +
         theme_pubr(x.text.angle=70)
@@ -699,13 +725,14 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
     plts[["model_val-mutation_event_count"]] = X %>% 
         count(dataset, Variant_Classification, is_selected) %>%
         ggbarplot(x="Variant_Classification", y="n", 
-                  label=TRUE, palette="npg", lab.size=2,
+                  label=TRUE, palette=PAL_DUAL, 
+                  lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
                   fill="is_selected", color=NA, position=position_dodge(0.9)) + 
         yscale("log10", .format=TRUE) + 
         labs(x="Mutation Effect", y="No. Events", fill="Selected Model") +
         theme_pubr(x.text.angle=70) +
         facet_wrap(~dataset, ncol=1) +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     
     plts[["model_val-mutation_event_frequency"]] = X %>% 
@@ -714,10 +741,10 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
                    group=interaction(Variant_Classification,dataset))) +
         geom_boxplot(aes(fill=dataset), outlier.size=0.1, 
                      position=position_dodge(0.7)) +
-        fill_palette("npg") + 
-        geom_hline(yintercept=0, linetype="dashed") +
+        fill_palette(PAL_DUAL) + 
+        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
         stat_compare_means(aes(group=dataset), method="wilcox.test", 
-                           label="p.signif", size=2) +
+                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Mutation Effect", y="log2(FC Mut. Freq. per Kb)", 
              fill="Selected Model") +
         theme_pubr(x.text.angle=70)
@@ -730,15 +757,15 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
                    group=interaction(Variant_Classification,dataset))) +
         geom_boxplot(aes(fill=dataset), outlier.size=0.1, 
                      position=position_dodge(0.7)) +
-        fill_palette("npg") + 
-        geom_hline(yintercept=0, linetype="dashed") +
+        fill_palette(PAL_DUAL) + 
+        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
         stat_compare_means(aes(group=dataset), method="wilcox.test", 
-                           label="p.signif", size=2) +
+                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Mutation Effect", y="log2(FC Mut. Freq. per Kb)", 
              fill="Selected Model") +
         theme_pubr(x.text.angle=70) +
         facet_wrap(~term_clean) +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     ## alternative protein isoforms have a higher mutation frequency than expected,
     ## what exons are causing that?
@@ -771,27 +798,27 @@ plot_event_oi = function(event_oi, gene_oi, ensembl_oi,
     plt_title = sprintf("%s_%s (%s)", event_oi, gene_oi, ensembl_oi)
     plts = list()
     plts[["spldep_vs_rnai"]] = X %>% 
-        ggscatter(x="spldep", y="rnai", size=1, alpha=0.5) + 
+        ggscatter(x="spldep", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
         stat_cor(method="pearson", label.y.npc="top", 
-                 label.x.npc = "middle", family="Arial", size=2) + 
+                 label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="Predicted Dep.", y="Real Dep.")
     
     plts[["splicing_vs_rnai"]] = X %>% 
-        ggscatter(x="splicing", y="rnai", size=1, alpha=0.5) + 
+        ggscatter(x="splicing", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
         stat_cor(method="spearman", label.y.npc="top", 
-                     label.x.npc = "middle", family="Arial", size=2) + 
+                     label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="Splicing (PSI)", y="Real Dep.")
     
     plts[["genexpr_vs_rnai"]] = X %>% 
-        ggscatter(x="genexpr", y="rnai", size=1, alpha=0.5) + 
+        ggscatter(x="genexpr", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
         stat_cor(method="spearman", label.y.npc="top", 
-                 label.x.npc = "middle", family="Arial", size=2) + 
+                 label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="mRNA levels (TPM)", y="Real Dep.")
     
     plts[["genexpr_vs_splicing"]] = X %>% 
-        ggscatter(x="genexpr", y="splicing", size=1, alpha=0.5) + 
+        ggscatter(x="genexpr", y="splicing", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
         stat_cor(method="spearman", label.y.npc="top", 
-                 label.x.npc = "middle", family="Arial", size=2) + 
+                 label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="mRNA levels (TPM)", y="Splicing (PSI)")
     
     
@@ -905,8 +932,8 @@ save_plt = function(plts, plt_name, extension=".pdf",
     plt = plts[[plt_name]]
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
-                    font.x=8, font.y=8, font.legend=8,
-                    font.tickslab=6, font.family="Arial")    
+                    font.x=8, font.y=8, font.legend=6,
+                    font.tickslab=6, font.family=FONT_FAMILY)
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
@@ -933,6 +960,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-selected_vs_event_std", ".pdf", figs_dir, width=4, height=5)
     ## lengths
     save_plt(plts, "model_prop-selected_vs_event_length", ".pdf", figs_dir, width=4, height=5)
+    ## n. exons
+    save_plt(plts, "model_prop-n_exons_gene", ".pdf", figs_dir, width=4, height=5)
     ## protein impact
     save_plt(plts, "model_prop-protein_impact-counts", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_prop-protein_impact-freqs", ".pdf", figs_dir, width=8, height=8)
