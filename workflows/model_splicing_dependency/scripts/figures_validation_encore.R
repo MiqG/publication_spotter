@@ -30,6 +30,17 @@ source(file.path(ROOT,"src","R","utils.R"))
 # THRESH_DPSI = 5
 RANDOM_SEED = 1234
 
+# formatting
+PAL_SINGLE_ACCENT = "orange"
+PAL_SINGLE_LIGHT = "#6AC2BF"
+PAL_SINGLE_DARK = "#716454"
+PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+LINE_SIZE = 0.25
+
+FONT_SIZE = 2 # for additional labels
+FONT_FAMILY = "Arial"
+
+
 # Development
 # -----------
 # RAW_DIR = file.path(ROOT,"data","raw")
@@ -107,7 +118,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     plts[["encore_val-n_selected_events-violin"]] = X %>% 
         count(cell_line, KD) %>% 
         ggviolin(x="cell_line", y="n", trim=TRUE,
-                 fill="cell_line", color=NA, palette="Set2") + 
+                 fill="cell_line", color=NA, palette=PAL_DUAL) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
         labs(x="Cell Line", y="N. Cancer-Driver Exons in KD")
@@ -116,7 +127,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     plts[["encore_val-demeter2-violin"]] = X %>% 
         distinct(cell_line, KD, demeter2) %>% 
         ggviolin(x="cell_line", y="demeter2", fill="cell_line", 
-                 color=NA, palette="Set2", trim=TRUE) + 
+                 color=NA, palette=PAL_DUAL, trim=TRUE) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
         labs(x="Cell Line", y="Gene Dependency")  +
@@ -125,7 +136,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
                       distinct(cell_line, KD) %>% 
                       count(cell_line) %>% 
                       mutate(lab=paste0("n=",n)),
-                  size=1, family="Arial")
+                  size=FONT_SIZE, family=FONT_FAMILY)
     
     # how does correlation change summing different top maximum?
     set.seed(RANDOM_SEED)
@@ -177,22 +188,22 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     correls = do.call(rbind, correls)
     
     plts[["encore_val-thresh_vs_pearsons"]] = correls %>% 
-        ggscatter(x="thresh", y="correlation", palette="Set2",
+        ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
                   size="log10_pvalue", color="cell_line", alpha=0.5) + 
         labs(x="N Harmful Exons", y="Pearson Correlation", 
              color="Cell Line", size="-log10(p-value)") +
         scale_size(range=c(0.1,1.5)) +
         theme(aspect.ratio=1) + 
         facet_wrap(~dataset, ncol=1) +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
         
     # evaluate predictions with different dynamic ranges
     plts[["encore_val-harm-hist"]] = X %>% 
-        gghistogram(x="harm_rank", fill="cell_line", palette="Set2", color=NA) + 
+        gghistogram(x="harm_rank", fill="cell_line", palette=PAL_DUAL, color=NA) + 
         facet_wrap(~cell_line) + 
         labs(x="Harm Score Rank", y="Count") + 
         guides(fill="none") +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     correls = lapply(seq(0,150,10), function(range_min){
         corr_higher = X %>% 
@@ -230,15 +241,15 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
     correls = do.call(rbind, correls)
     
     plts[["encore_val-ranges_vs_pearsons"]] = correls %>% 
-        ggscatter(x="dyn_range", y="correlation", palette="Set2",
-                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
+        ggscatter(x="dyn_range", y="correlation", palette=PAL_DUAL,
+                  size="log10_pvalue", color="cell_line", alpha=0.8) + 
         labs(x="Harm Score Rank Range", y="Pearson Correlation", 
              color="Cell Line", size="-log10(p-value)") +
         scale_size(range=c(0.1,1.5)) +
         theme(aspect.ratio=1) + 
         theme_pubr(x.text.angle = 70) +
         facet_wrap(~dataset, scales="free_x") +
-        theme(strip.text.x = element_text(size=6, family="Arial")) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         ylim(0,0.4)
     
     # what influences harm score rankings? DeltaPSI or Spl. Dep.?
@@ -251,20 +262,20 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         labs(x="Harm Score Rank", y="Delta PSI") +
         theme_pubr(x.text.angle=70) +
         facet_wrap(~cell_line, ncol=1) +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     plts[["encore_val-harm_rank_vs_spldep"]] = x %>%
         ggboxplot(x="bin", y="spldep", outlier.size=0.1) +
         labs(x="Harm Score Rank", y="Splicing Dependency") +
         theme_pubr(x.text.angle=70) +
         facet_wrap(~cell_line, ncol=1) +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     plts[["encore_val-dpsi_vs_spldep"]] = x %>%
         ggscatter(x="spldep", y="deltaPSI", size=0.1, alpha=0.5) +
         labs(x="Splicing Dependency", y="Delta PSI") +
         facet_wrap(~cell_line, ncol=1) +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     # the most harmful changes predict overall knockdown
     x = X %>% 
@@ -274,17 +285,17 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
     plts[["encore_val-top1-scatters"]] = x %>%
-        ggscatter(x="pred", y="demeter2", color="KD", size=1, alpha=0.5,
-                  palette=get_palette("simpsons",length(genes_kd))) + 
+        ggscatter(x="pred", y="demeter2", color="cell_line", size=1, alpha=0.5,
+                  palette=PAL_DUAL) + 
         guides(color="none") + 
-        stat_cor(method="pearson", size=1, family="Arial") + 
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_smooth(method="lm", linetype="dashed", color="black") + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
                         x %>% slice_max(demeter2*pred, n=5),
-                        size=1, family="Arial") +
+                        size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Sum of Top Harm Scores", y="Gene Dependency") +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     x = X %>% 
         group_by(cell_line, KD, demeter2) %>% 
@@ -293,17 +304,17 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
     plts[["encore_val-top10-scatters"]] = x %>%
-        ggscatter(x="pred", y="demeter2", color="KD", size=1,
-                  palette=get_palette("simpsons",length(genes_kd))) + 
+        ggscatter(x="pred", y="demeter2", color="cell_line", size=1,
+                  palette=PAL_DUAL) + 
         guides(color="none") + 
-        stat_cor(method="pearson", size=1, family="Arial") + 
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_smooth(method="lm", linetype="dashed", color="black") + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
                         x %>% slice_max(demeter2*pred, n=5),
-                        size=1, family="Arial") +
+                        size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Sum of Top Harm Scores", y="Gene Dependency") +
-        theme(strip.text.x = element_text(size=6, family="Arial"))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     # who are these top 10 harmful events?
     x = X %>% 
@@ -317,7 +328,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         mutate(event_gene=paste0(index,"_",GENE))
     plts[["encore_val-top10-bars"]] = x %>% 
         ggbarplot(x="event_gene", y="n", fill="cell_line", 
-                  color=NA, palette="Set2", position=position_dodge(0.9)) + 
+                  color=NA, palette=PAL_DUAL, position=position_dodge(0.9)) + 
         labs(x="Event & Gene", y="N. Exon in Top 10 Harm", fill="Cell Line") + 
         coord_flip()
     
@@ -327,7 +338,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         left_join(event_annot, by=c("index"="EVENT")) %>%
         mutate(event_gene=paste0(index,"_",GENE)) %>%
         ggboxplot(x="event_gene", y="harm_rank", fill="cell_line", 
-                  palette="Set2", outlier.size=0.1) + 
+                  palette=PAL_DUAL, outlier.size=0.1) + 
         labs(x="Event & Gene", y="Harm Score Rank", fill="Cell Line") +    
         coord_flip()
     
@@ -337,11 +348,14 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         pivot_wider(id_cols="KD", 
                     names_from="cell_line", 
                     values_from="demeter2") %>% 
-        ggscatter(x="K562", y="HepG2", size=1, alpha=0.5) + 
-        stat_cor(method="pearson", size=1, family="Arial") + 
+        ggscatter(x="K562", y="HepG2", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_smooth(method="lm", linetype="dashed", color="black")
     
     # are some events changing in KDs enriched in our selected events?
+    ## number of events available in the ontology?
+    ontology %>% filter(EVENT %in% selected_events) %>% distinct(EVENT) %>% nrow()
+    
     enrichment = enricher(
         selected_events, TERM2GENE=ontology, 
         universe=event_annot %>%  filter(str_detect(EVENT,"EX")) %>% 
@@ -357,10 +371,13 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         arrange(gene_ratio) %>%
         ggscatter(x="Description", y="gene_ratio", 
                   size="Count", color="p.adjust") +
-        gradient_color(c("blue", "red")) +
-        scale_size(range=c(0.5,3)) +
         labs(x="Event Set", y="Event Ratio") +
-        coord_flip()
+        coord_flip() +
+        scale_size(range=c(0.5,3)) + 
+        scale_color_continuous(
+            low=PAL_SINGLE_LIGHT, high=PAL_SINGLE_DARK, 
+            name="FDR", guide=guide_colorbar(reverse=TRUE)) +
+        theme_pubr()
     
     # upset plot of enriched exon sets
     events_oi = enrichment %>% slice_max(gene_ratio, n=10) %>% pull(geneID) %>% str_split("/")
@@ -370,7 +387,10 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         list_to_matrix() %>% 
         make_comb_mat()
     plts[["encore_val-enrichment-KD-upset"]] = m %>%
-        UpSet(comb_order = order(comb_size(m))) %>%
+        UpSet(comb_order = order(comb_size(m)),
+              comb_col = PAL_SINGLE_DARK,
+              top_annotation = upset_top_annotation(m, gp = gpar(fill = PAL_SINGLE_DARK, col=NA)),
+              right_annotation = upset_right_annotation(m, gp = gpar(fill = PAL_SINGLE_DARK, col=NA))) %>%
         draw() %>%
         grid.grabExpr() %>%
         as.ggplot()
@@ -407,7 +427,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=8,
-                    font.tickslab=6, font.family="Arial")    
+                    font.tickslab=6, font.family=FONT_FAMILY)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
