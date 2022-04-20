@@ -80,7 +80,7 @@ FONT_FAMILY = "Arial"
 # paths_real_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-EX.tsv.gz")
 # paths_random_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-random.tsv.gz")
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
-
+# msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 
 ##### FUNCTIONS #####
 load_drug_screens = function(drug_screens_dir){
@@ -97,6 +97,108 @@ load_drug_screens = function(drug_screens_dir){
     })
     dfs = do.call(rbind,dfs)
     return(dfs)
+}
+
+
+load_ontologies = function(msigdb_dir){
+    ontologies = list(
+        "reactome" = read.gmt(file.path(msigdb_dir,"c2.cp.reactome.v7.4.symbols.gmt"))
+    )
+    return(ontologies)
+}
+
+
+evaluate_reactome = function(models, drug_targets, ontology){
+    # - are drug target(s) and indirect hits in the same pathway?
+    X = models %>%
+        left_join(
+            drug_targets %>% distinct(DRUG_ID, TARGET) %>% mutate(is_target=TRUE),
+            by = c("DRUG_ID","GENE"="TARGET")
+        ) %>%
+        mutate(is_target=replace_na(is_target, FALSE),
+               is_sel = lr_padj<THRESH_FDR & n_obs>THRESH_NOBS) %>%
+        filter(!is_target)
+    
+    ontology = ontology %>%
+        group_by(term) %>%
+        mutate(gene_set_size=n()) %>%
+        ungroup()
+    
+    ## select pathways containing a drug target
+    drug_pathways = drug_targets %>% 
+        distinct(DRUG_ID, TARGET) %>% 
+        left_join(ontology, by = c("TARGET"="gene")) %>%
+        distinct(DRUG_ID, term, gene_set_size) %>%
+        drop_na()
+    
+    ## add hits of every drug
+    x_real = drug_pathways %>%
+        left_join(X %>%
+            filter(is_sel & !is_target) %>%
+            distinct(DRUG_ID, GENE, is_target), 
+            by="DRUG_ID"
+        ) %>%
+        drop_na() %>%
+        left_join(
+            ontology %>% mutate(in_pathway=TRUE), 
+            by=c("term","gene_set_size","GENE"="gene")
+        ) %>%
+        mutate(in_pathway=replace_na(in_pathway, FALSE))
+    
+    set.seed(RANDOM_SEED)
+    x_null = drug_pathways %>%
+        left_join(X %>%
+            group_by(DRUG_ID) %>%
+            mutate(is_sel = sample(is_sel)) %>%
+            ungroup() %>%
+            filter(is_sel & !is_target) %>%
+            distinct(DRUG_ID, GENE, is_target), 
+            by="DRUG_ID"
+        ) %>%
+        drop_na() %>%
+        left_join(
+            ontology %>% mutate(in_pathway=TRUE), 
+            by=c("term","gene_set_size","GENE"="gene")
+        ) %>%
+        mutate(in_pathway=replace_na(in_pathway, FALSE))
+    
+    ## for every drug, how many hits are in the pathway?
+    ## for each drug, consider only the pathway with the maximum number of hits
+    pathways_oi_real = x_real %>% 
+        count(DRUG_ID, term, in_pathway) %>% 
+        complete(DRUG_ID, term, in_pathway, fill = list(n=0)) %>% 
+        filter(in_pathway) %>%
+        left_join(
+            ontology %>% distinct(term, gene_set_size), by="term"
+        ) %>% 
+        group_by(DRUG_ID) %>% 
+        slice_max(n, n=1) %>%
+        slice_max(gene_set_size, n=1) %>%
+        ungroup() %>%
+        mutate(dataset="Real")
+    
+    ## create random background of finding this number of hits per drug and pathway
+    pathways_oi_null = x_null %>% 
+        count(DRUG_ID, term, in_pathway) %>% 
+        complete(DRUG_ID, term, in_pathway, fill = list(n=0)) %>% 
+        filter(in_pathway) %>%
+        left_join(
+            ontology %>% distinct(term, gene_set_size), by="term"
+        ) 
+    
+    pathways_oi_null = pathways_oi_real %>% 
+        distinct(DRUG_ID, term) %>% 
+        left_join(pathways_oi_null, by=c("DRUG_ID","term")) %>%
+        mutate(dataset="Random")
+    
+    eval_reactome = pathways_oi_null %>%
+        bind_rows(pathways_oi_real) %>%
+        left_join(
+            drug_targets %>% count(DRUG_ID, name="n_targets"),
+            by="DRUG_ID"
+        )
+    
+    return(eval_reactome)
 }
 
 
@@ -242,7 +344,8 @@ plot_targets = function(models, drug_targets){
             drug_targets %>% distinct(DRUG_ID, TARGET) %>% mutate(is_target=TRUE),
             by = c("DRUG_ID","GENE"="TARGET")
         ) %>%
-        mutate(is_target=replace_na(is_target, FALSE))
+        mutate(is_target=replace_na(is_target, FALSE),
+               is_sel = lr_padj<THRESH_FDR & n_obs>THRESH_NOBS)
     
     plts = list()
     
@@ -302,7 +405,8 @@ plot_ppi = function(models, shortest_paths){
                path_lab = as.character(shortest_path_length),
                path_lab = ifelse(shortest_path_length>=5,">=5",path_lab),
                path_lab = ifelse(shortest_path_length==1e6,"N.R.",path_lab),
-               path_lab = factor(path_lab, levels=c("0","1","2","3","4",">=5","N.R.")))
+               path_lab = factor(path_lab, levels=c("0","1","2","3","4",">=5","N.R."))) %>%
+        drop_na(is_sel)
     
     plts = list()
     
@@ -356,38 +460,29 @@ plot_ppi = function(models, shortest_paths){
 
 
 plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_targets){
-    # to get best candidates biologically relevant, we will only consider
-    # exons whose PSI coefficient is larger than the TPM coefficient
-    # in selected linear models
-    events_oi = spldep_models %>% 
-        # filter(abs(event_coefficient_mean) > abs(gene_coefficient_mean)) %>% 
-        pull(EVENT)
     
     X = models %>%
         left_join(shortest_paths_simple, by=c("DRUG_ID","GENE"="source")) %>%
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID") %>%
-        mutate(is_large = EVENT %in% events_oi,
-               is_sel = lr_padj < THRESH_FDR & n_obs > THRESH_NOBS,
+        mutate(is_sel = lr_padj < THRESH_FDR & n_obs > THRESH_NOBS,
                is_sel = replace_na(is_sel, FALSE),
                path_lab = as.character(shortest_path_length),
-               path_lab = ifelse(shortest_path_length==1e6,"N.R.",path_lab),
                path_lab = ifelse(shortest_path_length>=5,">=5",path_lab),
-               path_lab = replace_na(shortest_path_length,"NA"),
+               path_lab = ifelse(shortest_path_length==1e6,"N.R.",path_lab),
+               path_lab = replace_na(path_lab,"NA"),
+               path_lab = factor(path_lab, levels=c("0","1","2","3","4",">=5","N.R.","NA")),
                is_target = shortest_path_length=="0",
-               is_target = replace_na(is_target,FALSE)) %>%
-        group_by(drug_screen, DRUG_ID) %>%
-        mutate(spldep_coefficient_norm = order(spldep_coefficient, decreasing=TRUE) / n()) %>%
-        ungroup()
-    
+               is_target = replace_na(is_target,FALSE),
+               DRUG_NAME = ifelse(DRUG_NAME=="AFATINIB", paste0(DRUG_NAME,"_",DRUG_ID), DRUG_NAME))
     
     plts = list()
     
     # - how many events are we considering?
     plts[["mediators-bar-n_selected"]] = X %>% 
-        count(is_large, is_sel) %>% 
-        mutate(lab=paste0(is_large,"\n&\n",is_sel)) %>%
+        count(is_sel) %>% 
+        mutate(lab= is_sel ) %>%
         ggbarplot(x="lab", y="n", fill="lab", color=NA, 
-                  palette=get_palette(PAL_DUAL, 4), 
+                  palette=get_palette(PAL_DUAL, 2), 
                   label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY) +
         guides(fill="none") +
         yscale("log10", .format=TRUE) +
@@ -396,7 +491,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
     # what is the best significant association with larger PSI effect?    
     # - mediator on target
     assocs_oi = X %>%
-        filter(is_sel & is_large & is_target) %>%
+        filter(is_sel & is_target) %>%
         distinct(EVENT,DRUG_ID)
     
     x = assocs_oi %>% 
@@ -408,16 +503,12 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
                name = reorder_within(event_gene, spldep_coefficient, DRUG_ID))
     
     plts[["mediators-on_target-spldep_coef"]] = x %>% 
-        mutate(lab = round(spldep_coefficient, 3)) %>%
+        mutate(lab = sprintf("%s | %s", round(spldep_coefficient, 3), DRUG_NAME)) %>%
         ggbarplot(x="name", y="spldep_coefficient", 
               color="drug_screen", fill="DRUG_ID", palette=get_palette(PAL_DUAL, 8), 
               position=position_dodge(0.7)) +
         color_palette(c("black","white")) + 
-        geom_text(aes(y=sign(spldep_coefficient)*(abs(spldep_coefficient)+0.05), 
-                      label=lab, group=drug_screen), 
-                  position=position_dodge(0.7),
-                  size=FONT_SIZE, family=FONT_FAMILY) +
-        geom_text(aes(y=1.1, label=DRUG_NAME, group=drug_screen), 
+        geom_text(aes(y=1.5, label=lab, group=drug_screen), 
                   position=position_dodge(0.7),
                   size=FONT_SIZE, family=FONT_FAMILY) +
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
@@ -426,9 +517,9 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         coord_flip()
     
     plts[["mediators-on_target-event_coef"]] = x %>% 
-        distinct(name, event_coefficient_mean) %>%
+        distinct(event_gene, event_coefficient_mean) %>%
         mutate(lab = round(event_coefficient_mean, 3)) %>%
-        ggbarplot(x="name", y="event_coefficient_mean", 
+        ggbarplot(x="event_gene", y="event_coefficient_mean", 
                   color=NA, fill=PAL_SINGLE_LIGHT,
                   position=position_dodge(0.7)) +
         geom_text(aes(y=sign(event_coefficient_mean)*(abs(event_coefficient_mean)+0.015), label=lab),
@@ -439,12 +530,57 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         labs(x="Event & Gene" , y="PSI Coefficient") +
         coord_flip()
     
-    # - mediator up/downstream (off target)    
-    plts[["mediators-on_target-top_assocs_spldep_pos"]] = assocs_oi %>% 
+    # - mediator up/downstream (off target)
+    x = assocs_oi %>%
+        distinct(DRUG_ID) %>%
         left_join(X, by="DRUG_ID") %>% 
-        filter(is_sel & is_large) %>% 
+        left_join(spldep_models %>% 
+            distinct(EVENT, event_coefficient_mean), by="EVENT") %>%
+        filter(is_sel) %>% 
         distinct(DRUG_NAME, event_gene, lr_padj, spldep_coefficient,
-                 drug_screen, is_target, path_lab) %>%
+                 event_coefficient_mean, drug_screen, is_target, path_lab)
+    
+    plts[["mediators-on_target-top_assocs_spldep_all"]] = x %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_max(abs(spldep_coefficient), n=10) %>% 
+        ungroup() %>%
+        mutate(DRUG_NAME = as.factor(DRUG_NAME),
+               name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
+        ggbarplot(x="name", y="spldep_coefficient", 
+                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  position=position_dodge(0.7)) + 
+        geom_text(aes(y=(abs(spldep_coefficient)+0.08)*sign(spldep_coefficient),
+                      label=path_lab, group=drug_screen), 
+                  position=position_dodge(0.7),
+                  size=FONT_SIZE, family=FONT_FAMILY) + 
+        color_palette(c("black","white")) + 
+        facet_wrap(~DRUG_NAME, scales="free") + 
+        scale_x_reordered() +
+        coord_flip() +
+        labs(x="Event & Gene", y="Spl. Dep. Coef.",, fill="Is Target", color="Drug Screen") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["mediators-on_target-top_assocs_event_coef_all"]] = x %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_max(abs(spldep_coefficient), n=10) %>% 
+        ungroup() %>%
+        mutate(DRUG_NAME = as.factor(DRUG_NAME),
+               name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
+        ggbarplot(x="name", y="event_coefficient_mean", 
+                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  position=position_dodge(0.7)) + 
+        geom_text(aes(y=(abs(event_coefficient_mean)+0.01)*sign(event_coefficient_mean), 
+                      label=path_lab, group=drug_screen), 
+                  position=position_dodge(0.7),
+                  size=FONT_SIZE, family=FONT_FAMILY) + 
+        color_palette(c("black","white")) + 
+        facet_wrap(~DRUG_NAME, scales="free") + 
+        scale_x_reordered() +
+        coord_flip() +
+        labs(x="Event & Gene", y="PSI Coefficient", fill="Is Target", color="Drug Screen") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["mediators-on_target-top_assocs_spldep_pos"]] = x %>% 
         group_by(DRUG_NAME) %>% 
         slice_max(spldep_coefficient, n=10) %>% 
         ungroup() %>%
@@ -453,7 +589,8 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         ggbarplot(x="name", y="spldep_coefficient", 
                   color="drug_screen", fill="is_target", palette=PAL_DUAL, 
                   position=position_dodge(0.7)) + 
-        geom_text(aes(y=spldep_coefficient+0.08, label=path_lab, group=drug_screen), 
+        geom_text(aes(y=(abs(spldep_coefficient)+0.08)*sign(spldep_coefficient),
+                      label=path_lab, group=drug_screen), 
                   position=position_dodge(0.7),
                   size=FONT_SIZE, family=FONT_FAMILY) + 
         color_palette(c("black","white")) + 
@@ -463,11 +600,27 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         labs(x="Event & Gene", y="Spl. Dep. Coef.",, fill="Is Target", color="Drug Screen") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
-    plts[["mediators-on_target-top_assocs_spldep_neg"]] = assocs_oi %>% 
-        left_join(X, by="DRUG_ID") %>% 
-        filter(is_sel & is_large) %>% 
-        distinct(DRUG_NAME, event_gene, lr_padj, spldep_coefficient,
-                 drug_screen, is_target, path_lab) %>%
+    plts[["mediators-on_target-top_assocs_event_coef_pos"]] = x %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_max(spldep_coefficient, n=10) %>% 
+        ungroup() %>%
+        mutate(DRUG_NAME = as.factor(DRUG_NAME),
+               name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
+        ggbarplot(x="name", y="event_coefficient_mean", 
+                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  position=position_dodge(0.7)) + 
+        geom_text(aes(y=(abs(event_coefficient_mean)+0.01)*sign(event_coefficient_mean), 
+                      label=path_lab, group=drug_screen), 
+                  position=position_dodge(0.7),
+                  size=FONT_SIZE, family=FONT_FAMILY) + 
+        color_palette(c("black","white")) + 
+        facet_wrap(~DRUG_NAME, scales="free") + 
+        scale_x_reordered() +
+        coord_flip() +
+        labs(x="Event & Gene", y="PSI Coefficient", fill="Is Target", color="Drug Screen") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["mediators-on_target-top_assocs_spldep_neg"]] = x %>% 
         group_by(DRUG_NAME) %>% 
         slice_min(spldep_coefficient, n=10) %>% 
         ungroup() %>%
@@ -476,7 +629,8 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         ggbarplot(x="name", y="spldep_coefficient", 
                   color="drug_screen", fill="is_target", palette=PAL_DUAL, 
                   position=position_dodge(0.7)) + 
-        geom_text(aes(y=spldep_coefficient-0.08, label=path_lab, group=drug_screen), 
+        geom_text(aes(y=(abs(spldep_coefficient)+0.08)*sign(spldep_coefficient),
+                      label=path_lab, group=drug_screen), 
                   position=position_dodge(0.7),
                   size=FONT_SIZE, family=FONT_FAMILY) + 
         color_palette(c("black","white")) + 
@@ -486,16 +640,59 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         labs(x="Event & Gene", y="Spl. Dep. Coef.",, fill="Is Target", color="Drug Screen") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
-    
+    plts[["mediators-on_target-top_assocs_event_coef_neg"]] = x %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_min(spldep_coefficient, n=10) %>% 
+        ungroup() %>%
+        mutate(DRUG_NAME = as.factor(DRUG_NAME),
+               name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
+        ggbarplot(x="name", y="event_coefficient_mean", 
+                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  position=position_dodge(0.7)) + 
+        geom_text(aes(y=(abs(event_coefficient_mean)+0.01)*sign(event_coefficient_mean), 
+                      label=path_lab, group=drug_screen), 
+                  position=position_dodge(0.7),
+                  size=FONT_SIZE, family=FONT_FAMILY) + 
+        color_palette(c("black","white")) + 
+        facet_wrap(~DRUG_NAME, scales="free") + 
+        scale_x_reordered() +
+        coord_flip() +
+        labs(x="Event & Gene", y="PSI Coefficient", fill="Is Target", color="Drug Screen") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+      
     # - examples exon-drug synergy
-    events_oi = c("HsaEX0034998", # KRAS (reported in literature)
-                  "HsaEX0038400") # MDM2
-    
-    x = X %>% 
+    x = X %>%
         drop_na(spldep_coefficient) %>%
         filter(is_sel)
-        
-    plts[["mediators-examples-synergy"]] = x %>% 
+    
+    ## associations with drugs
+    drugs_oi = c("VENETOCLAX")
+    
+    plts[["mediators-drugs_oi-synergy"]] = x %>% 
+        filter(DRUG_NAME %in% drugs_oi) %>% 
+        group_by() %>%
+        slice_max(abs(spldep_coefficient), n=10) %>%
+        ungroup() %>%
+        mutate(DRUG_NAME = as.factor(DRUG_NAME),
+               name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
+        ggbarplot(x="name", y="spldep_coefficient", 
+                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  position=position_dodge(0.7)) + 
+        geom_text(aes(y=sign(spldep_coefficient)*(abs(spldep_coefficient)+0.1), label=path_lab, group=drug_screen), 
+                  position=position_dodge(0.7),
+                  size=FONT_SIZE, family=FONT_FAMILY) + 
+        color_palette(c("black","white")) + 
+        facet_wrap(~DRUG_NAME, scales="free") + 
+        scale_x_reordered() +
+        labs(x="Drug", y="Spl. Dep. Coefficient", fill="Is Target", color="Drug Screen") +
+        coord_flip() +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    ## associations with events
+    events_oi = c('HsaEX0034998','HsaEX0038400') # KRAS
+    # MDM2
+    
+    plts[["mediators-events_oi-synergy"]] = x %>% 
         filter(EVENT %in% events_oi) %>% 
         mutate(event_gene = as.factor(event_gene),
                name = reorder_within(DRUG_NAME, spldep_coefficient, event_gene)) %>%
@@ -548,7 +745,6 @@ plot_drug_rec = function(estimated_response, drug_screen, models){
                    group=interaction(drug_screen,in_demeter2))) +
         geom_violin(aes(fill=in_demeter2), color=NA) +
         geom_boxplot(width=0.1, outlier.size=0.1, position=position_dodge(0.9)) +
-        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
         fill_palette(PAL_DUAL) + 
         labs(x="Drug Screen", y="Pearson Correlation", fill="In Demeter2") +
         geom_text(aes(y=1.00, label=n), 
@@ -584,15 +780,34 @@ plot_drug_rec = function(estimated_response, drug_screen, models){
 }
 
 
+plot_reactome = function(eval_reactome){
+    
+    X = eval_reactome
+    
+    plts = list()
+    
+    plts[["reactome-violin-hits_in_pathway"]] = X %>% 
+        ggviolin(x="dataset", y="n", trim=TRUE, 
+                 fill="dataset", color=NA, palette = PAL_DUAL) + 
+        geom_boxplot(width=0.1, outlier.size=0.1) +
+        stat_compare_means(method="wilcox.test", family=FONT_FAMILY, size=FONT_SIZE) +
+        guides(fill="none") + 
+        labs(x="Drug-Exon Association", y="N. Associations in Drug Pathway")
+    
+    return(plts)
+}
+
+
 make_plots = function(models, drug_screen,
                       drug_targets, shortest_paths, shortest_paths_simple,
-                      spldep_models, estimated_drug_response){
+                      spldep_models, estimated_drug_response, eval_reactome){
     plts = list(
         plot_eda_associations(models, drug_screen),
         plot_targets(models, drug_targets),
         plot_ppi(models, shortest_paths),
         plot_mediators(spldep_models, models, shortest_paths_simple, drug_targets),
-        plot_drug_rec(estimated_response, drug_screen, models)
+        plot_drug_rec(estimated_response, drug_screen, models),
+        plot_reactome(eval_reactome)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -602,15 +817,7 @@ make_plots = function(models, drug_screen,
 make_figdata = function(models,
                         shortest_paths, rankings, drug_targets,
                         clusters, metadata, estimated_response,
-                        embedding, enrichment){
-    # prep
-    df_enrichs = do.call(rbind,
-        lapply(names(enrichment), function(e){
-            res = enrichment[[e]]
-            res[["ontology"]] = e
-            return(res)
-        })
-    )
+                        embedding, enrichment, eval_reactome){
     
     figdata = list(
         "drug_event_assoc" = list(
@@ -621,7 +828,8 @@ make_figdata = function(models,
             "pred_ic50_by_event_drug_clustering" = clusters,
             "pred_ic50_by_drug" = estimated_response,
             "assoc_coeff_clustering" = embedding,
-            "assoc_coeff_gsea" = df_enrichs
+            "assoc_coeff_gsea" = df_enrichs,
+            "evaluation_reactome" = eval_reactome
         )
     )
     return(figdata)
@@ -657,24 +865,32 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "associations-overlaps_screens-upset", ".pdf", figs_dir, width=8, height=7)
     
     # targets
-    save_plt(plts, "targets-violin-lr_pvalue", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "targets-violin-lr_pvalue", ".pdf", figs_dir, width=3.5, height=3)
     save_plt(plts, "targets-violin-lr_padj", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "targets-bar-n_signifs", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "targets-bar-n_signifs", ".pdf", figs_dir, width=3.5, height=3.5)
     
     # ppi
     save_plt(plts, "ppi-bar-counts", ".pdf", figs_dir, width=5, height=6)
     save_plt(plts, "ppi-bar-prop", ".pdf", figs_dir, width=5, height=6)
-    save_plt(plts, "ppi-bar-rel_prop", ".pdf", figs_dir, width=5, height=6)
-    save_plt(plts, "ppi-box-lr_padj", ".pdf", figs_dir, width=8, height=6)
+    save_plt(plts, "ppi-bar-rel_prop", ".pdf", figs_dir, width=4.5, height=5)
+    save_plt(plts, "ppi-box-lr_padj", ".pdf", figs_dir, width=8, height=4)
     save_plt(plts, "ppi-box-spldep_coef", ".pdf", figs_dir, width=8, height=6)
+    
+    # reactome
+    save_plt(plts, "reactome-violin-hits_in_pathway", ".pdf", figs_dir, width=3.5, height=3.5)
     
     # mediators
     save_plt(plts, "mediators-bar-n_selected", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "mediators-on_target-spldep_coef", ".pdf", figs_dir, width=9, height=11)
-    save_plt(plts, "mediators-on_target-event_coef", ".pdf", figs_dir, width=5.5, height=7)
+    save_plt(plts, "mediators-on_target-spldep_coef", ".pdf", figs_dir, width=6.5, height=11)
+    save_plt(plts, "mediators-on_target-event_coef", ".pdf", figs_dir, width=5.5, height=4)
+    save_plt(plts, "mediators-on_target-top_assocs_spldep_all", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_spldep_pos", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_spldep_neg", ".pdf", figs_dir, width=15, height=13)
-    save_plt(plts, "mediators-examples-synergy", ".pdf", figs_dir, width=10, height=5)
+    save_plt(plts, "mediators-on_target-top_assocs_event_coef_all", ".pdf", figs_dir, width=15, height=13)
+    save_plt(plts, "mediators-on_target-top_assocs_event_coef_pos", ".pdf", figs_dir, width=15, height=13)
+    save_plt(plts, "mediators-on_target-top_assocs_event_coef_neg", ".pdf", figs_dir, width=15, height=13)
+    save_plt(plts, "mediators-events_oi-synergy", ".pdf", figs_dir, width=10, height=5)
+    save_plt(plts, "mediators-drugs_oi-synergy", ".pdf", figs_dir, width=5, height=5)
     
     # drug recommendations
     save_plt(plts, "drug_rec-n_screens", ".pdf", figs_dir, width=6, height=7)
@@ -726,7 +942,8 @@ main = function(){
     paths_real = read_tsv(paths_real_file)
     spldep_models = read_tsv(spldep_models_file) %>%
         filter(EVENT %in% unique(models[["EVENT"]]))
-    
+    ontologies = load_ontologies(msigdb_dir)
+        
     # prep inputs
     ## IC50
     estimated_response = estimated_response %>% mutate(in_demeter2 = sample %in% colnames(rnai))
@@ -737,16 +954,18 @@ main = function(){
         group_by(DRUG_ID, source) %>%
         slice_min(shortest_path_length, n=1) %>%
         ungroup()
+    ## ReactomeDB
+    eval_reactome = evaluate_reactome(models, drug_targets, ontologies[["reactome"]])
     
     # make plots
     plts = make_plots(models, drug_screen,
                       drug_targets, shortest_paths, shortest_paths_simple,
-                      spldep_models, estimated_drug_response)
+                      spldep_models, estimated_drug_response, eval_reactome)
     
     # make figdata
     figdata = make_figdata(models, drug_screen,
                       drug_targets, shortest_paths, shortest_paths_simple,
-                      spldep_models, estimated_drug_response)
+                      spldep_models, estimated_drug_response, eval_reactome)
     
     # save
     save_plots(plts, figs_dir)

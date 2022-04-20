@@ -18,7 +18,7 @@ import numpy as np
 import string
 
 # variables
-SAVE_PARAMS = {'sep':'\t', 'index':False, 'compression':'gzip'}
+SAVE_PARAMS = {"sep": "\t", "index": False, "compression": "gzip"}
 THRESH_NON_MISSING = 50
 
 """
@@ -43,8 +43,14 @@ mat_file = os.path.join(RAW_DIR,'CCLE','vast_out','PSI-minN_1-minSD_0-noVLOW-min
 metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
 sample_info_file, ccle_cancer_types_file, sample_annot_file = '','',''
 
-# genexpr
-dataset = 'genexpr_tpm'
+# genexpr STAR
+dataset = 'genexpr_star'
+mat_file = os.path.join(RAW_DIR,'CCLE','STAR','merged_counts.tab.gz')
+metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
+sample_info_file, ccle_cancer_types_file, sample_annot_file, event_type = '','','',''
+
+# genepxr vasttools
+dataset = "genexpr_vast"
 mat_file = os.path.join(RAW_DIR,'CCLE','vast_out','TPM-hg38-1019.tab.gz')
 metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
 sample_info_file, ccle_cancer_types_file, sample_annot_file, event_type = '','','',''
@@ -53,98 +59,134 @@ sample_info_file, ccle_cancer_types_file, sample_annot_file, event_type = '','',
 
 ##### FUNCTIONS #####
 def load_data(
-        dataset, 
-        sample_info_file, ccle_cancer_types_file, sample_annot_file,
-        metadata_file, mat_file, event_type
-    ):
-    
-    if dataset=='metadata':
+    dataset,
+    sample_info_file,
+    ccle_cancer_types_file,
+    sample_annot_file,
+    metadata_file,
+    mat_file,
+    event_type,
+):
+
+    if dataset == "metadata":
         data = {
-            'sample_info': pd.read_csv(sample_info_file),
-            'cancer_types': pd.read_excel(ccle_cancer_types_file),
-            'sample_annot': pd.read_table(sample_annot_file),
+            "sample_info": pd.read_csv(sample_info_file),
+            "cancer_types": pd.read_excel(ccle_cancer_types_file),
+            "sample_annot": pd.read_table(sample_annot_file),
         }
-        
-    elif dataset=='event_psi':
-        data = {
-            'metadata': pd.read_table(metadata_file)
-        }
+
+    elif dataset == "event_psi":
+        data = {"metadata": pd.read_table(metadata_file)}
         psi = pd.read_table(mat_file, index_col=0)
         psi = psi.loc[psi.index.str.contains(event_type)].copy()
-        data['psi'] = psi
-        
-    elif dataset=='genexpr_tpm':
+        data["psi"] = psi
+
+    elif dataset == "genexpr_star":
         data = {
-            'metadata': pd.read_table(metadata_file),
-            'genexpr': pd.read_table(mat_file, index_col=[0,1])
+            "metadata": pd.read_table(metadata_file),
+            "genexpr": pd.read_table(mat_file, index_col=0),
         }
-        
+
+    elif dataset == "genexpr_vast":
+        data = {
+            "metadata": pd.read_table(metadata_file),
+            "genexpr": pd.read_table(mat_file, index_col=[0, 1]),
+        }
+
     else:
-        print('Invalid dataset.')
+        print("Invalid dataset.")
 
     return data
 
 
 def preprocess_ccle(data, dataset):
-    if dataset=='metadata':
-        sample_info = data['sample_info']
-        sample_annot = data['sample_annot'].rename(
-                columns={"sample_alias": "CCLE_Name"}
-            )
-        sample_annot = sample_annot.loc[sample_annot['library_strategy']=='RNA-Seq']
-        cancer_types = data['cancer_types'].rename(
-                columns={"CCLE_name": "CCLE_Name", "disease": "cancer_type"}
-            )
-        
+    if dataset == "metadata":
+        sample_info = data["sample_info"]
+        sample_annot = data["sample_annot"].rename(
+            columns={"sample_alias": "CCLE_Name"}
+        )
+        sample_annot = sample_annot.loc[sample_annot["library_strategy"] == "RNA-Seq"]
+        cancer_types = data["cancer_types"].rename(
+            columns={"CCLE_name": "CCLE_Name", "disease": "cancer_type"}
+        )
+
         # combine
-        metadata = pd.merge(sample_info, cancer_types, on='CCLE_Name', how='left')
-        metadata = pd.merge(metadata, sample_annot[['run_accession','CCLE_Name']], on='CCLE_Name', how='left')
-        
+        metadata = pd.merge(sample_info, cancer_types, on="CCLE_Name", how="left")
+        metadata = pd.merge(
+            metadata,
+            sample_annot[["run_accession", "CCLE_Name"]],
+            on="CCLE_Name",
+            how="left",
+        )
+
         output = metadata
-        
-    elif dataset=='event_psi':
-        psi = data['psi']
-        metadata = data['metadata']
-        
+
+    elif dataset == "event_psi":
+        psi = data["psi"]
+        metadata = data["metadata"]
+
         # drop rows missing all values
         is_na = psi.isnull()
         non_missing = is_na.shape[1] - is_na.sum(1)
         to_keep = non_missing >= THRESH_NON_MISSING
         psi = psi.loc[to_keep].copy()
-        
+
         # remove suffix from vast-tools
-        psi.columns = [c.replace('_1','') for c in psi.columns]
-        
+        psi.columns = [c.replace("_1", "") for c in psi.columns]
+
         # subset
-        common_samples = set(psi.columns).intersection(metadata['run_accession'])
+        common_samples = set(psi.columns).intersection(metadata["run_accession"])
         psi = psi[common_samples]
-        metadata = metadata.loc[metadata['run_accession'].isin(common_samples)]
+        metadata = metadata.loc[metadata["run_accession"].isin(common_samples)]
 
         # rename
-        psi = psi.rename(columns = metadata.set_index('run_accession')['DepMap_ID'].to_dict())
-        
+        psi = psi.rename(
+            columns=metadata.set_index("run_accession")["DepMap_ID"].to_dict()
+        )
+
         output = psi.reset_index()
-    
-    elif dataset=='genexpr_tpm':
-        genexpr = data['genexpr'].dropna()
-        metadata = data['metadata']
-        
-        # log-transform
-        genexpr = np.log2(genexpr + 1)
-        
-        # remove suffix from vast-tools
-        genexpr.columns = [c.replace('_1','') for c in genexpr.columns]
-        
+
+    elif dataset == "genexpr_star":
+        genexpr = data["genexpr"].dropna()
+        metadata = data["metadata"]
+
+        # remove genes with PAR_Y
+        genexpr = genexpr.loc[~genexpr.index.str.contains("PAR_Y")]
+
+        # remove suffix from ensembl
+        genexpr.index = [c.split(".")[0] for c in genexpr.index]
+
         # subset
-        common_samples = set(genexpr.columns).intersection(metadata['run_accession'])
+        common_samples = set(genexpr.columns).intersection(metadata["run_accession"])
         genexpr = genexpr[common_samples]
-        metadata = metadata.loc[metadata['run_accession'].isin(common_samples)]
+        metadata = metadata.loc[metadata["run_accession"].isin(common_samples)]
 
         # rename
-        genexpr = genexpr.rename(columns = metadata.set_index('run_accession')['DepMap_ID'].to_dict())
-        
-        output = genexpr.reset_index().drop(columns='NAME')
-        
+        genexpr = genexpr.rename(
+            columns=metadata.set_index("run_accession")["DepMap_ID"].to_dict()
+        )
+
+        output = genexpr.reset_index()
+
+    elif dataset == "genexpr_vast":
+        genexpr = data["genexpr"].dropna()
+        metadata = data["metadata"]
+
+        # remove suffix from vast-tools
+        genexpr.columns = [c.replace("_1", "") for c in genexpr.columns]
+
+        # subset
+        common_samples = set(genexpr.columns).intersection(metadata["run_accession"])
+        genexpr = genexpr[common_samples]
+        metadata = metadata.loc[metadata["run_accession"].isin(common_samples)]
+
+        # rename
+        genexpr = genexpr.rename(
+            columns=metadata.set_index("run_accession")["DepMap_ID"].to_dict()
+        )
+
+        output = genexpr.reset_index().drop(columns="NAME")
+
     return output
 
 
@@ -180,16 +222,20 @@ def main():
 
     # load
     data = load_data(
-        dataset, 
-        sample_info_file, ccle_cancer_types_file, sample_annot_file,
-        metadata_file, mat_file, event_type
+        dataset,
+        sample_info_file,
+        ccle_cancer_types_file,
+        sample_annot_file,
+        metadata_file,
+        mat_file,
+        event_type,
     )
-    
+
     output = preprocess_ccle(data, dataset)
-    
+
     # save
     output.to_csv(output_file, **SAVE_PARAMS)
-    
+
 
 ##### SCRIPT #####
 if __name__ == "__main__":

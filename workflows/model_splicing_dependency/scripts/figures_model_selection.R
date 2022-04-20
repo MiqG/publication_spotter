@@ -45,9 +45,11 @@ ROOT = here::here()
 source(file.path(ROOT,"src","R","utils.R"))
 
 # variables
+#MIN_N_OBS = 20
 THRESH_LR_PVALUE = 0.025
 THRESH_CORR = 0.2
 SIZE_CTL = 100
+THRESH_INDICES = 0.3 # correlation with sample indices
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
@@ -159,12 +161,17 @@ run_enrichments_indices = function(indices, selected_events, event_info){
         filter(index%in%selected_events) %>%
         mutate(corr_sign = ifelse(sign(correlation)>0,"positive","negative"),
                corr_sign = ifelse(sign(correlation)==0,NA,corr_sign),
-               is_sel = abs(correlation)>0.4)
+               is_sel = abs(correlation)>THRESH_INDICES)
     
     index_names = indices %>% pull(index_name) %>% unique()
     results = lapply(index_names, function(index_oi){
         result = lapply(c("positive","negative"), function(sign_oi){
-            genes = X %>% filter(corr_sign==sign_oi & index_name==index_oi & is_sel) %>% pull(GENE) %>% unique()
+            genes = X %>% 
+                filter(corr_sign==sign_oi & index_name==index_oi & is_sel) %>% 
+                pull(GENE) %>% 
+                unique()
+            
+            print(length(genes))
             universe = X %>% filter(index_name==index_oi) %>% pull(GENE) %>% unique()
             res = enricher(genes, TERM2GENE=ontologies[["GO_BP"]], universe=universe)
             res = res %>% 
@@ -341,7 +348,6 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
              color="In Positive Control") +
         theme(aspect.ratio=1)
 
-    
     ctl_pos_events = cancer_events %>% pull(EVENT) %>% unique()
     plts[["model_sel-lr_pvalue_ctl_pos"]] = models %>%
         mutate(is_ctl_pos = EVENT %in% ctl_pos_events) %>%
@@ -393,10 +399,11 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
     plts[["model_sel-tpr_vs_fpr"]] = eval_pvalue %>% 
         ggbarplot(x="thresh", y="cumsums", fill=PAL_SINGLE_LIGHT, color=NA) +
         labs(x="Thresholds LR Test p-value", y="CumSum(TPR - FPR)") +
-        geom_text(aes(y=0.10, label=total_events), 
+        geom_text(aes(y=0.8+0.10, label=total_events), 
                   size=FONT_SIZE, family=FONT_FAMILY, color="black") +
-        geom_text(aes(y=0.08, label=total_genes), 
-                  size=FONT_SIZE, family=FONT_FAMILY, color="black")
+        geom_text(aes(y=0.8+0.05, label=total_genes), 
+                  size=FONT_SIZE, family=FONT_FAMILY, color="black") + 
+        theme_pubr(x.text.angle=45)
     
     # - Spearman correlation with Pearson threshold
     # find the threshold for the mean pearson correlation
@@ -415,12 +422,12 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
             aes(x=thresh_fct, y=1.03, label=total_events), 
             eval_corr %>% 
                 distinct(thresh_fct,total_events), 
-            size=FONT_SIZE, color="black", family=FONT_FAMILY) +
+            size=FONT_SIZE-0.5, color="black", family=FONT_FAMILY) +
         geom_text(
             aes(x=thresh_fct, y=1.01, label=total_genes), 
             eval_corr %>% 
                 distinct(thresh_fct,total_genes), 
-            size=FONT_SIZE, color="black", family=FONT_FAMILY)
+            size=FONT_SIZE-0.5, color="black", family=FONT_FAMILY)
     
     return(plts)
 }
@@ -442,7 +449,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         geom_boxplot(fill=NA, outlier.size = 0.1) +
         stat_compare_means(method="wilcox.test", size=FONT_SIZE, family=FONT_FAMILY) +
         guides(color="none", fill="none") +
-        labs(x="Selected Model", y="Event Std.")
+        labs(x="Selected Model", y="Event Std.", fill="Selected Model")
     
     # - exon length distribution
     plts[["model_prop-selected_vs_event_length"]] = X %>%
@@ -451,7 +458,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         geom_boxplot(fill=NA, outlier.size = 0.1) +
         stat_compare_means(method="wilcox.test", size=FONT_SIZE, family=FONT_FAMILY) +
         guides(color="none", fill="none") +
-        labs(x="Selected Model", y="log10(Event Length)") +
+        labs(x="Selected Model", y="log10(Event Length)", fill="Selected Model") +
         geom_text(aes(y=10e3, label=lab), 
                   models %>% 
                       group_by(is_selected) %>% 
@@ -464,7 +471,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
     plts[["model_prop-n_exons_gene"]] = X %>%
         count(is_selected, GENE) %>%
         gghistogram(x="n", fill="is_selected", color="NA", palette=PAL_DUAL, alpha=0.9) + 
-        labs(x="N. Exons per Gene", y="Count")
+        labs(x="N. Exons per Gene", y="Count", fill="Selected Model")
            
     # protein impact of selected exons/genes
     prot_imp = models
@@ -478,7 +485,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
                   fill="is_selected", color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
-        labs(x="Protein Impact", y="Count")
+        labs(x="Protein Impact", y="Count", fill="Selected Model")
     
     plts[["model_prop-protein_impact-freqs"]] = prot_imp %>%
         group_by(term,is_selected) %>%
@@ -490,7 +497,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
                   color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
-        labs(x="Protein Impact", y="Proportion")
+        labs(x="Protein Impact", y="Proportion", fill="Selected Model")
     
     plts[["model_prop-protein_impact_clean-counts"]] = prot_imp %>%
         filter(is_selected) %>%
@@ -502,7 +509,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
                   fill="is_selected", color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
-        labs(x="Protein Impact", y="Count")
+        labs(x="Protein Impact", y="Count", fill="Selected Model")
     
     plts[["model_prop-protein_impact_clean-freqs"]] = prot_imp %>%
         group_by(term_clean,is_selected) %>%
@@ -513,7 +520,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
                   palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
         guides(color="none") + 
-        labs(x="Selected Model", y="Proportion")
+        labs(x="Selected Model", y="Proportion", fill="Selected Model")
     
     # GSEA of selected exons/genes
     plts_enrichment = lapply(names(enrichment), function(e_name){
@@ -544,16 +551,20 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
     
     plts[["model_prop-indices-violin"]] = X %>% 
         filter(is_selected) %>%
-        ggplot(aes(x=corr_sign, y=correlation, 
-                   group=interaction(index_name,is_selected,corr_sign))) + 
+        ggplot(aes(x=corr_sign, y=correlation)) + 
         geom_violin(aes(fill=is_selected), color=NA) + 
         geom_boxplot(fill=NA, outlier.size=0.1, 
                      width=0.1, position=position_dodge(0.9)) +
         fill_palette(PAL_SINGLE_LIGHT) + 
-        geom_hline(yintercept=c(-0.4,0,0.4), linetype="dashed", size=LINE_SIZE) + 
+        geom_hline(yintercept=c(-THRESH_INDICES,0,THRESH_INDICES), linetype="dashed", size=LINE_SIZE) + 
         theme_pubr() + 
-        labs(x="Correlation Sign", y="Spearman Correlation", fill="Is Selected")  +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+        labs(x="Correlation Sign", y="Spearman Correlation", fill="Selected Model")  +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        geom_text(aes(y=0.8, label=n), 
+                  X %>% 
+                    filter(is_selected) %>%
+                    count(corr_sign),
+                  size=FONT_SIZE, family=FONT_FAMILY)
     
     res = new("compareClusterResult", compareClusterResult = indices_enrich)
     plts[["model_prop-indices-enrichment-GO_BP-dotplot"]] = res %>% 
@@ -612,7 +623,10 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         labs(x="0.25 Quantile", y="0.75 Quantile") +
         geom_text_repel(aes(label=event_gene), size=FONT_SIZE, 
                         segment.size=0.1, family=FONT_FAMILY, 
-                        X %>% slice_max(order_by=abs(q25*q75), n=10), max.overlaps=50)
+                        X %>% slice_min(order_by=q75, n=10), max.overlaps=50) +
+        geom_text_repel(aes(label=event_gene), size=FONT_SIZE, 
+                        segment.size=0.1, family=FONT_FAMILY, 
+                        X %>% slice_max(order_by=q75, n=10), max.overlaps=50)
     
     X = X %>% 
         left_join(indices, by=c("EVENT"="index"))
@@ -655,8 +669,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
                   palette=PAL_DUAL, fill="is_selected", color=NA, 
                   position=position_dodge(0.9)) + 
         yscale("log10", .format=TRUE) + 
-        labs(x="Mutation Effect", y="No. Genes", 
-             fill="Selected Model") +
+        labs(x="Mutation Effect", y="No. Genes", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
     
     plts[["model_val-mutation_gene_frequency"]] = X %>% 
@@ -668,8 +681,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
                            label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
         yscale("log10", .format=TRUE) + 
         fill_palette(PAL_DUAL) +
-        labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", 
-             fill="Selected Model") +
+        labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
     
     
@@ -813,13 +825,13 @@ plot_event_oi = function(event_oi, gene_oi, ensembl_oi,
         ggscatter(x="genexpr", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
         stat_cor(method="spearman", label.y.npc="top", 
                  label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
-        labs(title=plt_title, x="mRNA levels (TPM)", y="Real Dep.")
+        labs(title=plt_title, x="mRNA levels (log2(TPM+1))", y="Real Dep.")
     
     plts[["genexpr_vs_splicing"]] = X %>% 
         ggscatter(x="genexpr", y="splicing", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
         stat_cor(method="spearman", label.y.npc="top", 
                  label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
-        labs(title=plt_title, x="mRNA levels (TPM)", y="Splicing (PSI)")
+        labs(title=plt_title, x="mRNA levels (log2(TPM+1))", y="Splicing (PSI)")
     
     
     names(plts) = paste0(patt,"-",names(plts))
@@ -974,13 +986,13 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-enrichment-GO_BP-cnetplot", ".pdf", figs_dir, width=20, height=20)
     ## transcriptomic indices
     save_plt(plts, "model_prop-indices-violin", ".pdf", figs_dir, width=4, height=6)
-    save_plt(plts, "model_prop-indices-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=11, height=5)
+    save_plt(plts, "model_prop-indices-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=8.2, height=6)
     save_plt(plts, "model_prop-indices-top_pos", ".pdf", figs_dir, width=5.5, height=5)
     save_plt(plts, "model_prop-indices-top_neg", ".pdf", figs_dir, width=5.5, height=5)
     ## tumorigenesis
     save_plt(plts, "model_prop-tumorigenesis-scatter", ".pdf", figs_dir, width=6, height=6)
     save_plt(plts, "model_prop-tumorigenesis_vs_indices", ".pdf", figs_dir, width=5, height=5)
-    
+
     # model validation
     save_plt(plts, "model_val-mutation_gene_count", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_count", ".pdf", figs_dir, width=8, height=10)
@@ -1046,8 +1058,12 @@ main = function(){
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
     
+    # log normalize gene expression
+    genexpr = genexpr %>% mutate_at(vars(-("ID")), function(x){ log2(x+1) })
+    
     # add info to models
     models = models %>% 
+        # filter(n_obs > MIN_N_OBS) %>%
         mutate(event_gene = paste0(EVENT,"_",GENE),
                event_type = gsub("Hsa","",gsub("[^a-zA-Z]", "",EVENT)),
                is_selected = pearson_correlation_mean>THRESH_CORR & 

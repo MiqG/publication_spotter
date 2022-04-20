@@ -151,12 +151,12 @@ rule all:
         
         # Personalization
         ## compute splicing dependency
-        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         ## compute one sample differential analysis
-        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','onediff-{event_type}'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','onediff-{event_type}'), event_type=EVENT_TYPES),
         ## drug recommendations
-        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS),
-        expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
+        #expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS),
+        #expand(os.path.join(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES)
         
         
 rule compute_splicing_dependency_tcga:
@@ -166,23 +166,21 @@ rule compute_splicing_dependency_tcga:
         coefs_dir = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}')
     output:
         directory(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'))
-    threads: 15
+    threads: 24
     params:
         script_dir = TS_DIR,
-        normalize_counts = True
     shell:
         """
-        python {params.script_dir}/target_spotter spldep_predict \
+        nice python {params.script_dir}/target_spotter spldep_predict \
                     --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
                     --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
                     --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
                     --output_dir={output} \
-                    --normalize_counts={params.normalize_counts} \
+                    --normalize_counts \
                     --n_jobs={threads}
         """
-        
         
 rule combine_splicing_dependency_tcga:
     input:
@@ -667,7 +665,7 @@ rule compute_splicing_dependency_Seryakov2021:
         script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/target_spotter spldep_predict \
+        nice python {params.script_dir}/target_spotter spldep_predict \
                     --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
@@ -690,7 +688,7 @@ rule compute_onesample_diff_Seryakov2021:
     threads: 10
     shell:
         """
-        python {params.script_dir}/target_spotter onediff_predict \
+        nice python {params.script_dir}/target_spotter onediff_predict \
                 --data_file={input.psi} \
                 --cancer_type={params.cancer_ref} \
                 --n_jobs={threads} \

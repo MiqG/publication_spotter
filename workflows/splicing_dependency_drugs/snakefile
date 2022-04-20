@@ -80,7 +80,10 @@ rule model_drug_response:
         mapping = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'))
-    threads: 15
+    threads: 24
+    resources:
+        runtime = 3600*12, # 12 h
+        memory = 50
     params:
         script_dir = TS_DIR
     shell:

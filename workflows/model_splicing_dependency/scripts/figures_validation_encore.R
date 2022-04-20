@@ -292,7 +292,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
-                        x %>% slice_max(demeter2*pred, n=5),
+                        x %>% slice_max(demeter2*pred, n=5), segment.size=0.1,
                         size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Sum of Top Harm Scores", y="Gene Dependency") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
@@ -311,7 +311,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) + 
         facet_wrap(~cell_line_lab, ncol=1, scales="free") + 
         geom_text_repel(aes(label=KD),
-                        x %>% slice_max(demeter2*pred, n=5),
+                        x %>% slice_max(demeter2*pred, n=5), segment.size=0.1,
                         size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Sum of Top Harm Scores", y="Gene Dependency") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))

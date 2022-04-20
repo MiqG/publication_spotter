@@ -60,6 +60,8 @@ FONT_FAMILY = "Arial"
 plot_model_selection = function(models, models_achilles, cancer_events){
     plts = list()         
     
+    ctl_pos_events = cancer_events %>% pull(EVENT) %>% unique()
+   
     X = models %>%
         bind_rows(models_achilles) %>%
         mutate(is_ctl_pos = EVENT %in% ctl_pos_events,
@@ -71,7 +73,6 @@ plot_model_selection = function(models, models_achilles, cancer_events){
         c("FALSE & KD (shRNA)","TRUE & KD (shRNA)")    
     )
     
-    ctl_pos_events = cancer_events %>% pull(EVENT) %>% unique()
     plts[["model_sel-lr_pvalue_ctl_pos_all"]] = X %>%
         ggplot(aes(x=lab, y=lr_pvalue)) +
         geom_violin(aes(fill=is_ctl_pos, color=model_type), trim=TRUE) +

@@ -79,11 +79,12 @@ plot_predictions = function(crispr, selected_events, harm){
     
     plts = list()
     plts[["predictions-scatters"]] = X %>% 
-        ggscatter(x="sign_harm", y="fitness_score", size=1, color="cell_line", palette=PAL_DUAL) + 
+        ggscatter(x="sign_harm", y="fitness_score", size=1, color=PAL_SINGLE_DARK) + 
         facet_wrap(~comparison+cell_line, ncol=2) + 
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
               aspect.ratio=1) +
+        guides(color="none") + 
         labs(x="Harm Score", y="Event Dependency") +
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
     
@@ -125,7 +126,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 save_plots = function(plts, figs_dir){
     save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=5.75, height=7)
-    save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=6, height=6)
 }
 
 

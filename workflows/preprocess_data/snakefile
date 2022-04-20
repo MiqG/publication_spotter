@@ -63,14 +63,14 @@ for c in CANCER_TYPES:
 rule all:
     input:
         os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz'),
-        # # preprocess CCLE
-        # ## metadata
-        # os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+        # preprocess CCLE
+        ## metadata
+        os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
         # ## PSI
         # expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        # ## gene expression
-        # os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-
+        ## gene expression
+        os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        
         # preprocess DepMap data
         expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=DEPMAP_RAW.keys()),
 
@@ -179,24 +179,63 @@ rule preprocess_psi_ccle:
                     --output_file={output} \
         """
         
-
-rule preprocess_tpm_ccle:
+        
+rule preprocess_genexpr_ccle:
     input:
-        tpm_file = os.path.join(RAW_DIR,'CCLE','vast_out','TPM-hg38-1019.tab.gz'),
-        metadata_file = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
+        genexpr = os.path.join(RAW_DIR,'CCLE','vast_out','TPM-hg38-1019.tab.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
     output:
-        os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
     params:
-        dataset = 'genexpr_tpm'
+        dataset = 'genexpr_vast'
     shell:
         """
         python scripts/preprocess_ccle.py \
                     --dataset={params.dataset} \
-                    --mat_file={input.tpm_file} \
-                    --metadata_file={input.metadata_file} \
-                    --output_file={output} \
+                    --mat_file={input.genexpr} \
+                    --metadata_file={input.metadata} \
+                    --output_file={output.genexpr}
         """
 
+
+# rule preprocess_genexpr_ccle:
+#     input:
+#         counts = os.path.join(RAW_DIR,'CCLE','STAR','merged_counts.tab.gz'),
+#         metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
+#     output:
+#         counts = os.path.join(PREP_DIR,'genexpr_counts','CCLE.tsv.gz')
+#     params:
+#         dataset = 'genexpr_counts'
+#     shell:
+#         """
+#         python scripts/preprocess_ccle.py \
+#                     --dataset={params.dataset} \
+#                     --mat_file={input.counts} \
+#                     --metadata_file={input.metadata} \
+#                     --output_file={output.counts}
+#         """
+
+        
+# rule compute_genexpr_tpm_ccle:
+#     input:
+#         counts = os.path.join(PREP_DIR,'genexpr_counts','CCLE.tsv.gz'),
+#         gene_info = os.path.join(RAW_DIR,'GENCODE','gene_lengths_hg38.tsv.gz')
+#     output:
+#         tpm = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
+#     params:
+#         method="TPM",
+#         geneid_col = "gene",
+#         genelen_col="length"
+#     shell:
+#         """
+#         python scripts/normalize_rnaseq.py \
+#                     --method={params.method} \
+#                     --counts_file={input.counts} \
+#                     --gene_info_file={input.gene_info} \
+#                     --geneid_col={params.geneid_col} \
+#                     --genelen_col={params.genelen_col} \
+#                     --output_file={output.tpm}
+#         """
 
 rule preprocess_depmap:
     input:

@@ -35,7 +35,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # summarize splicing dependencies by primary disease
-        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_summaries-{event_type}','{field}.tsv.gz'), field=["primary_disease"], event_type=EVENT_TYPES),
+        # expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_summaries-{event_type}','{field}.tsv.gz'), field=["primary_disease"], event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','model_selection'),
@@ -44,10 +44,10 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         
         # impute splicing dependencies with selected models
-        expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
+        # expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
         
         # embed splicing dependencies with selected models
-        expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
+        # expand(os.path.join(RESULTS_DIR,'files','embedded_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
         
         # EDA embeddings of splicing dependencies
         # os.path.join(RESULTS_DIR,'figures','splicing_dependency_embeddings'),
@@ -82,7 +82,7 @@ rule all:
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
-        #os.path.join(RESULTS_DIR,'figures','validation_crispr'),
+        # os.path.join(RESULTS_DIR,'figures','validation_crispr'),
         ## EDA known genes of interest
         # os.path.join(RESULTS_DIR,'figures','validation_genes_oi'),
         
@@ -98,23 +98,24 @@ rule model_gene_dependency:
         mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}'))
-    threads: 16
+    threads: 24
     resources:
-        runtime = 604800, # seconds = 168h = 7 days
-        memory = 30
+        runtime = 3600*12, # 12h
+        memory = 50
     params:
         script_dir = TS_DIR,
-        n_iterations = 500
+        n_iterations = 1000
     shell:
         """
-        python {params.script_dir}/target_spotter spldep_fit \
+        nice python {params.script_dir}/target_spotter spldep_fit \
                     --gene_dependency_file={input.gene_dependency_file} \
                     --splicing_file={input.splicing_file} \
                     --genexpr_file={input.genexpr_file} \
                     --mapping_file={input.mapping_file} \
                     --output_dir={output} \
                     --n_iterations={params.n_iterations} \
-                    --n_jobs={threads}
+                    --n_jobs={threads} \
+                    --log_transform
         """
         
         
@@ -133,41 +134,46 @@ rule compute_splicing_dependency:
         script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/target_spotter spldep_predict \
+        nice python {params.script_dir}/target_spotter spldep_predict \
                     --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
                     --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
                     --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
                     --output_dir={output} \
-                    --n_jobs={threads}
+                    --n_jobs={threads} \
+                    --log_transform
         """
         
     
 rule list_selected_models:
     input:
-        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}','model_summaries.tsv.gz')
+        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:
-        os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
+        selected_models = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     params:
         thresh_lr_pvalue = 0.025,
-        thresh_corr = 0.2
+        thresh_corr = 0.2,
+        thresh_nobs = 0
     run:
+        import os
         import pandas as pd
-        models = pd.read_table(input.models)
+        
+        models = pd.read_table(os.path.join(input.coefs_dir,'model_summaries.tsv.gz'))
         models = models.loc[
             (models['lr_pvalue']<params.thresh_lr_pvalue) &
-            (models['pearson_correlation_mean']>params.thresh_corr)
+            (models['pearson_correlation_mean']>params.thresh_corr) &
+            (models['n_obs']>params.thresh_nobs)
         ].copy()
         
-        with open(output[0], 'w') as f:
+        with open(output.selected_models, 'w') as f:
             for event in models['EVENT'].values:
                 f.write("%s\n" % event)
         
         
 rule summarize_splicing_dependency_by_field:
     input:
-        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz').format(event_type='{event_type}'),
+        spldep_dir = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}').format(event_type='{event_type}'),
         metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
     output:
         os.path.join(RESULTS_DIR,'files','splicing_dependency_summaries-{event_type}','{field}.tsv.gz')
@@ -177,7 +183,7 @@ rule summarize_splicing_dependency_by_field:
         import os
         import pandas as pd
         dfs = []
-        spldep = pd.read_table(input.spldep, index_col=0)
+        spldep = pd.read_table(os.path.join(input.spldep_dir,'mean.tsv.gz'), index_col=0)
         metadata = pd.read_table(input.metadata)
             
         field_values = set(metadata[params.field].dropna().unique())
@@ -207,7 +213,7 @@ rule summarize_splicing_dependency_by_field:
     
 rule impute_splicing_dependency:
     input:
-        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz'),
+        spldep_dir = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'),
         rows_oi = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
     output:
         os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz')
@@ -219,7 +225,7 @@ rule impute_splicing_dependency:
     shell:
         """
         python {params.script_dir}/impute_nan.py \
-                    --input_file={input.spldep} \
+                    --input_file={params.spldep_dir}/mean.tsv.gz \
                     --output_file={output} \
                     --rows_oi_file={input.rows_oi} \
                     --method={params.method} \
@@ -319,7 +325,7 @@ rule figures_validation_crispr:
         
 rule correlate_transcriptome_indices_ccle:
     input:
-        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz'),
+        spldep_dir = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'),
         indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz')
@@ -330,8 +336,8 @@ rule correlate_transcriptome_indices_ccle:
         padj_method = 'fdr_bh'
     shell:
         """
-        python {params.script_dir}/correlation_exon_transcriptome_indices.py \
-                        --omic_file={input.spldep} \
+        nice python {params.script_dir}/correlation_exon_transcriptome_indices.py \
+                        --omic_file={input.spldep_dir}/mean.tsv.gz \
                         --sample_properties_file={input.indices} \
                         --sample_col={params.sample_col} \
                         --cor_method={params.cor_method} \
@@ -355,7 +361,7 @@ rule compute_splicing_dependency_encore:
         script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/target_spotter spldep_predict \
+        nice python {params.script_dir}/target_spotter spldep_predict \
                     --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
@@ -417,15 +423,16 @@ rule delta_psi_encore:
 rule delta_spldep_encore:
     input:
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
-        spldep = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}','mean.tsv.gz')
+        spldep_dir = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}')
     output:
         delta_spldep = os.path.join(RESULTS_DIR,'files','ENCORE','delta_spldep-{event_type}.tsv.gz'),
     run:
+        import os
         import pandas as pd
         import numpy as np
         
         metadata = pd.read_table(input.metadata)
-        spldep = pd.read_table(input.spldep, index_col=0)
+        spldep = pd.read_table(os.path.join(input.spldep_dir,"mean.tsv.gz"), index_col=0)
         
         # delta Spl. Dep. as the difference between conditions and the mean of the conditions
         delta_spldep = {}
@@ -495,7 +502,7 @@ rule make_ontology:
 rule harm_score_encore:
     input:
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
-        spldep = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}','mean.tsv.gz'),
+        spldep_dir = os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}'),
         delta_spldep = os.path.join(RESULTS_DIR,'files','ENCORE','delta_spldep-{event_type}.tsv.gz'),
         delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'),
         delta_psi_rel = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi_rel-{event_type}.tsv.gz')
@@ -503,12 +510,13 @@ rule harm_score_encore:
         harm_score = os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz'),
         harm_score_rel = os.path.join(RESULTS_DIR,'files','ENCORE','harm_score_rel-{event_type}.tsv.gz')
     run:
+        import os
         import pandas as pd
         import numpy as np
         
         # load
         metadata = pd.read_table(input.metadata)
-        spldep = pd.read_table(input.spldep, index_col=0)
+        spldep = pd.read_table(os.path.join(input.spldep_dir,"mean.tsv.gz"), index_col=0)
         delta_spldep = pd.read_table(input.delta_spldep, index_col=0)
         delta_psi = pd.read_table(input.delta_psi, index_col=0)
         delta_psi_rel = pd.read_table(input.delta_psi_rel, index_col=0)
@@ -558,7 +566,7 @@ rule compute_splicing_dependency_Thomas2020:
         script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/target_spotter spldep_predict \
+        nice python {params.script_dir}/target_spotter spldep_predict \
                     --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
@@ -578,13 +586,13 @@ rule model_gene_dependency_achilles:
         mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'))
-    threads: 16
+    threads: 24
     resources:
         runtime = 604800, # seconds = 168h = 7 days
         memory = 30
     params:
         script_dir = TS_DIR,
-        n_iterations = 500
+        n_iterations = 1000
     shell:
         """
         nice python {params.script_dir}/target_spotter spldep_fit \
@@ -594,5 +602,6 @@ rule model_gene_dependency_achilles:
                     --mapping_file={input.mapping_file} \
                     --output_dir={output} \
                     --n_iterations={params.n_iterations} \
-                    --n_jobs={threads}
+                    --n_jobs={threads} \
+                    --log_transform
         """
