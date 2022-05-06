@@ -32,6 +32,7 @@ RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 
 ppi_file = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz')
 seed_nodes_file = os.path.join(RESULTS_DIR,'files','selected_models-EX-genes.txt')
+seed_nodes_file = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','genes','386.txt')
 sink_nodes_file = os.path.join(PREP_DIR,'gene_sets','cancer_gene_census.txt')
 n_jobs = 10
 """
@@ -91,7 +92,7 @@ def compute_shortest_paths(ppi, seed_nodes, sink_nodes, n_jobs=None):
     result = pd.DataFrame(result)
 
     # keep only shortest path for each sink
-    idx = result.groupby("sink")["shortest_path_length"].idxmin()
+    idx = result.dropna().groupby("sink")["shortest_path_length"].idxmin()
     result = result.loc[idx]
     result["type"] = "real"
 
