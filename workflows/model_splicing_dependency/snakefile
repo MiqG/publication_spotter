@@ -25,6 +25,12 @@ SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 EVENT_TYPES = ["EX"] # ['EX','ALTA','ALTD','INT']
 
+# model selection parameters
+THRESH_PVALUE = 0.025
+THRESH_CORR = 0.2
+THRESH_NOBS = 0
+N_RANDOM_MODELS = 1000
+
 ##### RULES #####
 rule all:
     input:
@@ -42,6 +48,9 @@ rule all:
         
         # write selected models
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
+        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
         
         # impute splicing dependencies with selected models
         # expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
@@ -78,7 +87,11 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','Thomas2020','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # Achilles Gene dependencies
-        expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES),
+        
+        # Shortest path length from selected genes to cancer-driver genes vs random selection
+        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz'), event_type=EVENT_TYPES, it=list(range(N_RANDOM_MODELS)))
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -150,11 +163,12 @@ rule list_selected_models:
     input:
         coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:
-        selected_models = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt')
+        selected_models = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'),
+        selected_models_gene = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt')
     params:
-        thresh_lr_pvalue = 0.025,
-        thresh_corr = 0.2,
-        thresh_nobs = 0
+        thresh_lr_pvalue = THRESH_PVALUE,
+        thresh_corr = THRESH_CORR,
+        thresh_nobs = THRESH_NOBS
     run:
         import os
         import pandas as pd
@@ -166,10 +180,52 @@ rule list_selected_models:
             (models['n_obs']>params.thresh_nobs)
         ].copy()
         
-        with open(output.selected_models, 'w') as f:
-            for event in models['EVENT'].values:
-                f.write("%s\n" % event)
+        models["EVENT"].to_csv(output.selected_models, sep="\t", header=None, index=False)
+        models["GENE"].drop_duplicates().to_csv(output.selected_models_gene, sep="\t", header=None, index=False)
+
         
+rule random_model_selection:
+    input:
+        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
+    output:
+        selected_events_dir = directory(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events')),
+        selected_genes_dir = directory(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes'))
+    params:
+        thresh_lr_pvalue = THRESH_PVALUE,
+        thresh_corr = THRESH_CORR,
+        thresh_nobs = THRESH_NOBS,
+        n_random_it = N_RANDOM_MODELS
+    run:
+        import os
+        import pandas as pd
+        import numpy as np
+        
+        # get number of selected exon models
+        models = pd.read_table(os.path.join(input.coefs_dir,'model_summaries.tsv.gz'))
+        idx = ((models['lr_pvalue']<params.thresh_lr_pvalue) &
+              (models['pearson_correlation_mean']>params.thresh_corr) &
+              (models['n_obs']>params.thresh_nobs))
+        n_selected = sum(idx)
+        print("Selected %s models." % n_selected)
+        
+        # randomly select exon models and save them
+        os.makedirs(output.selected_events_dir)
+        os.makedirs(output.selected_genes_dir)
+        
+        for it in range(params.n_random_it):
+            #print(it)
+            
+            # select randomly 
+            np.random.seed(it) # ensure reproducibility
+            random_events = np.random.choice(models["EVENT"], size=n_selected)
+            models = models.loc[models["EVENT"].isin(random_events)].copy()
+            
+            # save
+            models["EVENT"].to_csv(os.path.join(output.selected_events_dir,str(it)+".txt"), sep="\t", header=None, index=False)
+            models["GENE"].drop_duplicates().to_csv(os.path.join(output.selected_genes_dir,str(it)+".txt"), sep="\t", header=None, index=False)
+            
+        print("Done!")
+
         
 rule summarize_splicing_dependency_by_field:
     input:
@@ -232,7 +288,7 @@ rule impute_splicing_dependency:
                     --method_kws={params.method_kws} \
                     --features_as_rows={params.features_as_rows}
         """
-
+        
         
 rule embed_matrices:
     input:
@@ -604,4 +660,48 @@ rule model_gene_dependency_achilles:
                     --n_iterations={params.n_iterations} \
                     --n_jobs={threads} \
                     --log_transform
+        """
+        
+        
+rule ppi_cosmic_closeness_real:
+    input:
+        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        seed_nodes = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'),
+        sink_nodes = os.path.join(PREP_DIR,'gene_sets','cancer_gene_census.txt')
+    output:
+        os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz')
+    threads: 12
+    resources:
+        runtime = 3600*6, # 6h
+        memory = 6
+    shell:
+        """
+        python scripts/ppi_compute_closeness.py \
+                    --ppi_file={input.ppi} \
+                    --seed_nodes_file={input.seed_nodes} \
+                    --sink_nodes_file={input.sink_nodes} \
+                    --output_file={output} \
+                    --n_jobs={threads}
+        """
+        
+
+rule ppi_cosmic_closeness_random:
+    input:
+        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        seed_nodes = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{n_random_it}its','genes','{it}.txt').format(n_random_it=N_RANDOM_MODELS, event_type='{event_type}', it='{it}'),
+        sink_nodes = os.path.join(PREP_DIR,'gene_sets','cancer_gene_census.txt')
+    output:
+        os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz')
+    threads: 12
+    resources:
+        runtime = 3600*6, # 6h
+        memory = 6
+    shell:
+        """
+        python scripts/ppi_compute_closeness.py \
+                    --ppi_file={input.ppi} \
+                    --seed_nodes_file={input.seed_nodes} \
+                    --sink_nodes_file={input.sink_nodes} \
+                    --output_file={output} \
+                    --n_jobs={threads}
         """

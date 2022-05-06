@@ -137,7 +137,10 @@ rule all:
         expand(os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz'), cancer=CANCER_TYPES),
         
         # make Achilles comparable to Demeter2
-        os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz")
+        os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz"),
+        
+        # make COSMIC gene set
+        os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt")
         
         
 rule prepare_metadata_ccle:
@@ -822,3 +825,17 @@ rule make_achilles_comparable_to_demeter2:
         
         # save 
         achilles.reset_index().to_csv(output.achilles, sep="\t", index=False, compression="gzip")
+        
+        
+rule make_cosmic_gene_set:
+    input:
+        cosmic = os.path.join(RAW_DIR,"COSMIC","cancer_gene_census.tsv")
+    output:
+        cosmic = os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt")
+    run:
+        import pandas as pd
+        
+        df = pd.read_table(input.cosmic)
+        gene_set = df["Gene Symbol"]
+        gene_set.to_csv(output.cosmic, sep="\t", index=False, header=None)
+        
