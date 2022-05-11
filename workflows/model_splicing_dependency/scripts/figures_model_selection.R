@@ -53,9 +53,13 @@ THRESH_INDICES = 0.3 # correlation with sample indices
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
-PAL_SINGLE_LIGHT = "#6AC2BF"
-PAL_SINGLE_DARK = "#716454"
+PAL_SINGLE_LIGHT = "#efb300ff"#"#6AC2BF"
+PAL_SINGLE_DARK = "#007e67ff"
+PAL_SINGLE_NEUTRAL = "#716454"
 PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+PAL_FDR_DARK = "#005AB5"
+PAL_FDR_LIGHT = "#DC3220"
+
 LINE_SIZE = 0.25
 
 FONT_SIZE = 2 # for additional labels
@@ -74,16 +78,23 @@ FONT_FAMILY = "Arial"
 # spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
+# cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
 # gene_mut_freq_file = file.path(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz")
 # event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 # indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
+
+# ppi_closeness_file = file.path(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz')
+# randsel_events_file = file.path(RESULTS_DIR,'files','random_model_selection-EX-1000its','events-merged.tsv.gz')
+# randsel_genes_file = file.path(RESULTS_DIR,'files','random_model_selection-EX-1000its','genes-merged.tsv.gz')
+
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
+
 ##### FUNCTIONS #####
-load_ontologies = function(msigdb_dir, protein_impact_file){
+load_ontologies = function(msigdb_dir, protein_impact_file, cosmic_genes_file){
     ontologies = list(
         "hallmarks" = read.gmt(file.path(msigdb_dir,"h.all.v7.4.symbols.gmt")),
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,"c6.all.v7.4.symbols.gmt")),
@@ -92,10 +103,17 @@ load_ontologies = function(msigdb_dir, protein_impact_file){
             dplyr::rename(EVENT=EventID, term=ONTO) %>%
             dplyr::select(term,EVENT) %>%
             mutate(term_clean=gsub(" \\(.*","",term),
-                   term_clean=gsub("ORF disruption upon sequence inclusion",
-                                   "ORF disruption",term_clean),
                    term_clean=gsub("ORF disruption upon sequence exclusion",
-                                   "ORF disruption",term_clean))
+                                   "ORF disruption (exclusion)",term_clean),
+                   term_clean=gsub("ORF disruption upon sequence inclusion",
+                                   "ORF disruption (inclusion)",term_clean),
+                   term_clean=gsub("In the CDS, with uncertain impact",
+                                   "In the CDS (uncertain)",term_clean)),
+        "cosmic" = read_tsv(cosmic_genes_file) %>%
+            dplyr::select("Gene Symbol") %>%
+            rename(gene = `Gene Symbol`) %>%
+            mutate(term = "COSMIC_CENSUS") %>%
+            dplyr::select(term,gene)
     )
     return(ontologies)
 }
@@ -115,7 +133,8 @@ run_enrichment = function(genes, events, universe, ontologies){
     enrichments[["hallmarks"]] = enricher(genes, TERM2GENE=ontologies[["hallmarks"]], universe=universe[["genes"]])
     enrichments[["oncogenic_signatures"]] = enricher(genes, TERM2GENE=ontologies[["oncogenic_signatures"]], universe=universe[["genes"]])
     enrichments[["GO_BP"]] = enricher(genes, TERM2GENE=ontologies[["GO_BP"]], universe=universe[["genes"]])
-    enrichments[["protein_impact"]] = enricher(events, TERM2GENE=ontologies[["protein_impact"]], universe=universe[["events"]])
+    enrichments[["protein_impact"]] = enricher(events, TERM2GENE=ontologies[["protein_impact"]] %>% dplyr::select(term_clean, EVENT), universe=universe[["events"]], maxGSSize=1e6)
+    enrichments[["cosmic"]] = enricher(genes, TERM2GENE=ontologies[["cosmic"]], universe=universe[["genes"]], maxGSSize=1000)
     
     return(enrichments)
 }
@@ -303,6 +322,7 @@ get_spldep_stats = function(spldep, models){
         filter(index %in% (models %>% filter(is_selected) %>% pull(EVENT))) %>% 
         column_to_rownames("index")
     spldep_stats = data.frame(
+            avg = apply(X,1,mean, na.rm=TRUE),
             med = apply(X,1,median, na.rm=TRUE),
             std = apply(X,1,sd, na.rm=TRUE),
             min = apply(X,1,min, na.rm=TRUE),
@@ -433,7 +453,8 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
 }
 
 
-plot_model_properties = function(models, enrichment, indices, indices_enrich, spldep_stats){
+plot_model_properties = function(models, enrichment, indices, indices_enrich, 
+                                 spldep_stats, harm_stats, ppi_closeness){
     
     plts=list()
     
@@ -474,53 +495,68 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         labs(x="N. Exons per Gene", y="Count", fill="Selected Model")
            
     # protein impact of selected exons/genes
-    prot_imp = models
+    prot_imp = models %>%
+        count(term, is_selected) %>%
+        group_by(is_selected) %>%
+        mutate(freq = n / sum(n)) %>%
+        ungroup() %>%
+        group_by(term) %>%
+        mutate(rel_freq = freq / sum(freq)) %>%
+        ungroup() %>%
+        arrange(n)
+    
+    prot_imp_clean = models %>%
+        count(term_clean, is_selected) %>%
+        group_by(is_selected) %>%
+        mutate(freq = n / sum(n)) %>%
+        ungroup() %>%
+        group_by(term_clean) %>%
+        mutate(rel_freq = freq / sum(freq)) %>%
+        ungroup() %>%
+        arrange(n)
     
     plts[["model_prop-protein_impact-counts"]] = prot_imp %>%
         filter(is_selected) %>%
-        group_by(is_selected,term) %>% 
-        summarize(n=n()) %>% 
-        arrange(n) %>%
         ggbarplot(x="term", y="n", label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
                   fill="is_selected", color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
-        guides(color="none") + 
-        labs(x="Protein Impact", y="Count", fill="Selected Model")
+        labs(x="Splicing Impact", y="Count", fill="Selected Model")
     
     plts[["model_prop-protein_impact-freqs"]] = prot_imp %>%
-        group_by(term,is_selected) %>%
-        summarize(n=n()) %>%
-        drop_na() %>%
-        mutate(freq=n/sum(n)) %>%
-        filter(is_selected) %>%
-        ggbarplot(x="term", y="freq", fill="is_selected", 
-                  color=NA, palette=PAL_SINGLE_LIGHT) + 
+        ggbarplot(x="term", y="freq", label = prot_imp %>% pull(n), 
+                  lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
+                  fill="is_selected", color=NA, palette=PAL_DUAL,
+                  position=position_dodge(0.9)) + 
         theme_pubr(x.text.angle = 45, legend="right") +
-        guides(color="none") + 
-        labs(x="Protein Impact", y="Proportion", fill="Selected Model")
+        labs(x="Splicing Impact", y="Proportion", fill="Selected Model")
     
-    plts[["model_prop-protein_impact_clean-counts"]] = prot_imp %>%
+    plts[["model_prop-protein_impact-rel_freqs"]] = prot_imp %>%
+        ggbarplot(x="term", y="rel_freq", fill="is_selected", color=NA, palette=PAL_DUAL) + 
+        geom_hline(yintercept=0.5, linetype="dashed", size=LINE_SIZE) + 
+        theme_pubr(x.text.angle = 45, legend="right") +
+        labs(x="Splicing Impact", y="Norm. Proportion", fill="Selected Model")
+    
+    plts[["model_prop-protein_impact_clean-counts"]] = prot_imp_clean %>%
         filter(is_selected) %>%
-        group_by(is_selected,term_clean) %>%
-        summarize(n=n()) %>%
-        arrange(n) %>%
-        drop_na() %>%
         ggbarplot(x="term_clean", y="n", label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
                   fill="is_selected", color=NA, palette=PAL_SINGLE_LIGHT) + 
         theme_pubr(x.text.angle = 45, legend="right") +
-        guides(color="none") + 
-        labs(x="Protein Impact", y="Count", fill="Selected Model")
+        labs(x="Splicing Impact", y="Count", fill="Selected Model")
     
-    plts[["model_prop-protein_impact_clean-freqs"]] = prot_imp %>%
-        group_by(term_clean,is_selected) %>%
-        summarize(n=n()) %>%
-        mutate(freq=n/sum(n)) %>%
-        filter(is_selected) %>%
-        ggbarplot(x="term_clean", y="freq", fill="is_selected", color=NA,
-                  palette=PAL_SINGLE_LIGHT) + 
+    plts[["model_prop-protein_impact_clean-freqs"]] = prot_imp_clean %>%
+        ggbarplot(x="term_clean", y="freq", label = prot_imp_clean %>% pull(n), 
+                  lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
+                  fill="is_selected", color=NA, palette=PAL_DUAL,
+                  position=position_dodge(0.9)) + 
         theme_pubr(x.text.angle = 45, legend="right") +
-        guides(color="none") + 
-        labs(x="Selected Model", y="Proportion", fill="Selected Model")
+        labs(x="Splicing Impact", y="Proportion", fill="Selected Model")
+    
+    plts[["model_prop-protein_impact_clean-rel_freqs"]] = prot_imp_clean %>%
+        ggbarplot(x="term_clean", y="rel_freq", fill="is_selected", color=NA, palette=PAL_DUAL) + 
+        geom_hline(yintercept=0.5, linetype="dashed", size=LINE_SIZE) + 
+        theme_pubr(x.text.angle = 45, legend="right") +
+        labs(x="Splicing Impact", y="Norm. Proportion", fill="Selected Model")
+    
     
     # GSEA of selected exons/genes
     plts_enrichment = lapply(names(enrichment), function(e_name){
@@ -529,7 +565,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         plts[["dotplot"]] = dotplot(res) + 
             scale_size(range=c(0.5,3)) + 
             scale_color_continuous(
-                low=PAL_SINGLE_LIGHT, high=PAL_SINGLE_DARK, 
+                low=PAL_FDR_LIGHT, high=PAL_FDR_DARK, 
                 name="FDR", guide=guide_colorbar(reverse=TRUE)) +
             theme_pubr()
         
@@ -572,7 +608,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         scale_size(range=c(0.5,3)) + 
             scale_size(range=c(0.5,3)) + 
             scale_color_continuous(
-                low=PAL_SINGLE_LIGHT, high=PAL_SINGLE_DARK, 
+                low=PAL_FDR_LIGHT, high=PAL_FDR_DARK, 
                 name="FDR", guide=guide_colorbar(reverse=TRUE)) +
             theme_pubr()
     
@@ -611,13 +647,15 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
     #       - tumor suppressor exons: SplDep>0
     #       - double agent exons: SplDep ambiguous
     X = spldep_stats %>%
-        left_join(models[c("EVENT","event_gene")], by="EVENT")
+        left_join(models[c("EVENT","event_gene","term","term_clean","is_selected")], 
+                  by="EVENT")
 
     plts[["model_prop-tumorigenesis-scatter"]] = X %>% 
         ggplot(aes(x=q25, y=q75)) +
-        geom_scattermore(pointsize=5, pixels=c(1000,1000), 
-                         alpha=0.5, color=PAL_SINGLE_DARK) +
+        geom_scattermore(aes(color=med), pointsize=5, pixels=c(1000,1000), alpha=1) +
+        scale_color_gradient2(low='#0073C2FF', mid="white", high='#EFC000FF', midpoint=0) +
         theme_pubr() +
+        theme(aspect.ratio=1) +
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
         geom_vline(xintercept=0, linetype="dashed", size=LINE_SIZE) +
         labs(x="0.25 Quantile", y="0.75 Quantile") +
@@ -632,7 +670,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
         left_join(indices, by=c("EVENT"="index"))
     
     plts[["model_prop-tumorigenesis_vs_indices"]] = X %>% 
-        ggscatter(x="correlation", y="med", alpha=0.5, size=1, color=PAL_SINGLE_DARK) + 
+        ggscatter(x="correlation", y="med", alpha=0.5, size=1, color=PAL_SINGLE_LIGHT) + 
         stat_cor(method="spearman", label.y.npc = "bottom", 
                  size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
@@ -646,11 +684,69 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich, sp
                         size=FONT_SIZE, family=FONT_FAMILY, segment.size=0.1) +
         labs(x="Spearman Correlation", y="Median(Spl. Dep.)")
     
+    ord = prot_imp_clean %>% 
+        filter(is_selected) %>% 
+        pull(term_clean)
+    plts[["model_prop-tumorigenesis_vs_prot_imp"]] = X %>%
+        ggboxplot(x="term_clean", y="med", fill=PAL_SINGLE_LIGHT, outlier.size=0.1, order=ord) +
+        theme_pubr(x.text.angle = 45, legend="right") +
+        labs(x="Splicing Impact", y="med(Spl. Dep.)", fill="Selected Model")
+    
+    # harm scores
+    X = harm_stats %>%
+        left_join(spldep_stats, by="EVENT", suffix=c("_harm","_spldep")) %>%
+        left_join(models[c("EVENT","event_gene","term","term_clean","is_selected")], by="EVENT") %>%
+        mutate(harm_type = ifelse(med_spldep<0,"Exclusion","Inclusion"))
+
+    plts[["model_prop-harm_scores-scatter"]] = X %>% 
+        ggplot(aes(x=q25_harm, y=q75_harm)) +
+        geom_scattermore(aes(color=med_harm), pointsize=5, pixels=c(1000,1000), alpha=1) +
+        scale_color_gradient2(low='darkred', mid="white", midpoint=0) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
+        geom_vline(xintercept=0, linetype="dashed", size=LINE_SIZE) +
+        labs(x="0.25 Quantile", y="0.75 Quantile") +
+        geom_text_repel(aes(label=event_gene), size=FONT_SIZE, 
+                        segment.size=0.1, family=FONT_FAMILY, 
+                        X %>% group_by(harm_type) %>% slice_min(order_by=q75_harm, n=5), 
+                        max.overlaps=50) +
+        facet_wrap(~harm_type, scales="free_y") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["model_prop-harm_scores_vs_prot_imp"]] = X %>% 
+        ggboxplot(x="term_clean", y="med_harm", fill=PAL_SINGLE_LIGHT, outlier.size=0.1, order=ord) +
+        theme_pubr(x.text.angle = 45, legend="right") +
+        labs(x="Splicing Impact", y="med(Spl. Dep.)", fill="Selected Model") +
+        facet_wrap(~harm_type, scales="free_y") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    # are genes bearing selected exons closer to oncogenes?
+    X = ppi_closeness %>%
+        count(type, shortest_path_length) %>%
+        group_by(type) %>%
+        mutate(freq = n / sum(n)) %>%
+        ungroup()
+    
+    test = compare_means(
+        shortest_path_length ~ type, data=ppi_closeness,
+        method = "kruskal.test"
+    ) %>%
+    mutate(label = paste0(method,", = ",p.adj))
+    
+    plts[["model_prop-ppi_closeness"]] = X %>% 
+        ggbarplot(x="shortest_path_length", y="freq", fill="type", 
+                  color=NA, position=position_dodge(0.7), 
+                  palette=c("grey", PAL_SINGLE_LIGHT)) +
+        labs(x="Shortest Path Length", y="Rel. Proportion", fill="Dataset Type") +
+        geom_text(aes(x=1.7, y=0.7, label=label), test, size=FONT_SIZE, family=FONT_FAMILY)
+    
+    
     return(plts)
 }
 
 
-plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
+plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_genes, randsel_events){
     plts = list()
     
     # - mutation frequencies at the gene level
@@ -661,7 +757,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
         summarize(is_selected = any(is_selected)) %>%
         drop_na() %>%
         ungroup()
-        
+    
     plts[["model_val-mutation_gene_count"]] = X %>% 
         count(Variant_Classification, is_selected) %>%
         ggbarplot(x="Variant_Classification", y="n", 
@@ -682,6 +778,30 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
         yscale("log10", .format=TRUE) + 
         fill_palette(PAL_DUAL) +
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", fill="Selected Model") +
+        theme_pubr(x.text.angle=70)
+    
+    gene_mut_freq_null = X %>%
+        distinct(GENE, Variant_Classification, is_selected, mut_freq_per_kb) %>%
+        filter(Variant_Classification == "Silent") %>%
+        group_by(is_selected) %>%
+        mutate(null_mut_freq = median(mut_freq_per_kb, na.rm=TRUE)) %>%
+        ungroup() %>%
+        distinct(is_selected, null_mut_freq)
+    
+    X = X %>%
+        left_join(gene_mut_freq_null, by="is_selected") %>%
+        mutate(mut_freq_norm = mut_freq_per_kb / null_mut_freq)
+    
+    plts[["model_val-mutation_gene_frequency_norm"]] = X %>% 
+        ggplot(aes(x=Variant_Classification, y=mut_freq_norm, 
+                   group=interaction(Variant_Classification,is_selected))) +
+        geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
+                     position=position_dodge(0.7)) +
+        stat_compare_means(aes(group=is_selected), method="wilcox.test", 
+                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
+        yscale("log10", .format=TRUE) + 
+        fill_palette(PAL_DUAL) +
+        labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb) Norm.", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
     
     
@@ -789,6 +909,68 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
                is_selected) %>% 
         arrange(fc_mut_freq)
     
+    # Are selected events and genes mutated more/less frequently than by random chance?
+    ## genes
+    X = randsel_genes %>%
+        # the random dataset
+        left_join(
+            gene_mut_freq %>% distinct(GENE, mut_freq_per_kb, Variant_Classification), 
+        by="GENE") %>%
+        mutate(type = "Random") %>%
+        bind_rows(
+            # the real dataset
+            gene_mut_freq %>%
+            distinct(GENE, mut_freq_per_kb, Variant_Classification) %>%
+            left_join(models %>% distinct(GENE, is_selected), by="GENE") %>%
+            filter(is_selected) %>%
+            mutate(type = "Real")
+        ) %>%
+        drop_na(Variant_Classification)
+    
+    plts[["model_val-mutation_gene_frequency_vs_random"]] = X %>% 
+        ggboxplot(x="Variant_Classification", y="mut_freq_per_kb", 
+                  fill="type", outlier.size=0.1, palette=c("grey",PAL_SINGLE_LIGHT)) +
+        yscale("log10", .format=TRUE) +
+        stat_compare_means(aes(group=type), label.y=log10(20), 
+                           method="wilcox.test", label="p.signif", 
+                           size=FONT_SIZE, family=FONT_FAMILY) +
+        geom_text(aes(y=75, label=n), 
+                  X %>% filter(type=="Real") %>% count(Variant_Classification), 
+                  size=FONT_SIZE, family=FONT_FAMILY) +
+        labs(x="Mutation Effect", y="log10(Mut. Freq. per Gene Kb)", fill="Dataset Type") +
+        theme_pubr(x.text.angle=70)
+    
+    ## events
+    X = randsel_events %>%
+        # the random dataset
+        left_join(
+            event_mut_freq %>% distinct(EVENT, event_mut_freq_per_kb, Variant_Classification), 
+        by="EVENT") %>%
+        mutate(type = "Random") %>%
+        bind_rows(
+            # the real dataset
+            event_mut_freq %>%
+            distinct(EVENT, event_mut_freq_per_kb, Variant_Classification) %>%
+            left_join(models %>% distinct(EVENT, is_selected), by="EVENT") %>%
+            filter(is_selected) %>%
+            mutate(type = "Real")
+        ) %>%
+        drop_na(Variant_Classification)
+    
+    plts[["model_val-mutation_event_frequency_vs_random"]] = X %>% 
+        ggboxplot(x="Variant_Classification", y="event_mut_freq_per_kb", 
+                  fill="type", outlier.size=0.1, palette=c("grey",PAL_SINGLE_LIGHT)) +
+        yscale("log10", .format=TRUE) +
+        stat_compare_means(aes(group=type), label.y=log10(500), 
+                           method="wilcox.test", label="p.signif", 
+                           size=FONT_SIZE, family=FONT_FAMILY) +
+        geom_text(aes(y=1500, label=n), 
+                  X %>% filter(type=="Real") %>% count(Variant_Classification), 
+                  size=FONT_SIZE, family=FONT_FAMILY) +
+        labs(x="Mutation Effect", y="log10(Mut. Freq. per Event Kb)", fill="Dataset Type") +
+        theme_pubr(x.text.angle=70)
+    
+    
     return(plts)
 }
 
@@ -810,25 +992,25 @@ plot_event_oi = function(event_oi, gene_oi, ensembl_oi,
     plt_title = sprintf("%s_%s (%s)", event_oi, gene_oi, ensembl_oi)
     plts = list()
     plts[["spldep_vs_rnai"]] = X %>% 
-        ggscatter(x="spldep", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
+        ggscatter(x="spldep", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_NEUTRAL) + 
         stat_cor(method="pearson", label.y.npc="top", 
                  label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="Predicted Dep.", y="Real Dep.")
     
     plts[["splicing_vs_rnai"]] = X %>% 
-        ggscatter(x="splicing", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
+        ggscatter(x="splicing", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_NEUTRAL) + 
         stat_cor(method="spearman", label.y.npc="top", 
                      label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="Splicing (PSI)", y="Real Dep.")
     
     plts[["genexpr_vs_rnai"]] = X %>% 
-        ggscatter(x="genexpr", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
+        ggscatter(x="genexpr", y="rnai", size=1, alpha=0.5, color=PAL_SINGLE_NEUTRAL) + 
         stat_cor(method="spearman", label.y.npc="top", 
                  label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="mRNA levels (log2(TPM+1))", y="Real Dep.")
     
     plts[["genexpr_vs_splicing"]] = X %>% 
-        ggscatter(x="genexpr", y="splicing", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
+        ggscatter(x="genexpr", y="splicing", size=1, alpha=0.5, color=PAL_SINGLE_NEUTRAL) + 
         stat_cor(method="spearman", label.y.npc="top", 
                  label.x.npc = "middle", family=FONT_FAMILY, size=FONT_SIZE) + 
         labs(title=plt_title, x="mRNA levels (log2(TPM+1))", y="Splicing (PSI)")
@@ -880,13 +1062,14 @@ plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr
 
 make_plots = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
-                      enrichment, indices, indices_enrich, spldep_stats, 
-                      gene_mut_freq, event_mut_freq,
+                      enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+                      gene_mut_freq, event_mut_freq, randsel_genes, randsel_events,
                       rnai, spldep, splicing, genexpr, metadata){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
-        plot_model_properties(models, enrichment, indices, indices_enrich, spldep_stats),
-        plot_model_validation(models, gene_mut_freq, event_mut_freq),
+        plot_model_properties(models, enrichment, indices, indices_enrich, 
+                              spldep_stats, harm_stats, ppi_closeness),
+        plot_model_validation(models, gene_mut_freq, event_mut_freq, randsel_genes, randsel_events),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata)
     )
     plts = do.call(c,plts)
@@ -895,10 +1078,11 @@ make_plots = function(models, rnai_stats, cancer_events,
 
 
 make_figdata = function(models, rnai_stats, cancer_events, 
-                        eval_pvalue, eval_corr, 
-                        enrichment, indices, indices_enrich, spldep_stats, 
-                        gene_mut_freq, event_mut_freq,
-                        rnai, spldep, splicing, genexpr){
+                      eval_pvalue, eval_corr, 
+                      enrichment, indices, indices_enrich, spldep_stats, harm_stats,
+                      gene_mut_freq, event_mut_freq, 
+                      ppi_closeness, randsel_genes, randsel_events,
+                      rnai, spldep, splicing, genexpr, metadata){
     # prep enrichments
     df_enrichs = do.call(rbind,
         lapply(names(enrichment), function(e){
@@ -945,7 +1129,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=6,
-                    font.tickslab=6, font.family=FONT_FAMILY)
+                    font.tickslab=6, font.family=FONT_FAMILY, device=cairo_pdf)
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
@@ -977,8 +1161,10 @@ save_plots = function(plts, figs_dir){
     ## protein impact
     save_plt(plts, "model_prop-protein_impact-counts", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_prop-protein_impact-freqs", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_prop-protein_impact_clean-counts", ".pdf", figs_dir, width=6, height=6)
-    save_plt(plts, "model_prop-protein_impact_clean-freqs", ".pdf", figs_dir, width=6, height=6)
+    save_plt(plts, "model_prop-protein_impact-rel_freqs", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "model_prop-protein_impact_clean-counts", ".pdf", figs_dir, width=7, height=6)
+    save_plt(plts, "model_prop-protein_impact_clean-freqs", ".pdf", figs_dir, width=7, height=6)
+    save_plt(plts, "model_prop-protein_impact_clean-rel_freqs", ".pdf", figs_dir, width=7, height=6)
     ## GSEA
     save_plt(plts, "model_prop-enrichment-hallmarks-dotplot", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_prop-enrichment-hallmarks-cnetplot", ".pdf", figs_dir, width=8, height=8)
@@ -992,13 +1178,21 @@ save_plots = function(plts, figs_dir){
     ## tumorigenesis
     save_plt(plts, "model_prop-tumorigenesis-scatter", ".pdf", figs_dir, width=6, height=6)
     save_plt(plts, "model_prop-tumorigenesis_vs_indices", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "model_prop-tumorigenesis_vs_prot_imp", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "model_prop-harm_scores-scatter", ".pdf", figs_dir, width=8, height=7)
+    save_plt(plts, "model_prop-harm_scores_vs_prot_imp", ".pdf", figs_dir, width=8, height=7)
+    # ppi closeness
+    save_plt(plts, "model_prop-ppi_closeness", ".pdf", figs_dir, width=5, height=6)
 
     # model validation
     save_plt(plts, "model_val-mutation_gene_count", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_count", ".pdf", figs_dir, width=8, height=10)
     save_plt(plts, "model_val-mutation_gene_frequency", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "model_val-mutation_gene_frequency_norm", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_frequency", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_frequency-by_protein_impact", ".pdf", figs_dir, width=14, height=8)
+    save_plt(plts, "model_val-mutation_gene_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "model_val-mutation_event_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
     
     # events oi
     genes_oi = c("KRAS","SMNDC1","NUMB","NUMB_lung")
@@ -1049,7 +1243,7 @@ main = function(){
     indices = read_tsv(indices_file) %>% filter(index_name %in% c("stemness"))
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% dplyr::rename(GENE=Hugo_Symbol)
     event_mut_freq = read_tsv(event_mut_freq_file)
-    ontologies = load_ontologies(msigdb_dir, protein_impact_file)
+    ontologies = load_ontologies(msigdb_dir, protein_impact_file, cosmic_genes_file)
     spldep = read_tsv(spldep_file)
     rnai = read_tsv(rnai_file)
     genexpr = read_tsv(genexpr_file)
@@ -1057,6 +1251,11 @@ main = function(){
     cancer_events = read_tsv(cancer_events_file)
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
+    ppi_closeness = read_tsv(ppi_closeness_file) %>% 
+        mutate(type = gsub("_.*","",dataset_id))
+    
+    randsel_events = read_tsv(randsel_events_file)
+    randsel_genes = read_tsv(randsel_genes_file)
     
     # log normalize gene expression
     genexpr = genexpr %>% mutate_at(vars(-("ID")), function(x){ log2(x+1) })
@@ -1066,8 +1265,9 @@ main = function(){
         # filter(n_obs > MIN_N_OBS) %>%
         mutate(event_gene = paste0(EVENT,"_",GENE),
                event_type = gsub("Hsa","",gsub("[^a-zA-Z]", "",EVENT)),
-               is_selected = pearson_correlation_mean>THRESH_CORR & 
-                             lr_pvalue<THRESH_LR_PVALUE) %>% 
+               is_selected = pearson_correlation_mean > THRESH_CORR & 
+                             lr_pvalue < THRESH_LR_PVALUE,
+               is_selected = replace_na(is_selected, FALSE)) %>% 
         dplyr::select(-c(event_mean,event_std,gene_mean,gene_std)) %>% 
         left_join(ccle_stats, by=c("EVENT","ENSEMBL","GENE")) %>%
         left_join(event_info %>% distinct(EVENT,LE_o), by="EVENT") %>%
@@ -1079,6 +1279,8 @@ main = function(){
     ## model selection
     rnai_stats = get_rnai_stats(rnai, models)
     spldep_stats = get_spldep_stats(spldep, models)
+    splicing_stats = get_spldep_stats(splicing %>% rename(index=EVENT), models)
+    
     ### get controls
     ctl_pos_genes = cancer_events %>% pull(GENE) %>% unique()
     ctl_pos = rnai_stats %>% 
@@ -1117,19 +1319,38 @@ main = function(){
     ## GSEA of selected events correlating with transcriptomic indices
     indices_enrich = run_enrichments_indices(indices, selected_events, event_info)
     
+    # compute harm score
+    ## H.S. = (-1) * SplDep * DeltaPSI
+    ## where DeltaPSI is in the direction of inclusion if SplDep>0, or exclusion if SplDep<0
+    common_samples = intersect(colnames(spldep), colnames(splicing))
+    common_events = intersect(spldep[["index"]], splicing[["EVENT"]])
+    common_events = intersect(common_events, selected_events)
+       
+    spldep_mat = spldep %>% column_to_rownames("index")
+    spldep_mat = spldep_mat[common_events, common_samples]
+    splicing_mat = splicing %>% column_to_rownames("EVENT")
+    splicing_mat = splicing_mat[common_events, common_samples]
+    
+    psi_final = spldep_mat
+    psi_final[psi_final<0] = 0 # remove oncoexons
+    psi_final[psi_final>0] = 100 # include tumor-suppressor exons
+    harm = (-1) * spldep_mat * (psi_final - splicing_mat)
+    
+    harm_stats = get_spldep_stats(harm %>% rownames_to_column("index"), models)
+    
     # plot
     plts = make_plots(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
-                      enrichment, indices, indices_enrich, spldep_stats, 
-                      gene_mut_freq, event_mut_freq,
+                      enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+                      gene_mut_freq, event_mut_freq, randsel_genes, randsel_events,
                       rnai, spldep, splicing, genexpr, metadata)
 
     # make figdata
     figdata = make_figdata(models, rnai_stats, cancer_events, 
-                           eval_pvalue, eval_corr, 
-                           enrichment, indices, indices_enrich, spldep_stats, 
-                           gene_mut_freq, event_mut_freq,
-                           rnai, spldep, splicing, genexpr)
+                      eval_pvalue, eval_corr, 
+                      enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+                      gene_mut_freq, event_mut_freq, randsel_genes, randsel_events,
+                      rnai, spldep, splicing, genexpr, metadata)
     
     # save
     save_plots(plts, figs_dir)

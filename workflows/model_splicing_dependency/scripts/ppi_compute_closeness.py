@@ -94,7 +94,6 @@ def compute_shortest_paths(ppi, seed_nodes, sink_nodes, n_jobs=None):
     # keep only shortest path for each sink
     idx = result.dropna().groupby("sink")["shortest_path_length"].idxmin()
     result = result.loc[idx]
-    result["type"] = "real"
 
     return result
 

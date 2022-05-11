@@ -32,9 +32,13 @@ RANDOM_SEED = 1234
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
-PAL_SINGLE_LIGHT = "#6AC2BF"
-PAL_SINGLE_DARK = "#716454"
+PAL_SINGLE_LIGHT = "#47A59C"#"#6AC2BF"
+PAL_SINGLE_DARK = "#C86A73"#"#716454"
 PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+PAL_SINGLE_NEUTRAL = "#716454"
+PAL_FDR_DARK = "#005AB5"
+PAL_FDR_LIGHT = "#DC3220"
+
 LINE_SIZE = 0.25
 
 FONT_SIZE = 2 # for additional labels
@@ -272,7 +276,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     plts[["encore_val-dpsi_vs_spldep"]] = x %>%
-        ggscatter(x="spldep", y="deltaPSI", size=0.1, alpha=0.5) +
+        ggscatter(x="spldep", y="deltaPSI", size=0.1, alpha=0.8) +
         labs(x="Splicing Dependency", y="Delta PSI") +
         facet_wrap(~cell_line, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
@@ -304,7 +308,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         group_by(cell_line) %>%
         mutate(cell_line_lab=sprintf("%s (n=%s)", cell_line, n()))
     plts[["encore_val-top10-scatters"]] = x %>%
-        ggscatter(x="pred", y="demeter2", color="cell_line", size=1,
+        ggscatter(x="pred", y="demeter2", color="cell_line", size=1, alpha=0.5,
                   palette=PAL_DUAL) + 
         guides(color="none") + 
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
@@ -348,7 +352,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         pivot_wider(id_cols="KD", 
                     names_from="cell_line", 
                     values_from="demeter2") %>% 
-        ggscatter(x="K562", y="HepG2", size=1, alpha=0.5, color=PAL_SINGLE_DARK) + 
+        ggscatter(x="K562", y="HepG2", size=1, alpha=0.5, color=PAL_SINGLE_NEUTRAL) + 
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
     
@@ -375,7 +379,7 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         coord_flip() +
         scale_size(range=c(0.5,3)) + 
         scale_color_continuous(
-            low=PAL_SINGLE_LIGHT, high=PAL_SINGLE_DARK, 
+            low=PAL_FDR_LIGHT, high=PAL_FDR_DARK, 
             name="FDR", guide=guide_colorbar(reverse=TRUE)) +
         theme_pubr()
     
@@ -388,9 +392,9 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         make_comb_mat()
     plts[["encore_val-enrichment-KD-upset"]] = m %>%
         UpSet(comb_order = order(comb_size(m)),
-              comb_col = PAL_SINGLE_DARK,
-              top_annotation = upset_top_annotation(m, gp = gpar(fill = PAL_SINGLE_DARK, col=NA)),
-              right_annotation = upset_right_annotation(m, gp = gpar(fill = PAL_SINGLE_DARK, col=NA))) %>%
+              comb_col = PAL_SINGLE_NEUTRAL,
+              top_annotation = upset_top_annotation(m, gp = gpar(fill = PAL_SINGLE_NEUTRAL, col=NA)),
+              right_annotation = upset_right_annotation(m, gp = gpar(fill = PAL_SINGLE_NEUTRAL, col=NA))) %>%
         draw() %>%
         grid.grabExpr() %>%
         as.ggplot()
@@ -427,7 +431,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=6,
-                    font.tickslab=6, font.family=FONT_FAMILY)    
+                    font.tickslab=6, font.family=FONT_FAMILY, device=cairo_pdf)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")

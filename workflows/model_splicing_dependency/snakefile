@@ -47,11 +47,14 @@ rule all:
         # os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # write selected models
+        ## as lists
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'), event_type=EVENT_TYPES),
+        ## randomize model selection
         expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
         expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        
+        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
+        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
         # impute splicing dependencies with selected models
         # expand(os.path.join(RESULTS_DIR,'files','imputed_splicing_dependency_mean-{event_type}.tsv.gz'), event_type=['EX']),
         
@@ -91,7 +94,8 @@ rule all:
         
         # Shortest path length from selected genes to cancer-driver genes vs random selection
         expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz'), event_type=EVENT_TYPES),
-        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz'), event_type=EVENT_TYPES, it=list(range(N_RANDOM_MODELS)))
+        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz'), event_type=EVENT_TYPES, it=list(range(N_RANDOM_MODELS))),
+        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','merged.tsv.gz'), event_type=EVENT_TYPES)
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -217,7 +221,7 @@ rule random_model_selection:
             
             # select randomly 
             np.random.seed(it) # ensure reproducibility
-            random_events = np.random.choice(models["EVENT"], size=n_selected)
+            random_events = np.random.choice(models["EVENT"], size=n_selected, replace=False)
             models = models.loc[models["EVENT"].isin(random_events)].copy()
             
             # save
@@ -226,6 +230,50 @@ rule random_model_selection:
             
         print("Done!")
 
+        
+        
+rule combine_randomly_selected_models:
+    input:
+        random_events_dir = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events'),
+        random_genes_dir = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes')
+    output:
+        random_events = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events-merged.tsv.gz'),
+        random_genes = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes-merged.tsv.gz')
+    params:
+        n_random_it = N_RANDOM_MODELS
+    run:
+        import os
+        import pandas as pd
+        
+        random_events = []
+        random_genes = []
+        for it in range(params.n_random_it):
+            print(it)
+            
+            # events
+            f = os.path.join(input.random_events_dir,str(it)+".txt")
+            events = pd.DataFrame({
+                "random_iteration": "it"+str(it),
+                "EVENT": pd.read_table(f, header=None)[0].to_list()
+            })
+            random_events.append(events)
+            
+            # genes
+            f = os.path.join(input.random_genes_dir,str(it)+".txt")
+            genes = pd.DataFrame({
+                "random_iteration": "it"+str(it),
+                "GENE": pd.read_table(f, header=None)[0].to_list()
+            })
+            random_genes.append(genes)
+            
+        random_events = pd.concat(random_events)
+        random_genes = pd.concat(random_genes)
+        
+        random_events.to_csv(output.random_events, sep="\t", index=False, compression="gzip")
+        random_genes.to_csv(output.random_genes, sep="\t", index=False, compression="gzip")
+        
+        print("Done!")
+        
         
 rule summarize_splicing_dependency_by_field:
     input:
@@ -705,3 +753,28 @@ rule ppi_cosmic_closeness_random:
                     --output_file={output} \
                     --n_jobs={threads}
         """
+
+        
+rule combine_ppi_cosmic_closeness:
+    input:
+        closeness = [os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz')] + [os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz').format(event_type="{event_type}", it=it) for it in list(range(N_RANDOM_MODELS))]
+    output:
+        closeness = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','merged.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        
+        dfs = []
+        for f in input.closeness:
+            dataset_id = os.path.basename(f).replace(".tsv.gz","")
+            
+            print(dataset_id)
+            
+            df = pd.read_table(f)
+            df["dataset_id"] = dataset_id
+            dfs.append(df)
+            
+        dfs = pd.concat(dfs)
+        
+        dfs.to_csv(output.closeness, sep="\t", compression="gzip", index=False)
+        

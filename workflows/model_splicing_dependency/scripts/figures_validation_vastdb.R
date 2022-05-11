@@ -94,7 +94,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=8,
-                    font.tickslab=6, font.family="Arial")    
+                    font.tickslab=6, font.family="Arial", device=cairo_pdf)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")

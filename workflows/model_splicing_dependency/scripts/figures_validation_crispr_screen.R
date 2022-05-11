@@ -28,8 +28,8 @@ COMPARISONS_OI = c("0d-vs-14d")
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
-PAL_SINGLE_LIGHT = "#6AC2BF"
-PAL_SINGLE_DARK = "#716454"
+PAL_SINGLE_LIGHT = "#8AD5E7"#"#6AC2BF"
+PAL_SINGLE_DARK = "#E6C9A8"#"#716454"
 PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
 LINE_SIZE = 0.25
 
@@ -79,7 +79,7 @@ plot_predictions = function(crispr, selected_events, harm){
     
     plts = list()
     plts[["predictions-scatters"]] = X %>% 
-        ggscatter(x="sign_harm", y="fitness_score", size=1, color=PAL_SINGLE_DARK) + 
+        ggscatter(x="sign_harm", y="fitness_score", size=1, color="cell_line", palette=PAL_DUAL) + 
         facet_wrap(~comparison+cell_line, ncol=2) + 
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
@@ -117,7 +117,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=6,
-                    font.tickslab=6, font.family=FONT_FAMILY)    
+                    font.tickslab=6, font.family=FONT_FAMILY, device=cairo_pdf)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
