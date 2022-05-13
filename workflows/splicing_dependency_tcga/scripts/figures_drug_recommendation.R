@@ -22,6 +22,16 @@ require(writexl)
 ROOT = here::here()
 source(file.path(ROOT,'src','R','utils.R'))
 
+# formatting
+PAL_SINGLE_ACCENT = "orange"
+PAL_SINGLE_LIGHT = "#6AC2BF"
+PAL_SINGLE_DARK = "#716454"
+PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+LINE_SIZE = 0.25
+
+FONT_SIZE = 2 # for additional labels
+FONT_FAMILY = "Arial"
+
 # Development
 # ----------- 
 # PREP_DIR = file.path(ROOT,'data','prep')
@@ -59,9 +69,9 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
     X = treatments_clean %>%
         left_join(drug_recs,
             by=c('bcr_patient_barcode','cancer_type','DRUG_NAME')) %>%
-        drop_na() %>%
         distinct(drug_screen, cancer_type, sample, ranking, bcr_patient_barcode,
                  ranking_ratio, predicted_ic50, DRUG_NAME, DRUG_NAME_CLEAN) %>% 
+        drop_na() %>%
         group_by(cancer_type, sample) %>% 
         # only consider the best case scenario
         slice_min(order_by=ranking_ratio, n=1) %>%
@@ -75,7 +85,7 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         count(cancer_type) %>% 
         ggbarplot(x="cancer_type", y="n", fill="cancer_type", color=NA, 
                   palette=get_palette("Paired", length(unique(X[["cancer_type"]]))), 
-                  label=TRUE, lab.size=1) + 
+                  label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY) + 
         guides(fill="none") + 
         labs(x="Cancer Type", y="Count") + 
         coord_flip()
@@ -107,7 +117,7 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         count(cancer_subtype) %>% 
         ggbarplot(x="cancer_subtype", y="n", fill="cancer_subtype", color=NA, 
                   palette=get_palette("Paired", 15), 
-                  label=TRUE, lab.size=1) + 
+                  label=TRUE, lab.size=FONT_SIZE) + 
         guides(fill="none") + 
         labs(x="Cancer Subtype", y="Count") + 
         coord_flip()
@@ -166,6 +176,7 @@ plot_drug_recommendations = function(drug_treatments, drug_response, metadata){
         labs(x="Drug", y="Ranking Ratio") + 
         guides(color="none") + 
         coord_flip() +
+        theme_pubr(x.text.angle=45) +
         facet_wrap(~ranking) +
         theme(strip.text.x = element_text(size=6, family='Arial'))
     
@@ -188,9 +199,9 @@ save_plt = function(plts, plt_name, extension='.pdf',
     print(plt_name)
     plt = plts[[plt_name]]
     if (format){
-        plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
-                    font.x=8, font.y=8, font.legend=8,
-                    font.tickslab=6, font.family='Arial')    
+        plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
+                    font.x=8, font.y=8, font.legend=6,
+                    font.tickslab=6, font.family=FONT_FAMILY, device=cairo_pdf) 
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm')
@@ -215,8 +226,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'drug_rec-drugs_ranking_ratios', '.pdf', figs_dir, width=5, height=5)
     save_plt(plts, 'drug_rec-sample_counts_by_cancer-by_subtype', '.pdf', figs_dir, width=6, height=5)
     save_plt(plts, 'drug_rec-drugs_ranking_ratios-by_subtype', '.pdf', figs_dir, width=6, height=5)
-    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=7, height=5)
-    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=7, height=10)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_given', '.pdf', figs_dir, width=4.5, height=3)
+    save_plt(plts, 'drug_rec-drugs_ranking_ratios-KIRC_best', '.pdf', figs_dir, width=8.5, height=5.5)
 }
 
 
@@ -255,8 +266,8 @@ main = function(){
         mutate(DRUG_ID=as.numeric(gsub("_.*","",ID))) %>%
         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID") %>%
         mutate(DRUG_NAME_CLEAN = ID) %>%
-        separate(DRUG_NAME_CLEAN, c("drug_id","min_conc","max_conc"), sep="_") %>%
-        mutate(DRUG_NAME_CLEAN = sprintf("%s (%s-%s)", DRUG_NAME, min_conc, max_conc))
+        separate(DRUG_NAME_CLEAN, c("drug_id","max_conc"), sep="_") %>%
+        mutate(DRUG_NAME_CLEAN = DRUG_NAME)
         
     metadata_subtypes = read_tsv(metadata_subtypes_file) %>% 
         mutate(cancer_subtype=paste0(cancer,"_",cancer_subtype))

@@ -36,6 +36,16 @@ THRESH_FDR = 0.05
 THRESH_MEDIAN_DIFF = 5
 MIN_SAMPLES = 10
 
+# formatting
+PAL_SINGLE_ACCENT = "orange"
+PAL_SINGLE_LIGHT = "#6AC2BF"
+PAL_SINGLE_DARK = "#716454"
+PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+LINE_SIZE = 0.25
+
+FONT_SIZE = 2 # for additional labels
+FONT_FAMILY = "Arial"
+
 # Development
 # -----------
 # RAW_DIR = file.path(ROOT,'data','raw')
@@ -54,6 +64,14 @@ MIN_SAMPLES = 10
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
 # ontology_file = file.path(ROOT,"results","model_splicing_dependency",'files','ENCORE','kd_gene_sets-EX.tsv.gz')
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
+
+# MODELS_DIR = file.path(ROOT,"results","splicing_dependency_drugs")
+# drug_models_file = file.path(MODELS_DIR,"files","model_summaries_drug_response-EX.tsv.gz")
+# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
+# drug_treatments_file = file.path(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
+# metadata_file = file.path(PREP_DIR,'metadata','PANCAN.tsv.gz')
+# selected_drugs_file = file.path(MODELS_DIR,'files','selected_models-EX.txt')
+
 
 ##### FUNCTIONS #####
 prep_diff_result = function(diff_result, spldep_stats){
@@ -80,14 +98,15 @@ plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
         mutate(PT = `psi__condition_a-n_present` + `psi__condition_a-n_nan`,
                STN = `psi__condition_b-n_present` + `psi__condition_b-n_nan`) %>% 
         distinct(cancer_type,PT,STN) %>%
-        pivot_longer(c(PT,STN),names_to='sample_type',values_to='n')
+        pivot_longer(c(PT,STN), names_to='sample_type',values_to='n')
     
     plts[['top_samples-sample_counts_cancer']] = X %>% 
         ggbarplot(x='cancer_type', y='n', fill='sample_type', color=NA,
-                  position=position_dodge(0.7), label=TRUE, lab.size=1, palette='lancet') + 
+                  position=position_dodge(0.7), label=TRUE, lab.size=FONT_SIZE, 
+                  lab.family=FONT_FAMILY, palette='lancet') + 
         labs(x='Cancer Type', y='N. Samples') + 
         theme_pubr(x.text.angle = 45) + 
-        geom_hline(yintercept=10, linetype='dashed')
+        geom_hline(yintercept=10, linetype='dashed', size=LINE_SIZE)
     
     # ranking with differential analyses
     cancers_oi = X %>% 
@@ -115,9 +134,9 @@ plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
         guides(color="none") +
         labs(x='Delta PSI', y='median(Spl. Dep. in PT)') +
         ggpubr::color_palette(c("black","orange")) +
-        geom_hline(yintercept=0, linetype='dashed') +
-        geom_vline(xintercept=0, linetype='dashed') +
-        theme(strip.text.x = element_text(size=6, family='Arial'))
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        geom_vline(xintercept=0, linetype='dashed', size=LINE_SIZE) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     plts[['top_samples-dpsi_vs_spldep-selection']] = X %>%
         filter(psi__is_significant) %>%
@@ -125,7 +144,8 @@ plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
         count(sign_combined) %>% 
         drop_na() %>%
         ggbarplot(x='cancer_type', y='n', fill='sign_combined', palette='jco', 
-                  color=FALSE, label=TRUE, lab.size=1, position=position_dodge(0.9)) +
+                  color=FALSE, label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
+                  position=position_dodge(0.9)) +
         theme_pubr(x.text.angle = 45, legend='right') +
         labs(x='Cancer Type', y='N. Significant Events')
    
@@ -137,7 +157,7 @@ plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
         ggbarplot(x='event_gene', y='mean', 
                   fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
                   palette=get_palette('Paired',length(unique(X[['cancer_type']])))) + 
-        geom_hline(yintercept=0, linetype='dashed') +
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
         labs(x='Event & Gene', y='mean(Spl. Dep. in PT)', fill='Cancer Type') +
         coord_flip()
     
@@ -149,7 +169,7 @@ plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
         ggbarplot(x='event_gene', y='psi__median_diff', 
                   fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
                   palette=get_palette('Paired',length(unique(X[['cancer_type']])))) + 
-        geom_hline(yintercept=c(-5,5), linetype='dashed') +
+        geom_hline(yintercept=c(-5,5), linetype='dashed', size=LINE_SIZE) +
         labs(x='Event & Gene', y='Delta PSI', fill='Cancer Type') +
         coord_flip()
     
@@ -166,7 +186,7 @@ plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
         ggbarplot(x='event_gene', y='harm_score', 
                   fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
                   palette=get_palette('Paired',length(unique(X[['cancer_type']])))) + 
-        geom_hline(yintercept=0, linetype='dashed') +
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
         labs(x='Event & Gene', y='Harm Score', fill='Cancer Type') +
         coord_flip()
     
@@ -193,7 +213,7 @@ plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
         labs(x="Cancer Type", y="PSI", color="Sample Type") +
         theme_pubr() + 
         coord_flip() +
-        theme(strip.text.x = element_text(size=6, family='Arial'))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
         
     # enrichment ENCORE
     events_oi = x %>% pull(EVENT) %>% unique()
@@ -248,10 +268,10 @@ plot_ccle_vs_tcga = function(diff_result_sample_raw, psi_ccle){
         facet_wrap(~cancer_type, ncol=4) +
         theme_pubr(border=TRUE) +
         labs(x='Event Std. in CCLE', y='|Delta PSI|') +
-        geom_hline(yintercept=THRESH_MEDIAN_DIFF, linetype='dashed') +
-        geom_vline(xintercept=1, linetype='dashed') +
+        geom_hline(yintercept=THRESH_MEDIAN_DIFF, linetype='dashed', size=LINE_SIZE) +
+        geom_vline(xintercept=1, linetype='dashed', size=LINE_SIZE) +
         stat_cor(method='spearman', label.sep = '\n', size=2) +
-        theme(strip.text.x = element_text(size=6, family='Arial'))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     return(plts)
 }
@@ -270,17 +290,17 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle, indices){
             pointsize = 8,
             color='black') +
         labs(x='0.25 Quantile', y='0.75 Quantile') +
-        geom_hline(yintercept=0, linetype='dashed') +
-        geom_vline(xintercept=0, linetype='dashed') +
-        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial",
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        geom_vline(xintercept=0, linetype='dashed', size=LINE_SIZE) +
+        geom_text_repel(aes(label=event_gene), size=FONT_SIZE, segment.size=0.1, family="Arial",
                         X %>% group_by(cancer_type) %>% slice_max(order_by = q25*q75, n=5)) +
-        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial",
+        geom_text_repel(aes(label=event_gene), size=FONT_SIZE, segment.size=0.1, family="Arial",
                         X %>% group_by(cancer_type) %>% filter(q75>1)) +
-        geom_text_repel(aes(label=event_gene), size=1, segment.size=0.1, family="Arial",
+        geom_text_repel(aes(label=event_gene), size=FONT_SIZE, segment.size=0.1, family="Arial",
                         X %>% group_by(cancer_type) %>% filter(q75>0 & q25<(-0.9))) +
         facet_wrap(~cancer_type, ncol=4, scales="free") +
         theme_pubr(border=TRUE) +
-        theme(strip.text.x = element_text(size=6, family='Arial'))
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     idx = X %>% pull(event_gene)
     diffs = data.frame(
@@ -296,11 +316,11 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle, indices){
                  palette=get_palette("Paired",n_cancers)) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill='none') + 
-        geom_hline(yintercept=0, linetype='dashed') + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) + 
         geom_text_repel(aes(label=event_gene), 
                         diffs %>% 
                         filter(abs(median_diff)>0.5),
-                        size=1,
+                        size=FONT_SIZE,
                         segment.size=0.1, family="Arial") +  
         theme_pubr(x.text.angle=70) + 
         labs(x="Cancer Type", 
@@ -310,10 +330,11 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle, indices){
         ggviolin(x="cancer_type", y="range_diff", fill="cancer_type", color=NA, 
                  palette=get_palette("Paired",n_cancers)) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
-        guides(fill='none') + geom_hline(yintercept=0, linetype='dashed') + 
+        guides(fill='none') + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) + 
         geom_text_repel(aes(label=event_gene), diffs %>% 
                         filter(abs(range_diff)>0.15), family="Arial",
-                        size=1, segment.size=0.1, max.overlaps=15) +  
+                        size=FONT_SIZE, segment.size=0.1, max.overlaps=15) +  
         theme_pubr(x.text.angle=70) + 
         labs(x="Cancer Type", y="range(Spl. Dep. TCGA) - range(Spl. Dep. CCLE)")
     
@@ -343,7 +364,7 @@ plot_tumorigenesis = function(spldep_stats, spldep_stats_ccle, indices){
         ggviolin(x="index_name", y="med", fill="bisque3", color=NA) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         geom_text_repel(aes(label=event_gene), X %>% slice_max(abs(med), n=10),
-                        size=1, family="Arial", segment.size=0.1) +
+                        size=FONT_SIZE, family="Arial", segment.size=0.1) +
         labs(x="Index", y="median(Spearman Correlation)")
     
     return(plts)
@@ -424,12 +445,12 @@ save_plt = function(plts, plt_name, extension='.pdf',
     print(plt_name)
     plt = plts[[plt_name]]
     if (format){
-        plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
-                    font.x=8, font.y=8, font.legend=8,
-                    font.tickslab=6, font.family='Arial')    
+        plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
+                    font.x=8, font.y=8, font.legend=6,
+                    font.tickslab=6, font.family=FONT_FAMILY, device=cairo_pdf)   
     }
     filename = file.path(directory,paste0(plt_name,extension))
-    save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm')
+    save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm', )
 }
 
 
@@ -438,9 +459,9 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'top_samples-sample_counts_cancer', '.pdf', figs_dir, width=8, height=5)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-scatter', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=6, height=12)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=6, height=12)
-    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=6, height=12)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=5.5, height=12.5)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=5.5, height=12.5)
+    save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=5.5, height=12.5)
     save_plt(plts, 'top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=18, height=30)
     save_plt(plts, 'top_samples-enrichment-KD-dot', '.pdf', figs_dir, width=5, height=7)
     
@@ -448,9 +469,9 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'subtypes-top_samples-sample_counts_cancer', '.pdf', figs_dir, width=8, height=8)
     save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-scatter', '.pdf', figs_dir, width=10, height=10)
     save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-selection', '.pdf', figs_dir, width=10, height=6)
-    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=6, height=9)
-    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=6, height=9)
-    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=6, height=9)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_spldep', '.pdf', figs_dir, width=5.5, height=8)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_dpsi', '.pdf', figs_dir, width=5.5, height=8)
+    save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_harm', '.pdf', figs_dir, width=5.5, height=8)
     save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=15, height=15)
     save_plt(plts, 'subtypes-top_samples-enrichment-KD-dot', '.pdf', figs_dir, width=5, height=7)
 
@@ -515,6 +536,37 @@ main = function(){
     ontology = read_tsv(ontology_file)
     cancer_events = read_tsv(cancer_events_file)
     
+    # metadata = read_tsv(metadata_file)
+    
+    # explore possible drug validation
+#     selected_drugs = readLines(selected_drugs_file)
+#     drug_targets = read_tsv(drug_targets_file)
+#     drug_models = read_tsv(drug_models_file) %>% 
+#         filter(ID %in% selected_drugs & lr_padj<0.1) %>%
+#         left_join(drug_targets %>% distinct(DRUG_ID,DRUG_NAME), by="DRUG_ID") %>%
+#         group_by(ID) %>%
+#         arrange(-spldep_coefficient) %>%
+#         mutate(event_gene = paste0(EVENT,"_",GENE),
+#                event_type = gsub("Hsa","",gsub("[^a-zA-Z]", "",EVENT)),
+#                ranking = row_number()) %>%
+#         ungroup()
+#     drug_treatments = read_tsv(drug_treatments_file) %>% 
+#         mutate(DRUG_NAME=toupper(DRUG_NAME))
+    
+#     x = 
+#     x %>% 
+#         ungroup() %>%
+#         left_join(drug_models %>% 
+#         distinct(event_gene, DRUG_ID,DRUG_NAME,ranking,spldep_coefficient), by="event_gene") %>%
+#         drop_na(ranking) %>%
+#         filter(DRUG_NAME %in% drugs_oi) %>%
+#         arrange(mean) %>%
+#         distinct(event_gene, DRUG_NAME,DRUG_ID,ranking, spldep_coefficient, cancer_type, mean) %>%
+#         filter(ranking <= 10)
+    
+#     drugs_oi = drug_treatments %>% count(DRUG_NAME) %>% filter(n>50) %>% pull(DRUG_NAME)
+#     drug_treatments %>% filter(DRUG_NAME=="TEMSIROLIMUS")
+
     # add event gene
     spldep_stats = spldep_stats %>%
         left_join(annot[,c('EVENT','GENE')], by='EVENT') %>%

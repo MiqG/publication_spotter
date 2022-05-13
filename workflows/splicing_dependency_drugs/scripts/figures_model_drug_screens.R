@@ -81,6 +81,8 @@ FONT_FAMILY = "Arial"
 # paths_random_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-random.tsv.gz")
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
+# splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
+
 
 ##### FUNCTIONS #####
 load_drug_screens = function(drug_screens_dir){
@@ -537,7 +539,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         left_join(spldep_models %>% 
             distinct(EVENT, event_coefficient_mean), by="EVENT") %>%
         filter(is_sel) %>% 
-        distinct(DRUG_NAME, event_gene, lr_padj, spldep_coefficient,
+        distinct(DRUG_NAME, EVENT, event_gene, lr_padj, spldep_coefficient,
                  event_coefficient_mean, drug_screen, is_target, path_lab)
     
     plts[["mediators-on_target-top_assocs_spldep_all"]] = x %>% 
@@ -659,7 +661,55 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         coord_flip() +
         labs(x="Event & Gene", y="PSI Coefficient", fill="Is Target", color="Drug Screen") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-      
+    
+    ## co-splicing
+    drugs_oi = c("NUTLIN-3A (-)","AZD4547")
+    events_oi = x %>% 
+        filter(DRUG_NAME %in% drugs_oi) %>%
+        group_by(DRUG_NAME) %>% 
+        slice_max(spldep_coefficient, n=10) %>% 
+        ungroup() %>%
+        distinct(EVENT, event_gene, DRUG_NAME)
+    
+    corrs = sapply(drugs_oi, function(drug_oi){
+        corr = events_oi %>% 
+            filter(DRUG_NAME %in% drug_oi) %>%
+            left_join(splicing, by="EVENT") %>%
+            select(-one_of(c("EVENT","DRUG_NAME"))) %>%
+            column_to_rownames("event_gene") %>%
+            as.matrix() %>%
+            t() %>%
+            cor(method="spearman",use="pairwise.complete.obs")
+        return(corr)
+    }, simplify=FALSE)
+    
+    mat = corrs[["NUTLIN-3A (-)"]]
+    plts[["mediators-drugs_oi-cosplicing-nutlin"]] = Heatmap(
+        mat, name="Spear. Corr.", 
+        row_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+        column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+        heatmap_legend_param = list(legend_gp = gpar(fontsize = 6, fontfamily=FONT_FAMILY)),
+        cell_fun = function(j, i, x, y, width, height, fill) {
+                grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize = 6))
+        }) %>% 
+        draw() %>%
+        grid.grabExpr() %>%
+        as.ggplot()
+    
+    mat = corrs[["AZD4547"]]
+    plts[["mediators-drugs_oi-cosplicing-AZD4547"]] = Heatmap(
+        mat, name="Spear. Corr.", 
+        row_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+        column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+        heatmap_legend_param = list(legend_gp = gpar(fontsize = 6, fontfamily=FONT_FAMILY)),
+        cell_fun = function(j, i, x, y, width, height, fill) {
+                grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize = 6))
+        }) %>% 
+        draw() %>%
+        grid.grabExpr() %>%
+        as.ggplot()
+    
+    
     # - examples exon-drug synergy
     x = X %>%
         drop_na(spldep_coefficient) %>%
@@ -844,7 +894,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=6,
-                    font.tickslab=6, font.family=FONT_FAMILY)    
+                    font.tickslab=6, font.family=FONT_FAMILY, device=cairo_pdf)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
@@ -889,6 +939,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "mediators-on_target-top_assocs_event_coef_all", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_event_coef_pos", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_event_coef_neg", ".pdf", figs_dir, width=15, height=13)
+    save_plt(plts, "mediators-drugs_oi-cosplicing-AZD4547", ".pdf", figs_dir, width=12, height=10)
+    save_plt(plts, "mediators-drugs_oi-cosplicing-nutlin", ".pdf", figs_dir, width=12, height=10)
     save_plt(plts, "mediators-events_oi-synergy", ".pdf", figs_dir, width=10, height=5)
     save_plt(plts, "mediators-drugs_oi-synergy", ".pdf", figs_dir, width=5, height=5)
     
@@ -943,7 +995,8 @@ main = function(){
     spldep_models = read_tsv(spldep_models_file) %>%
         filter(EVENT %in% unique(models[["EVENT"]]))
     ontologies = load_ontologies(msigdb_dir)
-        
+    splicing = read_tsv(splicing_file)
+
     # prep inputs
     ## IC50
     estimated_response = estimated_response %>% mutate(in_demeter2 = sample %in% colnames(rnai))
