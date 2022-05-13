@@ -34,6 +34,7 @@ MIN_SAMPLES = 10
 
 THRESH_GENEXPR = 2
 THRESH_PSI = 25
+TOP_N = 5
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
@@ -293,109 +294,114 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         theme(aspect.ratio=1)
     
     # harm scores in selected cells
-    cells_oi = corrs %>% 
+    for (i in 1:TOP_N) {
+        cells_oi = corrs %>% 
         mutate(score = (-1)*correlation_high + correlation_low) %>% 
         arrange(-score) %>%
-        filter(row_number() == 3) %>% # take top N
+        filter(row_number() == i) %>% # take top N cell-cell pair
         dplyr::select(row,col) %>% 
         unlist() %>%
         as.vector()
     
-    X = ccle_harm %>%
-        filter(event_gene %in% top_events) %>%
-        dplyr::select(c("event_gene", cells_oi)) %>%
-        group_by(event_gene) %>%
-        mutate(diff = abs(get(cells_oi[1]) - get(cells_oi[2])),
-               avg = mean(c(get(cells_oi[1]), get(cells_oi[2])), na.rm=TRUE)) %>%
-        ungroup() %>%
-        arrange(-avg) %>%
-        mutate(event_harm = ifelse(row_number()<=6, "harmless", "harmful")) %>%
-        arrange(-diff) %>%
-        mutate(event_var = ifelse(row_number()<=6, "var", "ctt"),
-               label = paste0(event_harm,"_",event_var)) %>%
-        arrange(label) %>% 
-        dplyr::select(c(event_gene,cells_oi,label)) %>%
-        left_join(annot %>% distinct(EVENT, event_gene), by="event_gene") %>%
-        left_join(event_info %>% distinct(EVENT, LE_o), by="EVENT") %>%
-        left_join(protein_impact %>% distinct(EVENT, impact_clean), by="EVENT") %>%
-        mutate(event_length = cut(LE_o, breaks=c(1,50,100,250,500,1000,2000,3000,4000)))
+        X = ccle_harm %>%
+            filter(event_gene %in% top_events) %>%
+            dplyr::select(c("event_gene", cells_oi)) %>%
+            group_by(event_gene) %>%
+            mutate(diff = abs(get(cells_oi[1]) - get(cells_oi[2])),
+                   avg = mean(c(get(cells_oi[1]), get(cells_oi[2])), na.rm=TRUE)) %>%
+            ungroup() %>%
+            arrange(-avg) %>%
+            mutate(event_harm = ifelse(row_number()<=6, "harmless", "harmful")) %>%
+            arrange(-diff) %>%
+            mutate(event_var = ifelse(row_number()<=6, "var", "ctt"),
+                   label = paste0(event_harm,"_",event_var)) %>%
+            arrange(label,-diff) %>% 
+            dplyr::select(c(event_gene,cells_oi,label)) %>%
+            left_join(annot %>% distinct(EVENT, event_gene), by="event_gene") %>%
+            left_join(event_info %>% distinct(EVENT, LE_o), by="EVENT") %>%
+            left_join(protein_impact %>% distinct(EVENT, impact_clean), by="EVENT") %>%
+            mutate(event_length = cut(LE_o, breaks=c(1,50,100,250,500,1000,2000,3000,4000)))
+
+        colors_events = c("harmful_var"="red", "harmful_ctt"="yellow", "harmless_ctt"="grey")
+        colors_lengths = setNames(get_palette("Greens",4), X %>% pull(event_length) %>% unique() %>% sort())
+        colors_impact = setNames(get_palette("jco",5), X %>% pull(impact_clean) %>% unique() %>% sort())
+        colors_annot = list(
+            label = colors_events,
+            event_length = colors_lengths,
+            impact_clean = colors_impact
+        )
+        annotation_row = HeatmapAnnotation(df=X %>% 
+                                               column_to_rownames("event_gene") %>% 
+                                               dplyr::select(label, impact_clean, event_length), 
+                                           name="Event Info", which="row", col=colors_annot)
+
+
+        colors_cells = setNames(get_palette("Dark2",2), 
+                                ccle_metadata %>% filter(DepMap_ID %in% cells_oi) %>% pull(CCLE_Name))
+        colors_samples = list(CCLE_Name = colors_cells)
+        annotation_col = HeatmapAnnotation(df = ccle_metadata %>%  
+                                               filter(DepMap_ID %in% cells_oi) %>% 
+                                               mutate(DepMap_ID = factor(DepMap_ID, levels = cells_oi)) %>%
+                                               arrange(DepMap_ID) %>%
+                                               column_to_rownames("DepMap_ID") %>%
+                                               dplyr::select(CCLE_Name),
+                                           name = "Sample Info", which="col", col=colors_samples)
+
+
+        mat = X %>% 
+            column_to_rownames("event_gene") %>%
+            dplyr::select(cells_oi)
         
-    colors_events = c("harmful_var"="red", "harmful_ctt"="yellow", "harmless_ctt"="grey")
-    colors_lengths = setNames(get_palette("Greens",4), X %>% pull(event_length) %>% unique() %>% sort())
-    colors_impact = setNames(get_palette("jco",5), X %>% pull(impact_clean) %>% unique() %>% sort())
-    colors_annot = list(
-        label = colors_events,
-        event_length = colors_lengths,
-        impact_clean = colors_impact
-    )
-    annotation_row = HeatmapAnnotation(df=X %>% 
-                                           column_to_rownames("event_gene") %>% 
-                                           dplyr::select(label, impact_clean, event_length), 
-                                       name="Event Info", which="row", col=colors_annot)
-    
-    
-    colors_cells = setNames(get_palette("Dark2",2), 
-                            ccle_metadata %>% filter(DepMap_ID %in% cells_oi) %>% pull(CCLE_Name))
-    colors_samples = list(CCLE_Name = colors_cells)
-    annotation_col = HeatmapAnnotation(df = ccle_metadata %>%  
-                                           filter(DepMap_ID %in% cells_oi) %>% 
-                                           mutate(DepMap_ID = factor(DepMap_ID, levels = cells_oi)) %>%
-                                           arrange(DepMap_ID) %>%
-                                           column_to_rownames("DepMap_ID") %>%
-                                           dplyr::select(CCLE_Name),
-                                       name = "Sample Info", which="col", col=colors_samples)
-    
-    
-    mat = X %>% 
-        column_to_rownames("event_gene") %>%
-        dplyr::select(cells_oi)
-    plts[["selection_exons-harm-heatmap"]] = scale(mat) %>% # standardize for visualization
-        Heatmap(
-            cluster_rows = FALSE,
-            name="Harm Score", 
-            right_annotation = annotation_row,
-            top_annotation = annotation_col,
-            row_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
-            column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
-            heatmap_legend_param = list(legend_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY)),
-            cell_fun = function(j, i, x, y, width, height, fill) {
-                    grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize=6))
-        }) # %>% 
-        # draw(legend_label_gp=gpar(fontsize=6)) %>%
-        #grid.grabExpr() %>%
-        #as.ggplot()
-    
-    # where are our exons with respect to all in those cell lines?
-    events_sel = top_selection %>% pull(event_gene)
-    genes_sel = top_selection %>% pull(GENE)
-    
-    # gene expression of selected exons and cells
-    X = ccle_genexpr %>%
-        dplyr::select(c(GENE,cells_oi)) %>%
-        pivot_longer(-GENE, names_to="sampleID", values_to="expression")
-    
-    plts[["selection_exons-genexpr-violin"]] = X %>%
-        ggviolin(x="sampleID", y="expression", trim=TRUE,
-                 color=NA, fill=PAL_SINGLE_ACCENT) +
-        geom_boxplot(width=0.1, outlier.size=0.1) +
-        geom_text_repel(aes(label=GENE),
-                        X %>% filter(GENE %in% genes_sel), max.overlaps=50,
-                        segment.size=0.1, size=FONT_SIZE, family=FONT_FAMILY) +
-        labs(x="Cell Line", y="log2(TPM + 1)")
+        print(mat)
         
-    # splicing of selected exons and cells
-    X = ccle_splicing %>%
-        dplyr::select(c(event_gene,cells_oi)) %>%
-        pivot_longer(-event_gene, names_to="sampleID", values_to="psi")
-    
-    plts[["selection_exons-splicing-violin"]] = X %>%
-        ggviolin(x="sampleID", y="psi", trim=TRUE,
-                 color=NA, fill=PAL_SINGLE_ACCENT) +
-        geom_boxplot(width=0.1, outlier.size=0.1) +
-        geom_text_repel(aes(label=event_gene),
-                        X %>% filter(event_gene %in% events_sel), max.overlaps=50,
-                        segment.size=0.1, size=FONT_SIZE, family=FONT_FAMILY) +
-        labs(x="Cell Line", y="PSI")
+        plts[[paste0("selection_exons-harm-heatmap-",i)]] = scale(mat) %>% # standardize for visualization
+            Heatmap(
+                cluster_rows = FALSE,
+                name=paste("Harm Score",i), 
+                right_annotation = annotation_row,
+                top_annotation = annotation_col,
+                row_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+                column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+                heatmap_legend_param = list(legend_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY)),
+                cell_fun = function(j, i, x, y, width, height, fill) {
+                        grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize=6))
+            }) %>% 
+            draw() %>%
+            grid.grabExpr() %>%
+            as.ggplot()
+
+        # where are our exons with respect to all in those cell lines?
+        events_sel = top_selection %>% pull(event_gene)
+        genes_sel = top_selection %>% pull(GENE)
+
+        # gene expression of selected exons and cells
+        X = ccle_genexpr %>%
+            dplyr::select(c(GENE,cells_oi)) %>%
+            pivot_longer(-GENE, names_to="sampleID", values_to="expression")
+
+        plts[[paste0("selection_exons-genexpr-violin-",i)]] = X %>%
+            ggviolin(x="sampleID", y="expression", trim=TRUE,
+                     color=NA, fill=PAL_SINGLE_ACCENT) +
+            geom_boxplot(width=0.1, outlier.size=0.1) +
+            geom_text_repel(aes(label=GENE),
+                            X %>% filter(GENE %in% genes_sel), max.overlaps=50,
+                            segment.size=0.1, size=FONT_SIZE, family=FONT_FAMILY) +
+            labs(x="Cell Line", y="log2(TPM + 1)")
+
+        # splicing of selected exons and cells
+        X = ccle_splicing %>%
+            dplyr::select(c(event_gene,cells_oi)) %>%
+            pivot_longer(-event_gene, names_to="sampleID", values_to="psi")
+
+        plts[[paste0("selection_exons-splicing-violin-",i)]] = X %>%
+            ggviolin(x="sampleID", y="psi", trim=TRUE,
+                     color=NA, fill=PAL_SINGLE_ACCENT) +
+            geom_boxplot(width=0.1, outlier.size=0.1) +
+            geom_text_repel(aes(label=event_gene),
+                            X %>% filter(event_gene %in% events_sel), max.overlaps=50,
+                            segment.size=0.1, size=FONT_SIZE, family=FONT_FAMILY) +
+            labs(x="Cell Line", y="PSI")
+    }
     
     return(plts)
 }
@@ -414,12 +420,22 @@ make_plots = function(ccle_stats, genes_oi, events_oi,
 }
 
 
-make_figdata = function(diff_result_sample, 
-                        diff_result_subtypes, 
-                        spldep_stats){
+make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_stats){
+    
+    # a table of exons to be considered for validation
+    # as they have therapeutic potential
+    exons_info = annot %>% 
+        filter(event_gene %in% events_oi) %>% 
+        left_join(event_info %>% dplyr::select(-GENE), by="EVENT") %>% 
+        left_join(protein_impact, by="EVENT") %>%
+        left_join(
+            ccle_harm_stats %>% 
+            rename_at(vars(-event_gene),function(x) paste0("harm_",x)),
+            by = "event_gene")
+    
     figdata = list(
-        "targetable_events" = list(
-            "differential_analysis-by_cancer_type" = diff_result_sample,
+        "selection_exons" = list(
+            "exons_info" = exons_info
         )
     )
     return(figdata)
@@ -450,13 +466,16 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'selection_exons-median_vs_std', '.pdf', figs_dir, width=8, height=9)
     save_plt(plts, 'selection_exons-corrs-scatter', '.pdf', figs_dir, width=8, height=9)
     
-    cm = 1/2.54
-    pdf(file.path(figs_dir,'selection_exons-harm-heatmap.pdf'), width=16*cm, height=11*cm)
-    plts[['selection_exons-harm-heatmap']] %>% draw(legend_labels_gp = gpar(fontsize=6)) # this does nothing
-    dev.off()
+    for (i in 1:TOP_N){
+#         cm = 1/2.54
+#         pdf(file.path(figs_dir,sprintf('selection_exons-harm-heatmap-%s.pdf',i)), width=16*cm, height=13*cm)
+#         plts[[sprintf('selection_exons-harm-heatmap-%s',i)]] %>% draw(legend_labels_gp = gpar(fontsize=6)) # this does nothing
+#         dev.off()
+        save_plt(plts, paste0('selection_exons-harm-heatmap-',i), '.pdf', figs_dir, width=14, height=15, format=FALSE)
+        save_plt(plts, paste0('selection_exons-genexpr-violin-',i), '.pdf', figs_dir, width=7, height=7)
+        save_plt(plts, paste0('selection_exons-splicing-violin-',i), '.pdf', figs_dir, width=10, height=10)
+    }
     
-    save_plt(plts, 'selection_exons-genexpr-violin', '.pdf', figs_dir, width=7, height=7)
-    save_plt(plts, 'selection_exons-splicing-violin', '.pdf', figs_dir, width=10, height=10)
 }
 
 
@@ -534,6 +553,19 @@ main = function(){
         left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
         dplyr::select(-index)
     
+    # subset cell types
+    not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")
+    to_drop = ccle_metadata %>%
+        filter(primary_disease %in% not_oi) %>% 
+        pull(DepMap_ID)
+    
+    ccle_genexpr = ccle_genexpr %>%
+        dplyr::select(-any_of(to_drop))
+    ccle_splicing = ccle_splicing %>%
+        dplyr::select(-any_of(to_drop))
+    cclE_spldep = ccle_spldep %>%
+        dplyr::select(-any_of(to_drop))
+    
     # prep results differential analyses
     tcga_diff_result = prep_diff_result(tcga_diff_result, tcga_spldep_stats)
     
@@ -563,7 +595,7 @@ main = function(){
                       events_genes, protein_impact)
     
     # make figdata
-    figdata = make_figdata()
+    figdata = make_figdata(events_oi, annot, event_info, protein_impact, ccle_harm_stats)
 
     # save
     save_plots(plts, figs_dir)
