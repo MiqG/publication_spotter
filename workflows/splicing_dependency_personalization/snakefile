@@ -1,0 +1,119 @@
+"""
+Author: Miquel Anglada Girotto
+Contact: miquelangladagirotto [at] gmail [dot] com
+Last Update: 2021-01-12
+
+Workflow purpose
+--------------
+Workflow to analyze putative associations between exons and cancer at single-exon level.
+
+
+Outline
+-------
+- infer splicing dependency
+- differential PSI tumor vs normal by cancer type
+
+"""
+
+import os
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_personalization')
+SRC_DIR = os.path.join(ROOT,'src')
+MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+DRUG_ASSOC_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
+TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
+
+GENEXPRS = {
+    "Kumar2022": 'TPM-hg38-8.tab.gz',
+    "Szenajch2020": 'TPM-hg38-12.tab.gz'
+}
+STUDIES = list(GENEXPRS.keys())
+
+EVENT_TYPES = ['EX'] # ['EX','ALTA','ALTD']
+DRUG_SCREENS = ['GDSC1','GDSC2']
+
+DATASETS = ['psi','spldep']
+PADJ_METHOD = 'fdr_bh'
+SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
+
+##### RULES #####
+rule all:
+    input:
+        # compute splicing dependency
+        expand(os.path.join(RESULTS_DIR,'files','{study}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, study=STUDIES),
+        # drug recommendations
+        expand(os.path.join(RESULTS_DIR,'files','{study}','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS, study=STUDIES),
+        expand(os.path.join(RESULTS_DIR,'files','{study}','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES, study=STUDIES)
+           
+        
+rule compute_splicing_dependency:
+    input:
+        psi = os.path.join(RAW_DIR,'articles','{study}','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = lambda wildcards: os.path.join(RAW_DIR,'articles','{study}','vast_out',GENEXPRS[wildcards.study]),
+        coefs_dir = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','{study}','splicing_dependency-{event_type}'))
+    threads: 15
+    resources:
+        runtime = 86400, # seconds = 24h = 1 day
+        memory = 30
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """
+        
+        
+rule predict_drug_response:
+    input:
+        spldep_dir = os.path.join(RESULTS_DIR,'files','{study}','splicing_dependency-{event_type}'),
+        fitted_dir = os.path.join(DRUG_ASSOC_DIR,'files','models_drug_response-{drug_screen}-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','{study}','estimated_drug_response-{drug_screen}-{event_type}'))
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter drugassoc_predict \
+                    --splicing_dependency_file={input.spldep_dir}/mean.tsv.gz \
+                    --model_summaries_file={input.fitted_dir}/model_summaries.tsv.gz \
+                    --fitted_growth_rates_file={input.fitted_dir}/growth_rates.tsv.gz \
+                    --fitted_spldep_file={input.fitted_dir}/fitted_splicing_dependency.tsv.gz \
+                    --output_dir={output}
+        """
+        
+        
+rule combine_drug_rankings:
+    input:
+        [os.path.join(RESULTS_DIR,'files','{study}','estimated_drug_response-{drug_screen}-{event_type}').format(drug_screen=drug_screen, event_type='{event_type}', study='{study}') for drug_screen in DRUG_SCREENS]
+    output:
+        os.path.join(RESULTS_DIR,'files','{study}','estimated_drug_response_by_drug-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for d in input:
+            cancer_type = os.path.basename(os.path.dirname(d))
+            drug_screen = os.path.basename(d).replace('estimated_drug_response-','')[:5]
+            print(drug_screen, cancer_type)
+            filename = os.path.join(d,'estimated_drug_response_by_drug.tsv.gz')
+            df = pd.read_table(filename)
+            df["cohort"] = cancer_type
+            df["drug_screen"] = drug_screen
+            dfs.append(df)
+            
+        dfs = pd.concat(dfs)    
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
