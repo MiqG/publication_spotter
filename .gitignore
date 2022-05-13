@@ -2,3 +2,4 @@
 *snakemake*
 .done
 *.pyc
+*snakejob*
