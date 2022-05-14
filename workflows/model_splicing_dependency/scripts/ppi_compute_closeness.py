@@ -78,7 +78,7 @@ def single_shortest_path(G, source, target, weight=None):
     return {"seed": source, "sink": target, "shortest_path_length": l}
 
 
-def compute_shortest_paths(ppi, seed_nodes, sink_nodes, n_jobs=None):
+def _compute_shortest_paths(ppi, seed_nodes, sink_nodes, n_jobs=None):
     """
     Shortest path length from drug targets to significant associations or
     to random genes.
@@ -98,7 +98,56 @@ def compute_shortest_paths(ppi, seed_nodes, sink_nodes, n_jobs=None):
     return result
 
 
-def compute_shortest_paths_random(
+def compute_shortest_paths(ppi, seed_nodes, sink_nodes, max_iter=50):
+    """
+    Get shortest path for every sink node to seed nodes.
+    """
+    shortest_path_lengths = []
+
+    for sink in tqdm(list(sink_nodes)):
+        for n in range(max_iter):
+            if n == 0:
+                # if we are at the first iteration
+                # we only check if there is an overlap
+                if sink in seed_nodes:
+                    # if there is an overlap, we stop
+                    shortest_path_lengths.append(
+                        {"sink": sink, "seeds": sink, "shortest_path_length": n}
+                    )
+                    break
+
+                sink_tmp = [sink]
+
+            elif n == max_iter:
+                print("Reached %s maximum iterations for sink %s" % (max_iter, sink))
+                shortest_path_lengths.append(
+                    {"sink": sink, "seeds": np.nan, "shortest_path_length": np.nan}
+                )
+
+            else:
+                # the sink node is at least 1 step away
+                # is any seed node one step away from the sink?
+                neighbors = [list(nx.neighbors(ppi, sink_i)) for sink_i in sink_tmp]
+                neighbors = set(sum(neighbors, []))
+                overlap = neighbors.intersection(seed_nodes)
+                if len(overlap) > 0:
+                    shortest_path_lengths.append(
+                        {
+                            "sink": sink,
+                            "seeds": ";".join(overlap),
+                            "shortest_path_length": n,
+                        }
+                    )
+                    break
+
+                sink_tmp = neighbors
+
+    result = pd.DataFrame(shortest_path_lengths)
+
+    return result
+
+
+def _compute_shortest_paths_random(
     ppi,
     seed_nodes,
     sink_nodes,
@@ -172,10 +221,10 @@ def main():
 
     # prepare
     ppi, seed_nodes, sink_nodes = prepare_data(ppi, seed_nodes, sink_nodes)
-    
+
     print("Computing shortest paths...")
     # compute shortest paths
-    result = compute_shortest_paths(ppi, seed_nodes, sink_nodes, n_jobs)
+    result = compute_shortest_paths(ppi, seed_nodes, sink_nodes)
 
     # save
     print("Saving data...")

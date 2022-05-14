@@ -740,18 +740,17 @@ rule ppi_cosmic_closeness_random:
         sink_nodes = os.path.join(PREP_DIR,'gene_sets','cancer_gene_census.txt')
     output:
         os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz')
-    threads: 12
+    threads: 1
     resources:
-        runtime = 3600*6, # 6h
+        runtime = 3600*8, # 6h
         memory = 6
     shell:
         """
-        python scripts/ppi_compute_closeness.py \
+        nice python scripts/ppi_compute_closeness.py \
                     --ppi_file={input.ppi} \
                     --seed_nodes_file={input.seed_nodes} \
                     --sink_nodes_file={input.sink_nodes} \
-                    --output_file={output} \
-                    --n_jobs={threads}
+                    --output_file={output}
         """
 
         
