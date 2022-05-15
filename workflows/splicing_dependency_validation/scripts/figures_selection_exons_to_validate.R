@@ -64,6 +64,9 @@ FONT_FAMILY = "Arial"
 # ccle_metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
+# cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
+# encore_ontology_file = file.path(ROOT,"results","model_splicing_dependency",'files','ENCORE','kd_gene_sets-EX.tsv.gz')
+# cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 
 # CCLE_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # spldep_file = file.path(CCLE_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
@@ -420,7 +423,8 @@ make_plots = function(ccle_stats, genes_oi, events_oi,
 }
 
 
-make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_stats){
+make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_stats,
+                        cancer_events, cosmic_genes, encore_ontology){
     
     # a table of exons to be considered for validation
     # as they have therapeutic potential
@@ -431,8 +435,18 @@ make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_
         left_join(
             ccle_harm_stats %>% 
             rename_at(vars(-event_gene),function(x) paste0("harm_",x)),
-            by = "event_gene")
-    
+            by = "event_gene") %>%
+        mutate(in_true_positive_set = EVENT %in% cancer_events[["EVENT"]],
+               in_cosmic_genes = GENE %in% cosmic_genes[["gene"]]) %>%
+        left_join(
+            encore_ontology %>% 
+            filter(EVENT %in% exons_info[["EVENT"]]) %>%
+            group_by(EVENT) %>%
+            arrange(term) %>%
+            summarize(putative_upstream_rbps = str_c(term, collapse = "; ")),
+            by = "EVENT"
+        )
+            
     figdata = list(
         "selection_exons" = list(
             "exons_info" = exons_info
@@ -518,6 +532,14 @@ main = function(){
             impact_clean=gsub("In the CDS, with uncertain impact",
                              "In the CDS (uncertain)",impact_clean))
     
+    encore_ontology = read_tsv(encore_ontology_file)
+    cancer_events = read_tsv(cancer_events_file)
+    cosmic_genes = read_tsv(cosmic_genes_file) %>%
+            dplyr::select("Gene Symbol") %>%
+            rename(gene = `Gene Symbol`) %>%
+            mutate(term = "COSMIC_CENSUS") %>%
+            dplyr::select(term,gene)
+    
     event_info = read_tsv(event_info_file)
     annot = read_tsv(annotation_file) %>%
         mutate(event_gene = paste0(EVENT,"_",GENE))
@@ -552,6 +574,8 @@ main = function(){
         filter(index %in% selected_events) %>%
         left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
         dplyr::select(-index)
+    
+    
     
     # subset cell types
     not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")
@@ -595,7 +619,8 @@ main = function(){
                       events_genes, protein_impact)
     
     # make figdata
-    figdata = make_figdata(events_oi, annot, event_info, protein_impact, ccle_harm_stats)
+    figdata = make_figdata(events_oi, annot, event_info, protein_impact, ccle_harm_stats,
+                           cancer_events, cosmic_genes, encore_ontology)
 
     # save
     save_plots(plts, figs_dir)
