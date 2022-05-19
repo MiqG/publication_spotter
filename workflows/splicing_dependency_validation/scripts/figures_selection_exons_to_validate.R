@@ -9,6 +9,9 @@
 # -------
 # 1. They must be targetable exons from our TCGA analysis
 # 2. How do they vary across cancer cell lines (median vs. standard deviation)
+# 3. Discard ORF disruption, only plated cells, 10 exons in total
+# 4. Add information on drugs
+# 5. Check splicing correlation between exons
 
 require(tidyverse)
 require(ggpubr)
@@ -201,26 +204,27 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     # summarize the selection of exons for our experiment
     # requirements
     # ------------
-    # 1. Exclusion is harmful
-    # 2. Gene expression: log2(TPM+1)>2.5
-    # 3. Splicing: PSI>25
-    
+    # 1. [X] Exclusion is harmful
+    # 2. [X] Gene expression: log2(TPM+1)>2.5
+    # 3. [X] Splicing: PSI>25
+    # 4. [X] Not ORF disruption
+    # 5. [X] 10 exons in total
     
     # distributions of harm scores
     X = ccle_harm_stats %>%
         filter(event_gene %in% events_oi) %>%
         mutate(EVENT = gsub("_.*","", event_gene),
                GENE = gsub(".*_","", event_gene)) %>%
-        left_join(protein_impact, by="EVENT")
+        left_join(protein_impact, by="EVENT") %>%
+        filter(str_detect(impact_clean, "Alternative protein")) %>%
+        filter(event_gene != "HsaEX1036699_SFPQ") # too long of an exon
+    
     plts[["selection_exons-median_vs_std"]] = X %>% 
         ggplot(aes(x=med, y=std)) + 
         geom_scattermore(pixels=c(1000,1000), pointsize=3, alpha=0.5) + 
         theme_pubr() + 
         geom_text_repel(aes(label=event_gene, color=impact_clean), 
-                        X %>% slice_max(abs(med*std), n=12), max.overlaps=50,
-                        segment.size=0.1, size=FONT_SIZE, family=FONT_FAMILY) +
-        geom_text_repel(aes(label=event_gene, color=impact_clean), 
-                        X %>% slice_min(abs(med*std), n=6), max.overlaps=50,
+                        X, max.overlaps=50,
                         segment.size=0.1, size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="log10(median(Harm Score))", y="Standard Deviation", 
              color="Splicing Impact",
@@ -231,9 +235,9 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     # select cell pairs
     ## top most harmful and variant exons, and most harmless
     top_selection = X %>% 
-        slice_max(abs(med*std), n=12) %>% 
-        arrange(-std) %>% 
-        bind_rows(X %>% slice_min(abs(med*std), n=6) %>% arrange(-std)) %>%
+        #slice_max(abs(med*std), n=7) %>% 
+        #arrange(-std) %>% 
+        #bind_rows(X %>% slice_min(abs(med*std), n=3) %>% arrange(-std)) %>%
         distinct()
     
     ## samples that comply requirements
@@ -271,8 +275,8 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     compliant_samples = intersect(compliant_samples, compliant_samples_harm)
     
     ## split the list in two (high-variant and low-variant)
-    high_var = top_selection %>% slice_max(std, n=6) %>% pull(event_gene) # find most different
-    low_var = top_selection %>% slice_min(std, n=12) %>% pull(event_gene) # find most similar
+    high_var = top_selection %>% slice_max(std, n=4) %>% pull(event_gene) # find most different
+    low_var = top_selection %>% slice_min(std, n=8) %>% pull(event_gene) # find most similar
     
     ## find pair of cells with opposite high-variant and 
     ## similar low-variant harm scores
@@ -299,12 +303,12 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     # harm scores in selected cells
     for (i in 1:TOP_N) {
         cells_oi = corrs %>% 
-        mutate(score = (-1)*correlation_high + correlation_low) %>% 
-        arrange(-score) %>%
-        filter(row_number() == i) %>% # take top N cell-cell pair
-        dplyr::select(row,col) %>% 
-        unlist() %>%
-        as.vector()
+            mutate(score = (-1)*correlation_high + correlation_low) %>% 
+            arrange(-score) %>%
+            filter(row_number() == i) %>% # take top N cell-cell pair
+            dplyr::select(row,col) %>% 
+            unlist() %>%
+            as.vector()
     
         X = ccle_harm %>%
             filter(event_gene %in% top_events) %>%
@@ -314,9 +318,9 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
                    avg = mean(c(get(cells_oi[1]), get(cells_oi[2])), na.rm=TRUE)) %>%
             ungroup() %>%
             arrange(-avg) %>%
-            mutate(event_harm = ifelse(row_number()<=6, "harmless", "harmful")) %>%
+            mutate(event_harm = ifelse(row_number()<=4, "harmless", "harmful")) %>%
             arrange(-diff) %>%
-            mutate(event_var = ifelse(row_number()<=6, "var", "ctt"),
+            mutate(event_var = ifelse(row_number()<=4, "var", "ctt"),
                    label = paste0(event_harm,"_",event_var)) %>%
             arrange(label,-diff) %>% 
             dplyr::select(c(event_gene,cells_oi,label)) %>%
@@ -325,17 +329,17 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
             left_join(protein_impact %>% distinct(EVENT, impact_clean), by="EVENT") %>%
             mutate(event_length = cut(LE_o, breaks=c(1,50,100,250,500,1000,2000,3000,4000)))
 
-        colors_events = c("harmful_var"="red", "harmful_ctt"="yellow", "harmless_ctt"="grey")
-        colors_lengths = setNames(get_palette("Greens",4), X %>% pull(event_length) %>% unique() %>% sort())
-        colors_impact = setNames(get_palette("jco",5), X %>% pull(impact_clean) %>% unique() %>% sort())
+        #colors_events = c("harmful_var"="red", "harmful_ctt"="yellow", "harmless_ctt"="grey")
+        colors_lengths = setNames(get_palette("Greens",3), X %>% pull(event_length) %>% unique() %>% sort())
+        colors_impact = setNames(get_palette("jco",1), X %>% pull(impact_clean) %>% unique() %>% sort())
         colors_annot = list(
-            label = colors_events,
+            #label = colors_events,
             event_length = colors_lengths,
             impact_clean = colors_impact
         )
-        annotation_row = HeatmapAnnotation(df=X %>% 
+        annotation_row = HeatmapAnnotation(df = X %>% 
                                                column_to_rownames("event_gene") %>% 
-                                               dplyr::select(label, impact_clean, event_length), 
+                                               dplyr::select(impact_clean, event_length), 
                                            name="Event Info", which="row", col=colors_annot)
 
 
@@ -437,7 +441,9 @@ make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_
             rename_at(vars(-event_gene),function(x) paste0("harm_",x)),
             by = "event_gene") %>%
         mutate(in_true_positive_set = EVENT %in% cancer_events[["EVENT"]],
-               in_cosmic_genes = GENE %in% cosmic_genes[["gene"]]) %>%
+               in_cosmic_genes = GENE %in% cosmic_genes[["gene"]])
+            
+    exons_info = exons_info %>%
         left_join(
             encore_ontology %>% 
             filter(EVENT %in% exons_info[["EVENT"]]) %>%
@@ -485,7 +491,7 @@ save_plots = function(plts, figs_dir){
 #         pdf(file.path(figs_dir,sprintf('selection_exons-harm-heatmap-%s.pdf',i)), width=16*cm, height=13*cm)
 #         plts[[sprintf('selection_exons-harm-heatmap-%s',i)]] %>% draw(legend_labels_gp = gpar(fontsize=6)) # this does nothing
 #         dev.off()
-        save_plt(plts, paste0('selection_exons-harm-heatmap-',i), '.pdf', figs_dir, width=14, height=15, format=FALSE)
+        save_plt(plts, paste0('selection_exons-harm-heatmap-',i), '.pdf', figs_dir, width=20, height=15, format=FALSE)
         save_plt(plts, paste0('selection_exons-genexpr-violin-',i), '.pdf', figs_dir, width=7, height=7)
         save_plt(plts, paste0('selection_exons-splicing-violin-',i), '.pdf', figs_dir, width=10, height=10)
     }
@@ -524,13 +530,16 @@ main = function(){
     protein_impact = read_tsv(protein_impact_file) %>%
         dplyr::rename(EVENT=EventID, impact=ONTO) %>%
         mutate(
+            impact = gsub("ORF disruption upon sequence inclusion (Alt. Stop)",
+                          "Alternative protein isoforms (Ref, Alt. Stop)", impact),
             impact_clean=gsub(" \\(.*","",impact),
             impact_clean=gsub("ORF disruption upon sequence exclusion",
                             "ORF disruption (exclusion)",impact_clean),
             impact_clean=gsub("ORF disruption upon sequence inclusion",
                             "ORF disruption (inclusion)",impact_clean),
             impact_clean=gsub("In the CDS, with uncertain impact",
-                             "In the CDS (uncertain)",impact_clean))
+                             "In the CDS (uncertain)",impact_clean)
+        )
     
     encore_ontology = read_tsv(encore_ontology_file)
     cancer_events = read_tsv(cancer_events_file)
@@ -575,19 +584,18 @@ main = function(){
         left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
         dplyr::select(-index)
     
-    
-    
     # subset cell types
     not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")
+    cultures_oi = c("Adherent","not found",NA)
     to_drop = ccle_metadata %>%
-        filter(primary_disease %in% not_oi) %>% 
+        filter((primary_disease %in% not_oi) | !(culture_type %in% cultures_oi)) %>%
         pull(DepMap_ID)
     
     ccle_genexpr = ccle_genexpr %>%
         dplyr::select(-any_of(to_drop))
     ccle_splicing = ccle_splicing %>%
         dplyr::select(-any_of(to_drop))
-    cclE_spldep = ccle_spldep %>%
+    ccle_spldep = ccle_spldep %>%
         dplyr::select(-any_of(to_drop))
     
     # prep results differential analyses

@@ -1,0 +1,84 @@
+"""
+Author: Miquel Anglada Girotto
+Contact: miquelangladagirotto [at] gmail [dot] com
+Last Update: 2021-01-12
+
+Workflow purpose
+--------------
+Workflow to analyze putative associations between exons and cancer at single-exon level.
+
+
+Outline
+-------
+        
+"""
+
+import os
+import pandas as pd
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_validation')
+
+EVENTS_OI = [
+    "HsaEX0052877",
+    "HsaEX0049558",
+    "HsaEX0026116",
+    "HsaEX0070392",
+    "HsaEX0020455",
+    "HsaEX0044468",
+    "HsaEX0022946",
+    "HsaEX0044398",
+    "HsaEX0043609",
+    "HsaEX0066096",
+    "HsaEX0006970",
+    "HsaEX0056284",
+]
+
+event_info = pd.read_table(os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"))
+EVENTS_INFO = {
+    event: {
+        "event_chr": event_info.loc[event_info["EVENT"]==event,"COORD_o"].values[0].split(":")[0],
+        "event_start": event_info.loc[event_info["EVENT"]==event,"COORD_o"].values[0].split(":")[1].split("-")[0],
+        "event_end": event_info.loc[event_info["EVENT"]==event,"COORD_o"].values[0].split(":")[1].split("-")[1],
+        "event_strand": event_info.loc[event_info["EVENT"]==event,"REF_CO"].values[0].split(":")[-1]
+    }
+    for event in EVENTS_OI
+}
+
+##### RULES #####
+rule all:
+    input:
+        # fit gene dependencies and get empirical distributions of coefficients
+        expand(os.path.join(RESULTS_DIR,"pangolin_splicing_enhancers","{event}"), event=EVENTS_OI)
+    
+    
+rule get_splicing_enhancers:
+    input:
+        reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz")
+    output:
+        directory(os.path.join(RESULTS_DIR,"pangolin_splicing_enhancers","{event}"))
+    params:
+        event_chr = lambda wildcards: EVENTS_INFO[wildcards.event]["event_chr"],
+        event_start = lambda wildcards: EVENTS_INFO[wildcards.event]["event_start"],
+        event_end = lambda wildcards: EVENTS_INFO[wildcards.event]["event_end"],
+        event_strand = lambda wildcards: EVENTS_INFO[wildcards.event]["event_strand"],
+        margin_out = 30,
+        margin_in = 15
+    shell:
+        """
+        nice python scripts/explore_splicing_enhancers.py \
+                --event_chr={params.event_chr} \
+                --event_start={params.event_start} \
+                --event_end={params.event_end} \
+                --event_strand={params.event_strand} \
+                --margin_out={params.margin_out} \
+                --margin_in={params.margin_in} \
+                --reference_file={input.reference} \
+                --output_dir={output}
+        """
+        
+        
+        
