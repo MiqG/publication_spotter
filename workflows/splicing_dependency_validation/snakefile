@@ -21,6 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_validation')
+PANGOLIN_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','Pangolin')
 
 EVENTS_OI = [
     "HsaEX0052877",
@@ -35,6 +36,7 @@ EVENTS_OI = [
     "HsaEX0066096",
     "HsaEX0006970",
     "HsaEX0056284",
+    "HsaEX0034998"
 ]
 
 event_info = pd.read_table(os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"))
@@ -52,31 +54,37 @@ EVENTS_INFO = {
 rule all:
     input:
         # fit gene dependencies and get empirical distributions of coefficients
-        expand(os.path.join(RESULTS_DIR,"pangolin_splicing_enhancers","{event}"), event=EVENTS_OI)
+        expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{event}"), event=EVENTS_OI)
     
     
 rule get_splicing_enhancers:
     input:
-        reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz")
+        reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz"),
+        pangolin_dir = PANGOLIN_DIR
     output:
-        directory(os.path.join(RESULTS_DIR,"pangolin_splicing_enhancers","{event}"))
+        directory(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{event}"))
     params:
+        event_name = "{event}",
         event_chr = lambda wildcards: EVENTS_INFO[wildcards.event]["event_chr"],
         event_start = lambda wildcards: EVENTS_INFO[wildcards.event]["event_start"],
         event_end = lambda wildcards: EVENTS_INFO[wildcards.event]["event_end"],
         event_strand = lambda wildcards: EVENTS_INFO[wildcards.event]["event_strand"],
-        margin_out = 30,
-        margin_in = 15
+        margin_out = 30
+    threads: 1
+    resources:
+        runtime = 3600*6, # 6h
+        memory = 10 # GB
     shell:
         """
         nice python scripts/explore_splicing_enhancers.py \
+                --event_name={params.event_name} \
                 --event_chr={params.event_chr} \
                 --event_start={params.event_start} \
                 --event_end={params.event_end} \
                 --event_strand={params.event_strand} \
                 --margin_out={params.margin_out} \
-                --margin_in={params.margin_in} \
                 --reference_file={input.reference} \
+                --pangolin_dir={input.pangolin_dir} \
                 --output_dir={output}
         """
         

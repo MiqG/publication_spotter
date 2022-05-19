@@ -39,6 +39,9 @@ THRESH_GENEXPR = 2
 THRESH_PSI = 25
 TOP_N = 5
 
+THRESH_DRUGS_FDR = 0.1
+THRESH_DRUGS_NOBS = 20
+
 # formatting
 PAL_SINGLE_ACCENT = "orange"
 PAL_SINGLE_LIGHT = "#efb300ff"#"#6AC2BF"
@@ -75,6 +78,10 @@ FONT_FAMILY = "Arial"
 # spldep_file = file.path(CCLE_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 # spldep_ccle_file = file.path(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
 # selected_events_file = file.path(CCLE_DIR,'files','selected_models-EX.txt')
+
+# DRUGS_DIR = file.path(ROOT,"results","splicing_dependency_drugs")
+# drug_models_file = file.path(DRUGS_DIR,"files","model_summaries_drug_response-EX.tsv.gz")
+# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz') 
 
 # TCGA_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
 
@@ -275,7 +282,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     compliant_samples = intersect(compliant_samples, compliant_samples_harm)
     
     ## split the list in two (high-variant and low-variant)
-    high_var = top_selection %>% slice_max(std, n=4) %>% pull(event_gene) # find most different
+    high_var = top_selection %>% slice_max(std, n=5) %>% pull(event_gene) # find most different
     low_var = top_selection %>% slice_min(std, n=8) %>% pull(event_gene) # find most similar
     
     ## find pair of cells with opposite high-variant and 
@@ -371,7 +378,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
                 column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
                 heatmap_legend_param = list(legend_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY)),
                 cell_fun = function(j, i, x, y, width, height, fill) {
-                        grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize=6))
+                        grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize=6, fontfamily=FONT_FAMILY))
             }) %>% 
             draw() %>%
             grid.grabExpr() %>%
@@ -410,6 +417,29 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
             labs(x="Cell Line", y="PSI")
     }
     
+    # correlations between splicing events
+    mat = ccle_splicing %>% 
+        filter(event_gene %in% top_events) %>% 
+        column_to_rownames("event_gene") %>% 
+        as.matrix() %>% 
+        t() %>% 
+        cor(method="spearman", use="pairwise.complete.obs") %>% 
+        round(2)
+    
+    plts[["selection_exons-splicing-corr"]] = mat %>% # standardize for visualization
+        Heatmap(
+            name="Spearman Corr.",
+            row_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+            column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+            heatmap_legend_param = list(legend_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY)),
+            cell_fun = function(j, i, x, y, width, height, fill) {
+                    grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize=6, fontfamily=FONT_FAMILY))
+        }) %>% 
+        draw() %>%
+        grid.grabExpr() %>%
+        as.ggplot()
+
+    
     return(plts)
 }
 
@@ -442,7 +472,8 @@ make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_
             by = "event_gene") %>%
         mutate(in_true_positive_set = EVENT %in% cancer_events[["EVENT"]],
                in_cosmic_genes = GENE %in% cosmic_genes[["gene"]])
-            
+    
+    ## add ontology        
     exons_info = exons_info %>%
         left_join(
             encore_ontology %>% 
@@ -451,6 +482,21 @@ make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_
             arrange(term) %>%
             summarize(putative_upstream_rbps = str_c(term, collapse = "; ")),
             by = "EVENT"
+        )
+            
+    ## add drug associations
+    exons_info = exons_info %>%
+        left_join(
+            drug_models %>% 
+            left_join(
+                drug_targets %>% 
+                distinct(DRUG_ID, DRUG_NAME), 
+                by="DRUG_ID"
+            ) %>% 
+            distinct(EVENT, DRUG_NAME) %>%
+            group_by(EVENT) %>%
+            summarize(drug_associations = str_c(DRUG_NAME, collapse = "; ")),
+            by="EVENT"
         )
             
     figdata = list(
@@ -491,11 +537,12 @@ save_plots = function(plts, figs_dir){
 #         pdf(file.path(figs_dir,sprintf('selection_exons-harm-heatmap-%s.pdf',i)), width=16*cm, height=13*cm)
 #         plts[[sprintf('selection_exons-harm-heatmap-%s',i)]] %>% draw(legend_labels_gp = gpar(fontsize=6)) # this does nothing
 #         dev.off()
-        save_plt(plts, paste0('selection_exons-harm-heatmap-',i), '.pdf', figs_dir, width=20, height=15, format=FALSE)
+        save_plt(plts, paste0('selection_exons-harm-heatmap-',i), '.pdf', figs_dir, width=18, height=15, format=FALSE)
         save_plt(plts, paste0('selection_exons-genexpr-violin-',i), '.pdf', figs_dir, width=7, height=7)
         save_plt(plts, paste0('selection_exons-splicing-violin-',i), '.pdf', figs_dir, width=10, height=10)
     }
     
+    save_plt(plts, "selection_exons-splicing-corr", '.pdf', figs_dir, width=15, height=13)
 }
 
 
@@ -530,8 +577,8 @@ main = function(){
     protein_impact = read_tsv(protein_impact_file) %>%
         dplyr::rename(EVENT=EventID, impact=ONTO) %>%
         mutate(
-            impact = gsub("ORF disruption upon sequence inclusion (Alt. Stop)",
-                          "Alternative protein isoforms (Ref, Alt. Stop)", impact),
+            impact = gsub("ORF disruption upon sequence inclusion \\(Alt\\. Stop\\)",
+                          "Alternative protein isoforms \\(Ref, Alt\\. Stop\\)", impact),
             impact_clean=gsub(" \\(.*","",impact),
             impact_clean=gsub("ORF disruption upon sequence exclusion",
                             "ORF disruption (exclusion)",impact_clean),
@@ -583,6 +630,14 @@ main = function(){
         filter(index %in% selected_events) %>%
         left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
         dplyr::select(-index)
+    
+    drug_models = read_tsv(drug_models_file) %>% 
+        mutate(event_gene = paste0(EVENT,"_",GENE),
+               event_type = gsub("Hsa","",gsub("[^a-zA-Z]", "",EVENT))) %>%
+        filter(lr_padj < THRESH_DRUGS_FDR & n_obs > THRESH_DRUGS_NOBS)
+    drug_targets = read_tsv(drug_targets_file) %>% 
+        mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
+        distinct(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY)
     
     # subset cell types
     not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")

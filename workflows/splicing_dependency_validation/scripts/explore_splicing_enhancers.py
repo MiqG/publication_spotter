@@ -22,7 +22,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 # variables
-PANGOLIN_PATH = "/home/miquel/repositories/Pangolin"
 MODELS_SPLICING_PROB = [0, 2, 4, 6]
 MODELS_SPLICING_USAGE = [1, 3, 5, 7]
 MODELS_SPLICING = MODELS_SPLICING_PROB
@@ -39,16 +38,17 @@ event_strand = "+"
 margin_out = 30
 margin_in = 15
 output_dir = "."
+pangolin_dir = "/home/miquel/repositories/Pangolin"
 """
 
 ##### FUNCTIONS #####
-def load_models():
+def load_models(pangolin_dir):
     models = []
     for i in MODELS_SPLICING:
         for j in range(1, 4):
             model = Pangolin(L, W, AR)
             weights_file = os.path.join(
-                PANGOLIN_PATH, "pangolin", "models", "final.%s.%s.3.v2"
+                pangolin_dir, "pangolin", "models", "final.%s.%s.3.v2"
             ) % (j, i)
             if torch.cuda.is_available():
                 weights = torch.load(weights_file)
@@ -62,7 +62,6 @@ def load_models():
 
 def prep_sequence(chromosome, position, ref_seq, distance):
     try:
-        # seq = ref_seq[chromosome][(position - 5000) : (position + 5000)].seq
         seq = ref_seq[chromosome][
             position - 5001 - distance : position + 1 + 4999 + distance
         ].seq
@@ -196,13 +195,10 @@ def explore_splicing_enhancers_single(
 
 
 def explore_splicing_enhancers(
-    event_chr, event_start, event_end, event_strand, margin_out, margin_in, ref_seq, models
+    event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models
 ):
     # positions to mutagenize
-    positions = list(range(event_start - margin_out, event_start + margin_in)) + list(
-        range(event_end - margin_in, event_end + margin_out)
-    )
-    positions = list(set(positions)) # in case there are overlaps, do not do the operation twice
+    positions = list(range(event_start - margin_out, event_end + margin_out + 1))
 
     results = []
     for position in tqdm(positions):
@@ -220,13 +216,13 @@ def explore_splicing_enhancers(
     return results
 
 
-def make_plots(result, margin_out=30, margin_in=15, output_dir=".", width=5, height=5):
+def make_plots(result, margin_out=30, output_dir=".", width=5, height=5):
     cm = 1 / 2.54
-    
     
     X = result
 
     # init
+    event = X["event_name"].unique()[0]
     start = X["event_start"].unique()[0]
     end = X["event_end"].unique()[0]
     mut_pos = X[["position", "mut_pos"]].drop_duplicates()
@@ -237,23 +233,19 @@ def make_plots(result, margin_out=30, margin_in=15, output_dir=".", width=5, hei
 
     ## gain
     fig, ax = plt.subplots(figsize=(width * cm, height * cm))
-    ax.add_patch( Rectangle((start, 0.88),end - start,0.1,color="green",alpha=0.9,zorder=2) )
     ax.scatter(x=X["position"], y=X["score_gain"], alpha=0.5, s=5, zorder=3)
-    ax.axvspan(start - margin_out, start + margin_in, facecolor='yellow', alpha=0.25, zorder=1)
-    ax.axvspan(end - margin_in, end + margin_out, facecolor='yellow', alpha=0.25, zorder=1)
+    ax.axvspan(start, end, facecolor='green', alpha=0.25, zorder=1)
     plt.ylim(-1,1)
-    plt.title("All Score Gain")
+    plt.title("All Score Gain | %s" % event)
 
     plt.savefig(os.path.join(output_dir,"all_score_gain.png"), pad_inches=0)
     
     ## loss
     fig, ax = plt.subplots(figsize=(width * cm, height * cm))
-    ax.add_patch( Rectangle((start, 0.88),end - start,0.1,color="green",alpha=0.9,zorder=2) )
     ax.scatter(x=X["position"], y=X["score_loss"], alpha=0.5, s=5, zorder=3)
-    ax.axvspan(start - margin_out, start + margin_in, facecolor='yellow', alpha=0.25, zorder=1)
-    ax.axvspan(end - margin_in, end + margin_out, facecolor='yellow', alpha=0.25, zorder=1)
+    ax.axvspan(start, end, facecolor='green', alpha=0.25, zorder=1)
     plt.ylim(-1,1)
-    plt.title("All Score Loss")
+    plt.title("All Score Loss | %s" % event)
     
     plt.savefig(os.path.join(output_dir,"all_score_loss.png"), pad_inches=0)
     
@@ -272,13 +264,11 @@ def make_plots(result, margin_out=30, margin_in=15, output_dir=".", width=5, hei
     )
     
     fig, ax = plt.subplots(figsize=(width * cm, height * cm))
-    ax.add_patch( Rectangle((start, 0.88),end - start,0.1,color="green",alpha=0.9,zorder=2) )
     ax.scatter(x=X["mut_pos"], y=X["score_gain"], alpha=0.5, s=5, zorder=3)
-    ax.axvspan(start - margin_out, start + margin_in, facecolor='yellow', alpha=0.25, zorder=1)
-    ax.axvspan(end - margin_in, end + margin_out, facecolor='yellow', alpha=0.25, zorder=1)
+    ax.axvspan(start, end, facecolor='green', alpha=0.25, zorder=1)
     plt.xlabel("Mutagenesis Position")
     plt.ylabel("Predicted Splice Site Usage Change")
-    plt.title("SS Score Gain")
+    plt.title("SS Score Gain | %s" % event)
     plt.ylim(-1,1)
     
     plt.savefig(os.path.join(output_dir,"ss_score_gain.png"), pad_inches=0)
@@ -296,13 +286,11 @@ def make_plots(result, margin_out=30, margin_in=15, output_dir=".", width=5, hei
     )
     
     fig, ax = plt.subplots(figsize=(width * cm, height * cm))
-    ax.add_patch( Rectangle((start, 0.88),end - start,0.1,color="green",alpha=0.9,zorder=2) )
     ax.scatter(x=X["mut_pos"], y=X["score_loss"], alpha=0.5, s=5, zorder=3)
-    ax.axvspan(start - margin_out, start + margin_in, facecolor='yellow', alpha=0.25, zorder=1)
-    ax.axvspan(end - margin_in, end + margin_out, facecolor='yellow', alpha=0.25, zorder=1)
+    ax.axvspan(start, end, facecolor='green', alpha=0.25, zorder=1)
     plt.xlabel("Mutagenesis Position")
     plt.ylabel("Predicted Splice Site Usage Change")
-    plt.title("SS Score Loss")
+    plt.title("SS Score Loss | %s" % event)
     plt.ylim(-1,1)
     
     plt.savefig(os.path.join(output_dir,"ss_score_loss.png"), pad_inches=0)
@@ -310,13 +298,14 @@ def make_plots(result, margin_out=30, margin_in=15, output_dir=".", width=5, hei
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--event_name", type=str)
     parser.add_argument("--event_chr", type=str)
     parser.add_argument("--event_start", type=int)
     parser.add_argument("--event_end", type=int)
     parser.add_argument("--event_strand", type=str)
     parser.add_argument("--margin_out", type=int)
-    parser.add_argument("--margin_in", type=int)
     parser.add_argument("--reference_file", type=str)
+    parser.add_argument("--pangolin_dir", type=str)
     parser.add_argument("--output_dir", type=str)
 
     args = parser.parse_args()
@@ -327,29 +316,32 @@ def parse_args():
 def main():
     # unpack arguments
     args = parse_args()
+    event_name = args.event_name
     event_chr = args.event_chr
     event_start = args.event_start
     event_end = args.event_end
     event_strand = args.event_strand
     margin_out = args.margin_out
-    margin_in = args.margin_in
     reference_file = args.reference_file
+    pangolin_dir = args.pangolin_dir
     output_dir = args.output_dir
 
     # load
-    models = load_models()
+    models = load_models(pangolin_dir)
     ref_seq = pyfastx.Fasta(reference_file)
 
     # analysis
     result = explore_splicing_enhancers(
-        event_chr, event_start, event_end, event_strand, margin_out, margin_in, ref_seq, models
+        event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models
     )
+    results["event_name"] = event_name
     
     # save
+    os.makedirs(output_dir, exist_ok=True)
     result.to_csv(os.path.join(output_dir,"mutagenesis.tsv.gz"), sep="\t", compression="gzip", index=False)
     
     # viz
-    make_plots(result, margin_out, margin_in, output_dir, 12, 12)
+    make_plots(result, margin_out, output_dir, 12, 12)
     
 
 ##### SCRIPT #####

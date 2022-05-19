@@ -970,6 +970,13 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Event Kb)", fill="Dataset Type") +
         theme_pubr(x.text.angle=70)
     
+    x = X %>% 
+        mutate(random_iteration = replace_na(random_iteration, "real")) %>% 
+        group_by(Variant_Classification, random_iteration) %>% 
+        summarize(med = median(event_mut_freq_per_kb, na.rm=TRUE)) %>% 
+        ungroup()
+    
+    x %>% ggviolin(x="Variant_Classification", y="med") + yscale("log10") + geom_point(data=x %>% filter(random_iteration=="real")) + theme_pubr(x.text.angle = 70)
     
     return(plts)
 }
