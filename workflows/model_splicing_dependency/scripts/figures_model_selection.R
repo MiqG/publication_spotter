@@ -741,6 +741,55 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich,
         labs(x="Shortest Path Length", y="Rel. Proportion", fill="Dataset Type") +
         geom_text(aes(x=1.7, y=0.7, label=label), test, size=FONT_SIZE, family=FONT_FAMILY)
     
+    # consider type of splicing impact
+    X = ppi_closeness %>%
+        left_join(models %>% distinct(GENE, term_clean), by=c("sink"="GENE")) %>%
+        count(term_clean, type, shortest_path_length) %>%
+        group_by(term_clean, type) %>%
+        mutate(freq = n / sum(n)) %>%
+        ungroup() %>%
+        drop_na()
+    
+    test = lapply(unique(models[["term_clean"]]), function(term_i){
+        
+        df = tryCatch(
+                ppi_closeness %>%
+                left_join(models %>% distinct(GENE, term_clean), by=c("sink"="GENE")) %>%
+                filter(term_clean == term_i) %>%
+                compare_means(
+                    shortest_path_length ~ type, data=.,
+                    method = "kruskal.test"
+                ) %>%
+                mutate(label = paste0(method,", = ",p.adj),
+                       term_clean = term_i),
+            
+                error = function(e){
+                    df = data.frame(
+                        ".y." = NA,
+                        "p" = NA,
+                        "p.adj" = NA,
+                        "p.format" = NA,
+                        "p.signif" = NA,
+                        "method" = NA,
+                        "label" = NA,
+                        "term_clean" = term_i
+                    )
+                    
+                    return(df)
+                }
+            )
+        
+        return(df)
+    })
+    test = do.call(rbind, test)
+    
+    plts[["model_prop-ppi_closeness_by_impact"]] = X %>% 
+        ggbarplot(x="shortest_path_length", y="freq", fill="type", 
+                  color=NA, position=position_dodge(0.7), 
+                  palette=c("grey", PAL_SINGLE_LIGHT)) +
+        labs(x="Shortest Path Length", y="Rel. Proportion", fill="Dataset Type") +
+        geom_text(aes(x=1.7, y=0.7, label=label), test, size=FONT_SIZE, family=FONT_FAMILY) + 
+        facet_wrap(~term_clean)
     
     return(plts)
 }
@@ -780,6 +829,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
     
+    # normalize with respect to silent mutations
     gene_mut_freq_null = X %>%
         distinct(GENE, Variant_Classification, is_selected, mut_freq_per_kb) %>%
         filter(Variant_Classification == "Silent") %>%
@@ -788,11 +838,11 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         ungroup() %>%
         distinct(is_selected, null_mut_freq)
     
-    X = X %>%
+    x = X %>%
         left_join(gene_mut_freq_null, by="is_selected") %>%
         mutate(mut_freq_norm = mut_freq_per_kb / null_mut_freq)
     
-    plts[["model_val-mutation_gene_frequency_norm"]] = X %>% 
+    plts[["model_val-mutation_gene_frequency_silent_norm"]] = x %>% 
         ggplot(aes(x=Variant_Classification, y=mut_freq_norm, 
                    group=interaction(Variant_Classification,is_selected))) +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
@@ -804,6 +854,48 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb) Norm.", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
     
+    # normalize by random selection selected and not selected
+    gene_mut_freq_null_selected = randsel_genes %>% 
+        left_join(X %>% distinct(Variant_Classification, mut_freq_per_kb, GENE), by="GENE") %>%
+        group_by(random_iteration, Variant_Classification) %>%
+        summarize(null_mut_freq = median(mut_freq_per_kb),
+                  n = n()) %>%
+        mutate(is_selected = TRUE) %>%
+        ungroup()
+    
+    gene_mut_freq_null_notsel = X %>% 
+        distinct(GENE) %>%
+        mutate(count = 1000) %>%
+        uncount(count) %>%
+        group_by(GENE) %>%
+        mutate(random_iteration = paste0("it",row_number()-1)) %>%
+        ungroup() %>%
+        left_join(randsel_genes %>% mutate(is_selected = TRUE), 
+                  by=c("GENE","random_iteration")) %>%
+        filter(is.na(is_selected)) %>%
+        left_join(X %>% distinct(Variant_Classification, mut_freq_per_kb, GENE), by="GENE") %>%
+        group_by(random_iteration, Variant_Classification) %>%
+        summarize(null_mut_freq = median(mut_freq_per_kb),
+                  n = n()) %>%
+        mutate(is_selected = FALSE)
+    
+    gene_mut_freq_null = rbind(gene_mut_freq_null_selected, gene_mut_freq_null_notsel)
+    
+    x = X %>%
+        left_join(gene_mut_freq_null, by="is_selected") %>%
+        mutate(mut_freq_norm = mut_freq_per_kb / null_mut_freq)
+    
+    plts[["model_val-mutation_gene_frequency_random_norm"]] = x %>% 
+        ggplot(aes(x=Variant_Classification, y=mut_freq_norm, 
+                   group=interaction(Variant_Classification,is_selected))) +
+        geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
+                     position=position_dodge(0.7)) +
+        stat_compare_means(aes(group=is_selected), method="wilcox.test", 
+                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
+        yscale("log10", .format=TRUE) + 
+        fill_palette(PAL_DUAL) +
+        labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb) Norm.", fill="Selected Model") +
+        theme_pubr(x.text.angle=70)
     
     # - mutation frequencies at the exon level
     # how often do selected exons get hit when the gene is mutated?
@@ -1195,7 +1287,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_val-mutation_gene_count", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_count", ".pdf", figs_dir, width=8, height=10)
     save_plt(plts, "model_val-mutation_gene_frequency", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_val-mutation_gene_frequency_norm", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "model_val-mutation_gene_frequency_silent_norm", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "model_val-mutation_gene_frequency_random_norm", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_frequency", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_frequency-by_protein_impact", ".pdf", figs_dir, width=14, height=8)
     save_plt(plts, "model_val-mutation_gene_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)

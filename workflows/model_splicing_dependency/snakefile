@@ -215,18 +215,19 @@ rule random_model_selection:
         # randomly select exon models and save them
         os.makedirs(output.selected_events_dir)
         os.makedirs(output.selected_genes_dir)
-        
-        for it in range(params.n_random_it):
+
+        for it in np.arange(params.n_random_it):
             #print(it)
             
-            # select randomly 
             np.random.seed(it) # ensure reproducibility
+            
+            # select randomly 
             random_events = np.random.choice(models["EVENT"], size=n_selected, replace=False)
-            models = models.loc[models["EVENT"].isin(random_events)].copy()
+            tmp_models = models.loc[models["EVENT"].isin(random_events)].copy()
             
             # save
-            models["EVENT"].to_csv(os.path.join(output.selected_events_dir,str(it)+".txt"), sep="\t", header=None, index=False)
-            models["GENE"].drop_duplicates().to_csv(os.path.join(output.selected_genes_dir,str(it)+".txt"), sep="\t", header=None, index=False)
+            tmp_models["EVENT"].to_csv(os.path.join(output.selected_events_dir,str(it)+".txt"), sep="\t", header=None, index=False)
+            tmp_models["GENE"].drop_duplicates().to_csv(os.path.join(output.selected_genes_dir,str(it)+".txt"), sep="\t", header=None, index=False)
             
         print("Done!")
 
