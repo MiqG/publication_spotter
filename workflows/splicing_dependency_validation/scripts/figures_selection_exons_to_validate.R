@@ -60,6 +60,7 @@ FONT_FAMILY = "Arial"
 # -----------
 # RAW_DIR = file.path(ROOT,'data','raw')
 # PREP_DIR = file.path(ROOT,'data','prep')
+# SUPPORT_DIR = file.path(ROOT,'support')
 
 # annotation_file = file.path(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 # event_info_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
@@ -87,6 +88,11 @@ FONT_FAMILY = "Arial"
 
 # diff_result_sample_file = file.path(TCGA_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_file = file.path(TCGA_DIR,'files','PANCAN','summary_splicing_dependency-EX.tsv.gz')
+
+# diff_result_subtypes_file = file.path(TCGA_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
+# spldep_stats_subtypes_file = file.path(TCGA_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
+
+# available_cells_file = file.path(SUPPORT_DIR,"available_cancer_cells.tsv")
 
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_validation')
 # figs_dir = file.path(RESULTS_DIR,'figures','selection_exons_to_validate')
@@ -205,7 +211,7 @@ plot_eda_transcriptome = function(ccle_stats, genes_oi, events_oi){
 plot_selection_exons = function(ccle_harm_stats, ccle_harm, 
                                 ccle_splicing, ccle_genexpr,
                                 events_genes, events_oi, 
-                                protein_impact){
+                                protein_impact, available_cells){
     plts = list()
     
     # summarize the selection of exons for our experiment
@@ -217,7 +223,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     # 4. [X] Not ORF disruption
     # 5. [X] 10 exons in total
     
-    # distributions of harm scores
+    # distributions of harm scores of events
     X = ccle_harm_stats %>%
         filter(event_gene %in% events_oi) %>%
         mutate(EVENT = gsub("_.*","", event_gene),
@@ -239,23 +245,48 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         color_palette("jco") +
         theme(aspect.ratio=1)
     
-    # select cell pairs
-    ## top most harmful and variant exons, and most harmless
-    top_selection = X %>% 
-        #slice_max(abs(med*std), n=7) %>% 
-        #arrange(-std) %>% 
-        #bind_rows(X %>% slice_min(abs(med*std), n=3) %>% arrange(-std)) %>%
-        distinct()
-    
-    ## samples that comply requirements
+    # get selected events
+    top_selection = X %>% distinct()
     top_genes = top_selection %>% pull(GENE) %>% unique()
     top_events = top_selection %>% pull(event_gene) %>% unique()
     
+    # correlations between splicing events across all cancer cell lines (in general)
+    mat = ccle_splicing %>% 
+        filter(event_gene %in% top_events) %>% 
+        column_to_rownames("event_gene") %>% 
+        as.matrix() %>% 
+        t() %>% 
+        cor(method="spearman", use="pairwise.complete.obs") %>% 
+        round(2)
+    
+    plts[["selection_exons-splicing-corr"]] = mat %>% # standardize for visualization
+        Heatmap(
+            name="Spearman Corr.",
+            row_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+            column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
+            heatmap_legend_param = list(legend_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY)),
+            cell_fun = function(j, i, x, y, width, height, fill) {
+                    grid.text(sprintf("%.2f", mat[i, j]), x, y, 
+                              gp = gpar(fontsize=6, fontfamily=FONT_FAMILY))
+        }) %>% 
+        draw() %>%
+        grid.grabExpr() %>%
+        as.ggplot()
+    
+    # filter available cancer cell lines
+    ccle_genexpr = ccle_genexpr %>%
+        dplyr::select(any_of(c(available_cells,"GENE")))
+    ccle_splicing = ccle_splicing %>%
+        dplyr::select(any_of(c(available_cells,"event_gene")))
+    ccle_spldep = ccle_spldep %>%
+        dplyr::select(any_of(c(available_cells,"event_gene")))
+    
+    # select cell pairs
     compliant_samples_genexpr = ccle_genexpr %>% 
         filter(GENE %in% top_genes) %>% 
         pivot_longer(-GENE, names_to="sampleID", values_to="expression") %>%
         group_by(sampleID) %>% 
-        filter(all(median(expression, na.rm=TRUE) > THRESH_GENEXPR)) %>% 
+        filter(all(median(expression, na.rm=TRUE) > 0)) %>% 
         ungroup() %>%
         pull(sampleID) %>%
         unique()
@@ -264,7 +295,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         filter(event_gene %in% top_events) %>% 
         pivot_longer(-event_gene, names_to="sampleID", values_to="psi") %>%
         group_by(sampleID) %>% 
-        filter(all(median(psi, na.rm=TRUE) > THRESH_PSI)) %>% 
+        filter(all(median(psi, na.rm=TRUE) > 0)) %>% 
         ungroup() %>%
         pull(sampleID) %>%
         unique()
@@ -273,7 +304,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         filter(event_gene %in% top_events) %>%
         pivot_longer(-event_gene, names_to="sampleID", values_to="harm") %>%
         group_by(sampleID) %>%
-        filter(sum(is.na(harm)) < 1) %>%
+        filter(sum(!is.na(harm)) > 2) %>% # at least in two samples
         ungroup() %>%
         pull(sampleID) %>%
         unique()
@@ -319,7 +350,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     
         X = ccle_harm %>%
             filter(event_gene %in% top_events) %>%
-            dplyr::select(c("event_gene", cells_oi)) %>%
+            dplyr::select(all_of(c("event_gene", cells_oi))) %>%
             group_by(event_gene) %>%
             mutate(diff = abs(get(cells_oi[1]) - get(cells_oi[2])),
                    avg = mean(c(get(cells_oi[1]), get(cells_oi[2])), na.rm=TRUE)) %>%
@@ -364,7 +395,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
 
         mat = X %>% 
             column_to_rownames("event_gene") %>%
-            dplyr::select(cells_oi)
+            dplyr::select(all_of(cells_oi))
         
         print(mat)
         
@@ -417,40 +448,17 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
             labs(x="Cell Line", y="PSI")
     }
     
-    # correlations between splicing events
-    mat = ccle_splicing %>% 
-        filter(event_gene %in% top_events) %>% 
-        column_to_rownames("event_gene") %>% 
-        as.matrix() %>% 
-        t() %>% 
-        cor(method="spearman", use="pairwise.complete.obs") %>% 
-        round(2)
-    
-    plts[["selection_exons-splicing-corr"]] = mat %>% # standardize for visualization
-        Heatmap(
-            name="Spearman Corr.",
-            row_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
-            column_names_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY),
-            heatmap_legend_param = list(legend_gp = gpar(fontsize=6, fontfamily=FONT_FAMILY)),
-            cell_fun = function(j, i, x, y, width, height, fill) {
-                    grid.text(sprintf("%.2f", mat[i, j]), x, y, gp = gpar(fontsize=6, fontfamily=FONT_FAMILY))
-        }) %>% 
-        draw() %>%
-        grid.grabExpr() %>%
-        as.ggplot()
-
-    
     return(plts)
 }
 
 
 make_plots = function(ccle_stats, genes_oi, events_oi,
                       ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
-                      events_genes, protein_impact){
+                      events_genes, protein_impact, available_cells){
     plts = list(
         plot_eda_transcriptome(ccle_stats, genes_oi, events_oi),
         plot_selection_exons(ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
-                             events_genes, events_oi, protein_impact)
+                             events_genes, events_oi, protein_impact, available_cells)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -617,6 +625,11 @@ main = function(){
         filter(EVENT %in% selected_events) %>%
         left_join(events_genes, by='EVENT')
     
+    tcga_diff_result_subtypes = read_tsv(diff_result_subtypes_file)
+    tcga_spldep_stats_subtypes = read_tsv(spldep_stats_subtypes_file) %>% 
+        filter(EVENT %in% selected_events) %>%
+        left_join(events_genes, by='EVENT')
+    
     ccle_metadata = read_tsv(ccle_metadata_file)
     ccle_stats = read_tsv(ccle_stats_file)
     ccle_splicing = read_tsv(splicing_file) %>%
@@ -639,28 +652,34 @@ main = function(){
         mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
         distinct(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY)
     
-    # subset cell types
-    not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")
-    cultures_oi = c("Adherent","not found",NA)
-    to_drop = ccle_metadata %>%
-        filter((primary_disease %in% not_oi) | !(culture_type %in% cultures_oi)) %>%
-        pull(DepMap_ID)
+    available_cells = read_tsv(available_cells_file) %>%
+        drop_na() %>%
+        pull(DepMap_ID) %>%
+        unique()
     
-    ccle_genexpr = ccle_genexpr %>%
-        dplyr::select(-any_of(to_drop))
-    ccle_splicing = ccle_splicing %>%
-        dplyr::select(-any_of(to_drop))
-    ccle_spldep = ccle_spldep %>%
-        dplyr::select(-any_of(to_drop))
+    # subset cell types
+#     not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")
+#     cultures_oi = c("Adherent","not found",NA)
+#     to_drop = ccle_metadata %>%
+#         filter((primary_disease %in% not_oi) | !(culture_type %in% cultures_oi)) %>%
+#         pull(DepMap_ID)
     
     # prep results differential analyses
     tcga_diff_result = prep_diff_result(tcga_diff_result, tcga_spldep_stats)
+    tcga_diff_result_subtypes = prep_diff_result(tcga_diff_result_subtypes, tcga_spldep_stats_subtypes)
     
-    ccle_harm = compute_harm_score(ccle_spldep, ccle_splicing %>% filter(event_gene %in% selected_event_genes))
+    # compute harm scores and their summary stats for available cell lines
+    ccle_harm = compute_harm_score(ccle_spldep %>% 
+                                       filter(event_gene %in% selected_event_genes) %>%
+                                       dplyr::select(any_of(c(available_cells,"event_gene"))), 
+                                   ccle_splicing %>% 
+                                       filter(event_gene %in% selected_event_genes) %>%
+                                       dplyr::select(any_of(c(available_cells,"event_gene"))))
     ccle_harm_stats = get_stats(ccle_harm, "event_gene")
     
     # events and genes differentially spliced and targetable
-    events_oi = tcga_diff_result %>%
+    ## by cancer types
+    events_oi_types = tcga_diff_result %>%
         # differentially spliced
         filter(psi__is_significant) %>%
         # targetable (only exclusion of exon)
@@ -668,7 +687,7 @@ main = function(){
         pull(event_gene) %>%
         unique()
     
-    genes_oi = tcga_diff_result %>%
+    genes_oi_types = tcga_diff_result %>%
         # differentially spliced
         filter(psi__is_significant) %>%
         # targetable (only exclusion of exon)
@@ -676,10 +695,31 @@ main = function(){
         pull(GENE) %>%
         unique()
     
+    ## by cancer subtypes
+    events_oi_subtypes = tcga_diff_result_subtypes %>%
+        # differentially spliced
+        filter(psi__is_significant) %>%
+        # targetable (only exclusion of exon)
+        filter((sign(psi__median_diff)>0 & sign(mean)<0)) %>%
+        pull(event_gene) %>%
+        unique()
+    
+    genes_oi_subtypes = tcga_diff_result_subtypes %>%
+        # differentially spliced
+        filter(psi__is_significant) %>%
+        # targetable (only exclusion of exon)
+        filter((sign(psi__median_diff)>0 & sign(mean)<0)) %>%
+        pull(GENE) %>%
+        unique()
+    
+    ## combine
+    events_oi = union(events_oi_types, events_oi_subtypes)
+    genes_oi = union(genes_oi_types, genes_oi_subtypes)
+    
     # plot
     plts = make_plots(ccle_stats, genes_oi, events_oi,
                       ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
-                      events_genes, protein_impact)
+                      events_genes, protein_impact, available_cells)
     
     # make figdata
     figdata = make_figdata(events_oi, annot, event_info, protein_impact, ccle_harm_stats,
