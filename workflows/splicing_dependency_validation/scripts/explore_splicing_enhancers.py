@@ -31,14 +31,16 @@ NUCLEOTIDES = ["A", "C", "T", "G"]
 Development
 -----------
 reference_file = "/home/miquel/databases/data/GENCODE/GRCh38.p13.genome.fa.gz"
-event_chr = "chr19" 
-event_start = 10808569
-event_end = 10808580
+event_name = "HsaEX0063029"
+event_chr = "chr5" 
+event_start = 70070641
+event_end = 70070751
 event_strand = "+"
-margin_out = 30
-margin_in = 15
+margin_out = 100
 output_dir = "."
 pangolin_dir = "/home/miquel/repositories/Pangolin"
+method="deletion"
+size=15
 """
 
 ##### FUNCTIONS #####
@@ -60,10 +62,10 @@ def load_models(pangolin_dir):
     return models
 
 
-def prep_sequence(chromosome, position, ref_seq, distance):
+def prep_sequence(chromosome, position, ref_seq, distance, size):
     try:
         seq = ref_seq[chromosome][
-            position - 5001 - distance : position + 1 + 4999 + distance
+            position - 5001 - distance : position + size + 4999 + distance
         ].seq
     except Exception as e:
         print(e)
@@ -77,10 +79,14 @@ def prep_sequence(chromosome, position, ref_seq, distance):
     return seq
 
 
-def mutagenize(mut_pos, mut_chr, distance, ref_seq):
+def point_substitution(mut_pos, mut_chr, distance, ref_seq, size):
     """
-    Returns alt sequences at a given position.
+    Returns alt sequences at a given position substituting the 3 alternative nucleotides.
+    TODO: mutagenize different sizes
     """
+    
+    assert size==1 # until we don't adapt...
+    
     # what is the reference nucleotide?
     nucl_ref = ref_seq[mut_chr][mut_pos - 1]  # minus 1 because it is 0 notation
     nucl_alts = list(set(NUCLEOTIDES) - set(nucl_ref))
@@ -90,8 +96,30 @@ def mutagenize(mut_pos, mut_chr, distance, ref_seq):
     input_alts = {}
     for idx, alt in enumerate(nucl_alts):
         input_alts["alt%s" % alt] = (
-            input_ref[: 5000 + distance] + alt + input_ref[5000 + distance + 1 :]
+            input_ref[: 5000 + distance] + alt + input_ref[5000 + distance + size :]
         )  # we sum by 1 because the reference nucleotide is length one
+        
+    return input_ref, input_alts
+
+
+def point_deletion(mut_pos, mut_chr, distance, ref_seq, size=1):
+    input_ref = prep_sequence(mut_chr, mut_pos, ref_seq, distance, size)
+    input_alts = {
+        "alt0": input_ref[: 5000 + distance] + input_ref[5000 + distance + size :]
+    }
+    
+    return input_ref, input_alts
+
+    
+def mutagenize(mut_pos, mut_chr, distance, ref_seq, method="substitution", size=1):
+    """
+    Returns alt sequences at a given position deleting the nucleotide at that position
+    """
+    if method=="substitution":
+        input_ref, input_alts = point_substitution(mut_pos, mut_chr, distance, ref_seq, size)
+    elif method=="deletion":
+        # unfinished !!
+        input_ref, input_alts = point_deletion(mut_pos, mut_chr, distance, ref_seq, size)
 
     return input_ref, input_alts
 
@@ -155,8 +183,11 @@ def compute_splice_scores(input_ref, input_alts, strand, distance, models):
 
 
 def explore_splicing_enhancers_single(
-    position, event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models
+    position, event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models, method="substitution", size=1
 ):
+    """
+    method: "substitution" or "deletion"
+    """
     # perform point mutagenesis for the positions nearby splice sites
     # choose distance to get information on both splice sites
     if position < event_start:
@@ -171,7 +202,7 @@ def explore_splicing_enhancers_single(
         distance = max(position - event_start + margin_out, event_end - position + margin_out)
 
     # mutagenize reference sequence in that position
-    input_ref, input_alts = mutagenize(position, event_chr, distance, ref_seq)
+    input_ref, input_alts = mutagenize(position, event_chr, distance, ref_seq, method, size)
 
     # score
     scores_losses, scores_gains = compute_splice_scores(
@@ -181,11 +212,11 @@ def explore_splicing_enhancers_single(
     # prepare output
     ## losses
     loss = pd.DataFrame(scores_losses)
-    loss["position"] = list(range(position - distance, position + distance + 1))
+    loss["position"] = list(range(position - distance, position + distance + size))
     loss = loss.melt(id_vars=["position"], var_name="alt", value_name="score_loss")
     ## gains
     gain = pd.DataFrame(scores_gains)
-    gain["position"] = list(range(position - distance, position + distance + 1))
+    gain["position"] = list(range(position - distance, position + distance + size))
     gain = gain.melt(id_vars=["position"], var_name="alt", value_name="score_gain")
 
     result = pd.merge(loss, gain, on=["position", "alt"], how="inner")
@@ -195,7 +226,7 @@ def explore_splicing_enhancers_single(
 
 
 def explore_splicing_enhancers(
-    event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models
+    event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models, method="substitution", size=1
 ):
     # positions to mutagenize
     positions = list(range(event_start - margin_out, event_end + margin_out + 1))
@@ -203,7 +234,7 @@ def explore_splicing_enhancers(
     results = []
     for position in tqdm(positions):
         result = explore_splicing_enhancers_single(
-            position, event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models
+            position, event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models, method, size
         )
         results.append(result)
 
@@ -304,6 +335,8 @@ def parse_args():
     parser.add_argument("--event_end", type=int)
     parser.add_argument("--event_strand", type=str)
     parser.add_argument("--margin_out", type=int)
+    parser.add_argument("--method", type=str, default="substitution")
+    parser.add_argument("--size", type=int, default=1)
     parser.add_argument("--reference_file", type=str)
     parser.add_argument("--pangolin_dir", type=str)
     parser.add_argument("--output_dir", type=str)
@@ -322,6 +355,8 @@ def main():
     event_end = args.event_end
     event_strand = args.event_strand
     margin_out = args.margin_out
+    method = args.method
+    size = args.size
     reference_file = args.reference_file
     pangolin_dir = args.pangolin_dir
     output_dir = args.output_dir
@@ -332,9 +367,9 @@ def main():
 
     # analysis
     result = explore_splicing_enhancers(
-        event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models
+        event_chr, event_start, event_end, event_strand, margin_out, ref_seq, models, method, size
     )
-    results["event_name"] = event_name
+    result["event_name"] = event_name
     
     # save
     os.makedirs(output_dir, exist_ok=True)
