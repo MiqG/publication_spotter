@@ -1,0 +1,29 @@
+common_name	who	DepMap_ID	CCLE_Name	disease	lineage	grade
+HT-29	Carolina	ACH-000552	HT29_LARGE_INTESTINE	colorectal cancer	colorectal	primary
+MDA-MB-231	Carolina	ACH-000768	MDAMB231_BREAST	breast cancer	breast	metastasis
+MDA-MB-468	Carolina	ACH-000849	MDAMB468_BREAST	breast cancer	breast	metastasis
+HCT116_p53+/+	Carolina	ACH-000971	HCT116_LARGE_INTESTINE	colorectal cancer	colorectal	primary
+HCT116_p53+/-	Carolina	ACH-000971	HCT116_LARGE_INTESTINE	colorectal cancer	colorectal	primary
+HCT116-P53-/-	Carolina	ACH-000971	HCT116_LARGE_INTESTINE	colorectal cancer	colorectal	primary
+HEK-Blue Tlr2/1	Carolina					
+HEK-Blue Tlr2/6	Carolina					
+HEK293	Hannah			non-cancerous	kidney	
+293T	Hannah			non-cancerous	kidney	
+HeLa	Hannah	ACH-001086	HELA_CERVIX	cervical cancer	cervix	
+A549	Hannah	ACH-000681	A549_LUNG	lung cancer	lung	primary
+H1755	Hannah	ACH-000282	NCIH1755_LUNG	lung cancer	lung	metastasis
+SH-SY5Y	Ludo	ACH-001188	SHSY5Y_AUTONOMIC_GANGLIA	neuroblastoma	peripheral nervous system	metastasis
+MCF7	Ariadna	ACH-000019	MCF7_BREAST	breast cancer	breast	metastasis
+HCT-116	Ariadna	ACH-000971	HCT116_LARGE_INTESTINE	colon cancer	colorectal	primary
+IMIM-PC2	Ariadna					
+J82	Ariadna	ACH-000396	J82_URINARY_TRACT	urinary tract	bladder	primary
+Panc1	Ariadna	ACH-000164	PANC1_PANCREAS	pancreas	exocrine	primary
+SH-SY5Y	Ariadna	ACH-001188	SHSY5Y_AUTONOMIC_GANGLIA	peripheral nervous system	neuroblastoma	metastasis
+SW 780	Ariadna	ACH-000384	SW780_URINARY_TRACT	bladder cancer	urinary tract	primary
+T98G	Ariadna	ACH-000571	T98G_CENTRAL_NERVOUS_SYSTEM	brain cancer	glioblastoma	primary
+U118MG	Ariadna	ACH-000040	U118MG_CENTRAL_NERVOUS_SYSTEM	brain cancer	central nervous system	primary
+DU145	Ariadna	ACH-000979	DU145_PROSTATE	prostate cancer	prostate	metastasis
+U2OS	Ariadna	ACH-000364	U2OS_BONE	bone cancer	bone	primary
+THP1	Ariadna	ACH-000146	THP1_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE	leukemia	blood	primary
+U937	Ariadna	ACH-000406	U937_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE	leukemia	blood	metastasis
+VMCUB1	Ariadna	ACH-000545	VMCUB1_URINARY_TRACT	urinary tract	bladder	primary
