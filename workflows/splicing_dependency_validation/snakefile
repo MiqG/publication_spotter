@@ -24,19 +24,23 @@ RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_validation')
 PANGOLIN_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','Pangolin')
 
 EVENTS_OI = [
-    "HsaEX0052877",
-    "HsaEX0049558",
-    "HsaEX0026116",
-    "HsaEX0070392",
-    "HsaEX0020455",
-    "HsaEX0044468",
-    "HsaEX0022946",
-    "HsaEX0044398",
-    "HsaEX0043609",
-    "HsaEX0066096",
     "HsaEX0006970",
+    "HsaEX0008092",
+    "HsaEX0020455",
+    "HsaEX0022946",
+    "HsaEX0026116",
+    "HsaEX0034998",
+    "HsaEX0043609",
+    "HsaEX0044398",
+    "HsaEX0044468",
+    "HsaEX0049558",
+    "HsaEX0050345",
+    "HsaEX0052877",
     "HsaEX0056284",
-    "HsaEX0034998"
+    "HsaEX0066096",
+    "HsaEX0070392",
+    "HsaEX0071941",
+    "HsaEX0030476" # not selected cancer-driver exon (just control)
 ]
 
 event_info = pd.read_table(os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"))
@@ -69,7 +73,9 @@ rule get_splicing_enhancers:
         event_start = lambda wildcards: EVENTS_INFO[wildcards.event]["event_start"],
         event_end = lambda wildcards: EVENTS_INFO[wildcards.event]["event_end"],
         event_strand = lambda wildcards: EVENTS_INFO[wildcards.event]["event_strand"],
-        margin_out = 30
+        margin_out = 250,
+        method = "deletion",
+        size = 10
     threads: 1
     resources:
         runtime = 3600*6, # 6h
@@ -83,6 +89,8 @@ rule get_splicing_enhancers:
                 --event_end={params.event_end} \
                 --event_strand={params.event_strand} \
                 --margin_out={params.margin_out} \
+                --size={params.size} \
+                --method={params.method} \
                 --reference_file={input.reference} \
                 --pangolin_dir={input.pangolin_dir} \
                 --output_dir={output}

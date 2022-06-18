@@ -245,7 +245,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         color_palette("jco") +
         theme(aspect.ratio=1)
     
-    # get selected events
+    # get selected events for validation
     top_selection = X %>% distinct()
     top_genes = top_selection %>% pull(GENE) %>% unique()
     top_events = top_selection %>% pull(event_gene) %>% unique()
@@ -448,6 +448,37 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
             labs(x="Cell Line", y="PSI")
     }
     
+    
+    # overview
+    palette = get_palette("Paired", length(available_cells))
+    
+    plts[["selection_exons-harm-overview"]] = ccle_harm %>%
+        filter(event_gene %in% top_events) %>%
+        mutate(event_gene = factor(event_gene, levels=top_events)) %>%
+        pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="harm_score") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        ggstripchart(x="event_gene", y="harm_score", color="CCLE_Name", palette=palette) +
+        theme_pubr(x.text.angle=70) +
+        labs(x="Event & Gene", y="Harm Score", color="Cell Line")
+    
+    plts[["selection_exons-splicing-overview"]] = ccle_splicing %>%
+        filter(event_gene %in% top_events) %>%
+        mutate(event_gene = factor(event_gene, levels=top_events)) %>%
+        pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="psi") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        ggstripchart(x="event_gene", y="psi", color="CCLE_Name", palette=palette) +
+        theme_pubr(x.text.angle=70) +
+        labs(x="Event & Gene", y="PSI", color="Cell Line")
+    
+    plts[["selection_exons-genexpr-overview"]] = ccle_genexpr %>%
+        filter(GENE %in% top_genes) %>%
+        mutate(GENE = factor(GENE, levels=top_genes)) %>%
+        pivot_longer(cols= -GENE, names_to="DepMap_ID", values_to="genexpr") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        ggstripchart(x="GENE", y="genexpr", color="CCLE_Name", palette=palette) +
+        theme_pubr(x.text.angle=70) +
+        labs(x="Gene", y="log2(TPM+1)", color="Cell Line")
+    
     return(plts)
 }
 
@@ -551,6 +582,10 @@ save_plots = function(plts, figs_dir){
     }
     
     save_plt(plts, "selection_exons-splicing-corr", '.pdf', figs_dir, width=15, height=13)
+    
+    save_plt(plts, "selection_exons-harm-overview", '.pdf', figs_dir, width=15, height=13)
+    save_plt(plts, "selection_exons-splicing-overview", '.pdf', figs_dir, width=15, height=13)
+    save_plt(plts, "selection_exons-genexpr-overview", '.pdf', figs_dir, width=15, height=13)
 }
 
 
