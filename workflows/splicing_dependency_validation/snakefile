@@ -58,7 +58,8 @@ EVENTS_INFO = {
 rule all:
     input:
         # fit gene dependencies and get empirical distributions of coefficients
-        expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{event}"), event=EVENTS_OI)
+        #expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{event}"), event=EVENTS_OI),
+        expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI)
     
     
 rule get_splicing_enhancers:
@@ -97,4 +98,31 @@ rule get_splicing_enhancers:
         """
         
         
-        
+rule get_exon_sequences:
+    input:
+        reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz"),
+    output:
+        os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta")
+    params:
+        event_name = "{event}",
+        event_chr = lambda wildcards: EVENTS_INFO[wildcards.event]["event_chr"],
+        event_start = lambda wildcards: EVENTS_INFO[wildcards.event]["event_start"],
+        event_end = lambda wildcards: EVENTS_INFO[wildcards.event]["event_end"],
+        event_strand = lambda wildcards: EVENTS_INFO[wildcards.event]["event_strand"],
+        margin_out = 250
+    threads: 1
+    resources:
+        runtime = int(3600*0.5), # 0.5h
+        memory = 2 # GB
+    shell:
+        """
+        nice python scripts/get_exon_sequence.py \
+                        --event_name={params.event_name} \
+                        --event_chr={params.event_chr} \
+                        --event_start={params.event_start} \
+                        --event_end={params.event_end} \
+                        --event_strand={params.event_strand} \
+                        --margin_out={params.margin_out} \
+                        --reference_file={input.reference} \
+                        --output_file={output}
+        """
