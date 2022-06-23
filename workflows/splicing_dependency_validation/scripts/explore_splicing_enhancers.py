@@ -92,7 +92,7 @@ def point_substitution(mut_pos, mut_chr, distance, ref_seq, size):
     nucl_alts = list(set(NUCLEOTIDES) - set(nucl_ref))
 
     # prep reference and mutant sequences for scoring
-    input_ref = prep_sequence(mut_chr, mut_pos, ref_seq, distance)
+    input_ref = prep_sequence(mut_chr, mut_pos, ref_seq, distance, size)
     input_alts = {}
     for idx, alt in enumerate(nucl_alts):
         input_alts["alt%s" % alt] = (

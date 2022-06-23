@@ -42,6 +42,31 @@ TOP_N = 5
 THRESH_DRUGS_FDR = 0.1
 THRESH_DRUGS_NOBS = 20
 
+SELECTED_CELL_LINES = c(
+    "A549_LUNG",
+    "HT29_LARGE_INTESTINE",
+    "MDAMB231_BREAST"
+)
+
+SELECTED_EXONS = c(
+    #"HsaEX0008092_BIN1",
+    #"HsaEX0022946_ERBIN",
+    #"HsaEX0066096_TMTC1",
+    #"HsaEX0044468_NVL",
+    #"HsaEX0043609_NPNT",
+    #"HsaEX0006970_ATP6V0A2",
+    #"HsaEX0056284_SATB2"
+    "HsaEX0070392_VLDLR",
+    "HsaEX0052877_RCC1",
+    "HsaEX0049558_PPP1R12A",
+    "HsaEX0044398_NUP85",
+    "HsaEX0034998_KRAS",
+    "HsaEX0071941_YAP1",
+    "HsaEX0050345_PRPF18",
+    "HsaEX0026116_FNBP1",
+    "HsaEX0020455_DNM2"
+)
+
 # formatting
 PAL_SINGLE_ACCENT = "orange"
 PAL_SINGLE_LIGHT = "#efb300ff"#"#6AC2BF"
@@ -97,6 +122,7 @@ FONT_FAMILY = "Arial"
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_validation')
 # figs_dir = file.path(RESULTS_DIR,'figures','selection_exons_to_validate')
 
+# models_file = file.path(ROOT,"results","model_splicing_dependency","files","models_gene_dependency-EX","model_summaries.tsv.gz")
 
 ##### FUNCTIONS #####
 from_matrix_to_edgelist = function(X){
@@ -450,7 +476,9 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     
     
     # overview
-    palette = get_palette("Paired", length(available_cells))
+    palette = setNames(get_palette("Paired", length(available_cells)), 
+                       ccle_metadata %>% filter(DepMap_ID %in% available_cells) %>% 
+                       pull(CCLE_Name) %>% unique() %>% sort())
     
     plts[["selection_exons-harm-overview"]] = ccle_harm %>%
         filter(event_gene %in% top_events) %>%
@@ -466,6 +494,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         mutate(event_gene = factor(event_gene, levels=top_events)) %>%
         pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="psi") %>%
         left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(DepMap_ID %in% available_cells) %>%
         ggstripchart(x="event_gene", y="psi", color="CCLE_Name", palette=palette) +
         theme_pubr(x.text.angle=70) +
         labs(x="Event & Gene", y="PSI", color="Cell Line")
@@ -475,7 +504,43 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         mutate(GENE = factor(GENE, levels=top_genes)) %>%
         pivot_longer(cols= -GENE, names_to="DepMap_ID", values_to="genexpr") %>%
         left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(DepMap_ID %in% available_cells) %>%
         ggstripchart(x="GENE", y="genexpr", color="CCLE_Name", palette=palette) +
+        theme_pubr(x.text.angle=70) +
+        labs(x="Gene", y="log2(TPM+1)", color="Cell Line")
+    
+    plts[["selection_exons-harm-selected"]] = ccle_harm %>%
+        filter(event_gene %in% top_events) %>%
+        mutate(event_gene = factor(event_gene, levels=top_events)) %>%
+        pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="harm_score") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
+        filter(event_gene %in% SELECTED_EXONS) %>%
+        ggstripchart(x="event_gene", y="harm_score", color="CCLE_Name", 
+                     palette=palette[SELECTED_CELL_LINES]) +
+        theme_pubr(x.text.angle=70) +
+        labs(x="Event & Gene", y="Harm Score", color="Cell Line")
+    
+    plts[["selection_exons-splicing-selected"]] = ccle_splicing %>%
+        filter(event_gene %in% top_events) %>%
+        mutate(event_gene = factor(event_gene, levels=top_events)) %>%
+        pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="psi") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
+        filter(event_gene %in% SELECTED_EXONS) %>%
+        ggstripchart(x="event_gene", y="psi", color="CCLE_Name", 
+                     palette=palette[SELECTED_CELL_LINES]) +
+        theme_pubr(x.text.angle=70) +
+        labs(x="Event & Gene", y="PSI", color="Cell Line")
+    
+    plts[["selection_exons-genexpr-selected"]] = ccle_genexpr %>%
+        filter(GENE %in% top_genes) %>%
+        mutate(GENE = factor(GENE, levels=top_genes)) %>%
+        pivot_longer(cols= -GENE, names_to="DepMap_ID", values_to="genexpr") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
+        ggstripchart(x="GENE", y="genexpr", color="CCLE_Name",
+                     palette=palette[SELECTED_CELL_LINES]) +
         theme_pubr(x.text.angle=70) +
         labs(x="Gene", y="log2(TPM+1)", color="Cell Line")
     
@@ -586,6 +651,10 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "selection_exons-harm-overview", '.pdf', figs_dir, width=15, height=13)
     save_plt(plts, "selection_exons-splicing-overview", '.pdf', figs_dir, width=15, height=13)
     save_plt(plts, "selection_exons-genexpr-overview", '.pdf', figs_dir, width=15, height=13)
+    
+    save_plt(plts, "selection_exons-harm-selected", '.pdf', figs_dir, width=15, height=13)
+    save_plt(plts, "selection_exons-splicing-selected", '.pdf', figs_dir, width=15, height=13)
+    save_plt(plts, "selection_exons-genexpr-selected", '.pdf', figs_dir, width=15, height=13)
 }
 
 
@@ -688,7 +757,10 @@ main = function(){
         distinct(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY)
     
     available_cells = read_tsv(available_cells_file) %>%
-        drop_na() %>%
+        drop_na(DepMap_ID) %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        distinct(DepMap_ID, culture_type) %>%
+        filter(culture_type != "Suspension") %>% # we don't want suspension
         pull(DepMap_ID) %>%
         unique()
     

@@ -40,7 +40,6 @@ EVENTS_OI = [
     "HsaEX0066096",
     "HsaEX0070392",
     "HsaEX0071941",
-    "HsaEX0030476" # not selected cancer-driver exon (just control)
 ]
 
 event_info = pd.read_table(os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"))
@@ -54,11 +53,20 @@ EVENTS_INFO = {
     for event in EVENTS_OI
 }
 
+METHODS_KWS = {
+    "deletion": {
+        "size": 10
+    },
+    "substitution": {
+        "size": 1
+    }
+}
+
 ##### RULES #####
 rule all:
     input:
         # fit gene dependencies and get empirical distributions of coefficients
-        #expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{event}"), event=EVENTS_OI),
+        expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"), event=EVENTS_OI, method=METHODS_KWS.keys()),
         expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI)
     
     
@@ -67,7 +75,7 @@ rule get_splicing_enhancers:
         reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz"),
         pangolin_dir = PANGOLIN_DIR
     output:
-        directory(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{event}"))
+        directory(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"))
     params:
         event_name = "{event}",
         event_chr = lambda wildcards: EVENTS_INFO[wildcards.event]["event_chr"],
@@ -75,8 +83,8 @@ rule get_splicing_enhancers:
         event_end = lambda wildcards: EVENTS_INFO[wildcards.event]["event_end"],
         event_strand = lambda wildcards: EVENTS_INFO[wildcards.event]["event_strand"],
         margin_out = 250,
-        method = "deletion",
-        size = 10
+        method = "{method}",
+        size = lambda wildcards: METHODS_KWS[wildcards.method]["size"]
     threads: 1
     resources:
         runtime = 3600*6, # 6h
