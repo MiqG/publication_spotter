@@ -87,7 +87,7 @@ rule get_splicing_enhancers:
         size = lambda wildcards: METHODS_KWS[wildcards.method]["size"]
     threads: 1
     resources:
-        runtime = 3600*6, # 6h
+        runtime = 3600*24, # 24h
         memory = 10 # GB
     shell:
         """
