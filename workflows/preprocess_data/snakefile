@@ -70,10 +70,12 @@ rule all:
         # expand(os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ## gene expression
         os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        ## mutations
+        os.path.join(PREP_DIR,'mutations','CCLE.tsv.gz'),
         
         # preprocess DepMap data
         expand(os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz'), dataset=DEPMAP_RAW.keys()),
-
+        
         # # impute CCLE PSI matrix
         # expand(os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
 
@@ -89,10 +91,10 @@ rule all:
         # # count mutation frequency on genes
         # os.path.join(PREP_DIR,'gene_mutation_freq','CCLE.tsv.gz'),
 
-        # # count mutation frequency on exons
+        # count mutation frequency on exons
         # os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv'),
-        # expand(os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
-        # expand(os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
+        expand(os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
+        expand(os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz'), event_type=['EX']),
 
         # # Thomas 2020
         # os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
@@ -201,6 +203,21 @@ rule preprocess_genexpr_ccle:
         """
 
 
+rule preprocess_mutations_ccle:
+    input:
+        mutations = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv')
+    output:
+        os.path.join(PREP_DIR,'mutations','CCLE.tsv.gz')
+    shell:
+        """
+        set -eo pipefail
+        
+        nice python scripts/preprocess_ccle_mutations.py \
+                    --input_file={input.mutations} \
+                    --output_file={output}
+        """
+    
+    
 # rule preprocess_genexpr_ccle:
 #     input:
 #         counts = os.path.join(RAW_DIR,'CCLE','STAR','merged_counts.tab.gz'),
@@ -361,7 +378,7 @@ rule compute_transcriptome_indices_tcga:
                         --gene_lengths_file={input.gene_lengths}
         """
         
-        
+
 rule mutation_frequency:
     input:
         snv = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
@@ -384,36 +401,38 @@ rule mutation_frequency:
         """
         
         
-rule redefine_exons_vastdb:
-    input:
-        os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg19_noseqs.tsv')
-    output:
-        os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv')
-    threads: 10
-    shell:
-        """
-        python scripts/redefine_exons_vastdb.py \
-                    --exon_info_file={input} \
-                    --output_file={output} \
-                    --n_jobs={threads}
-        """
+# rule redefine_exons_vastdb:
+#     input:
+#         os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg19_noseqs.tsv')
+#     output:
+#         os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv')
+#     threads: 10
+#     shell:
+#         """
+#         python scripts/redefine_exons_vastdb.py \
+#                     --exon_info_file={input} \
+#                     --output_file={output} \
+#                     --n_jobs={threads}
+#         """
         
         
 rule annotate_mutations_to_events:
     input:
-        input_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
-        exon_annotation = os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv')
+        mutations = os.path.join(PREP_DIR,'mutations','CCLE.tsv.gz'),
+        exon_annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
     output:
         os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz')
     params:
-        event_type = '{event_type}'
+        event_type = '{event_type}',
+        margin = 100
     shell:
         """
-        Rscript scripts/annotate_mutations_to_exons.R \
-                        --input_file={input.input_file} \
-                        --output_file={output} \
+        nice python scripts/annotate_mutations_to_events.py \
+                        --mutations_file={input.mutations} \
                         --annotation_file={input.exon_annotation} \
-                        --event_type={params.event_type}
+                        --event_type={params.event_type} \
+                        --margin={params.margin} \
+                        --output_file={output}
         """
         
         
