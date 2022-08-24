@@ -855,47 +855,47 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         theme_pubr(x.text.angle=70)
     
     # normalize by random selection selected and not selected
-    gene_mut_freq_null_selected = randsel_genes %>% 
-        left_join(X %>% distinct(Variant_Classification, mut_freq_per_kb, GENE), by="GENE") %>%
-        group_by(random_iteration, Variant_Classification) %>%
-        summarize(null_mut_freq = median(mut_freq_per_kb),
-                  n = n()) %>%
-        mutate(is_selected = TRUE) %>%
-        ungroup()
+#     gene_mut_freq_null_selected = randsel_genes %>% 
+#         left_join(X %>% distinct(Variant_Classification, mut_freq_per_kb, GENE), by="GENE") %>%
+#         group_by(random_iteration, Variant_Classification) %>%
+#         summarize(null_mut_freq = median(mut_freq_per_kb),
+#                   n = n()) %>%
+#         mutate(is_selected = TRUE) %>%
+#         ungroup()
     
-    gene_mut_freq_null_notsel = X %>% 
-        distinct(GENE) %>%
-        mutate(count = 1000) %>%
-        uncount(count) %>%
-        group_by(GENE) %>%
-        mutate(random_iteration = paste0("it",row_number()-1)) %>%
-        ungroup() %>%
-        left_join(randsel_genes %>% mutate(is_selected = TRUE), 
-                  by=c("GENE","random_iteration")) %>%
-        filter(is.na(is_selected)) %>%
-        left_join(X %>% distinct(Variant_Classification, mut_freq_per_kb, GENE), by="GENE") %>%
-        group_by(random_iteration, Variant_Classification) %>%
-        summarize(null_mut_freq = median(mut_freq_per_kb),
-                  n = n()) %>%
-        mutate(is_selected = FALSE)
+#     gene_mut_freq_null_notsel = X %>% 
+#         distinct(GENE) %>%
+#         mutate(count = 1000) %>%
+#         uncount(count) %>%
+#         group_by(GENE) %>%
+#         mutate(random_iteration = paste0("it",row_number()-1)) %>%
+#         ungroup() %>%
+#         left_join(randsel_genes %>% mutate(is_selected = TRUE), 
+#                   by=c("GENE","random_iteration")) %>%
+#         filter(is.na(is_selected)) %>%
+#         left_join(X %>% distinct(Variant_Classification, mut_freq_per_kb, GENE), by="GENE") %>%
+#         group_by(random_iteration, Variant_Classification) %>%
+#         summarize(null_mut_freq = median(mut_freq_per_kb),
+#                   n = n()) %>%
+#         mutate(is_selected = FALSE)
     
-    gene_mut_freq_null = rbind(gene_mut_freq_null_selected, gene_mut_freq_null_notsel)
+#     gene_mut_freq_null = rbind(gene_mut_freq_null_selected, gene_mut_freq_null_notsel)
     
-    x = X %>%
-        left_join(gene_mut_freq_null, by="is_selected") %>%
-        mutate(mut_freq_norm = mut_freq_per_kb / null_mut_freq)
+#     x = X %>%
+#         left_join(gene_mut_freq_null, by="is_selected") %>%
+#         mutate(mut_freq_norm = mut_freq_per_kb / null_mut_freq)
     
-    plts[["model_val-mutation_gene_frequency_random_norm"]] = x %>% 
-        ggplot(aes(x=Variant_Classification, y=mut_freq_norm, 
-                   group=interaction(Variant_Classification,is_selected))) +
-        geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
-                     position=position_dodge(0.7)) +
-        stat_compare_means(aes(group=is_selected), method="wilcox.test", 
-                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
-        yscale("log10", .format=TRUE) + 
-        fill_palette(PAL_DUAL) +
-        labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb) Norm.", fill="Selected Model") +
-        theme_pubr(x.text.angle=70)
+#     plts[["model_val-mutation_gene_frequency_random_norm"]] = x %>% 
+#         ggplot(aes(x=Variant_Classification, y=mut_freq_norm, 
+#                    group=interaction(Variant_Classification,is_selected))) +
+#         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
+#                      position=position_dodge(0.7)) +
+#         stat_compare_means(aes(group=is_selected), method="wilcox.test", 
+#                            label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
+#         yscale("log10", .format=TRUE) + 
+#         fill_palette(PAL_DUAL) +
+#         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb) Norm.", fill="Selected Model") +
+#         theme_pubr(x.text.angle=70)
     
     # - mutation frequencies at the exon level
     # how often do selected exons get hit when the gene is mutated?
@@ -917,6 +917,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         left_join(notsel_mut_freq, by=c("Variant_Classification","GENE")) %>%
         # Fold change difference 
         mutate(fc_mut_freq = log2(event_mut_freq_per_kb / notsel_mut_freq))
+      
     
     ## do the same with a null distribution of 1000 random exons
     null = models %>%
@@ -993,82 +994,82 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
     
     ## alternative protein isoforms have a higher mutation frequency than expected,
     ## what exons are causing that?
-    X %>% 
-        drop_na(fc_mut_freq) %>% 
-        filter(dataset=="Real" & 
-               term_clean=="Alternative protein isoforms" & 
-               Variant_Classification=="Frame_Shift_Del" & 
-               is_selected) %>% 
-        arrange(fc_mut_freq)
+#     X %>% 
+#         drop_na(fc_mut_freq) %>% 
+#         filter(dataset=="Real" & 
+#                term_clean=="Alternative protein isoforms" & 
+#                Variant_Classification=="Frame_Shift_Del" & 
+#                is_selected) %>% 
+#         arrange(fc_mut_freq)
     
     # Are selected events and genes mutated more/less frequently than by random chance?
     ## genes
-    X = randsel_genes %>%
-        # the random dataset
-        left_join(
-            gene_mut_freq %>% distinct(GENE, mut_freq_per_kb, Variant_Classification), 
-        by="GENE") %>%
-        mutate(type = "Random") %>%
-        bind_rows(
-            # the real dataset
-            gene_mut_freq %>%
-            distinct(GENE, mut_freq_per_kb, Variant_Classification) %>%
-            left_join(models %>% distinct(GENE, is_selected), by="GENE") %>%
-            filter(is_selected) %>%
-            mutate(type = "Real")
-        ) %>%
-        drop_na(Variant_Classification)
+#     X = randsel_genes %>%
+#         # the random dataset
+#         left_join(
+#             gene_mut_freq %>% distinct(GENE, mut_freq_per_kb, Variant_Classification), 
+#         by="GENE") %>%
+#         mutate(type = "Random") %>%
+#         bind_rows(
+#             # the real dataset
+#             gene_mut_freq %>%
+#             distinct(GENE, mut_freq_per_kb, Variant_Classification) %>%
+#             left_join(models %>% distinct(GENE, is_selected), by="GENE") %>%
+#             filter(is_selected) %>%
+#             mutate(type = "Real")
+#         ) %>%
+#         drop_na(Variant_Classification)
     
-    plts[["model_val-mutation_gene_frequency_vs_random"]] = X %>% 
-        ggboxplot(x="Variant_Classification", y="mut_freq_per_kb", 
-                  fill="type", outlier.size=0.1, palette=c("grey",PAL_SINGLE_LIGHT)) +
-        yscale("log10", .format=TRUE) +
-        stat_compare_means(aes(group=type), label.y=log10(20), 
-                           method="wilcox.test", label="p.signif", 
-                           size=FONT_SIZE, family=FONT_FAMILY) +
-        geom_text(aes(y=75, label=n), 
-                  X %>% filter(type=="Real") %>% count(Variant_Classification), 
-                  size=FONT_SIZE, family=FONT_FAMILY) +
-        labs(x="Mutation Effect", y="log10(Mut. Freq. per Gene Kb)", fill="Dataset Type") +
-        theme_pubr(x.text.angle=70)
+#     plts[["model_val-mutation_gene_frequency_vs_random"]] = X %>% 
+#         ggboxplot(x="Variant_Classification", y="mut_freq_per_kb", 
+#                   fill="type", outlier.size=0.1, palette=c("grey",PAL_SINGLE_LIGHT)) +
+#         yscale("log10", .format=TRUE) +
+#         stat_compare_means(aes(group=type), label.y=log10(20), 
+#                            method="wilcox.test", label="p.signif", 
+#                            size=FONT_SIZE, family=FONT_FAMILY) +
+#         geom_text(aes(y=75, label=n), 
+#                   X %>% filter(type=="Real") %>% count(Variant_Classification), 
+#                   size=FONT_SIZE, family=FONT_FAMILY) +
+#         labs(x="Mutation Effect", y="log10(Mut. Freq. per Gene Kb)", fill="Dataset Type") +
+#         theme_pubr(x.text.angle=70)
     
-    ## events
-    X = randsel_events %>%
-        # the random dataset
-        left_join(
-            event_mut_freq %>% distinct(EVENT, event_mut_freq_per_kb, Variant_Classification), 
-        by="EVENT") %>%
-        mutate(type = "Random") %>%
-        bind_rows(
-            # the real dataset
-            event_mut_freq %>%
-            distinct(EVENT, event_mut_freq_per_kb, Variant_Classification) %>%
-            left_join(models %>% distinct(EVENT, is_selected), by="EVENT") %>%
-            filter(is_selected) %>%
-            mutate(type = "Real")
-        ) %>%
-        drop_na(Variant_Classification)
+#     ## events
+#     X = randsel_events %>%
+#         # the random dataset
+#         left_join(
+#             event_mut_freq %>% distinct(EVENT, event_mut_freq_per_kb, Variant_Classification), 
+#         by="EVENT") %>%
+#         mutate(type = "Random") %>%
+#         bind_rows(
+#             # the real dataset
+#             event_mut_freq %>%
+#             distinct(EVENT, event_mut_freq_per_kb, Variant_Classification) %>%
+#             left_join(models %>% distinct(EVENT, is_selected), by="EVENT") %>%
+#             filter(is_selected) %>%
+#             mutate(type = "Real")
+#         ) %>%
+#         drop_na(Variant_Classification)
     
-    plts[["model_val-mutation_event_frequency_vs_random"]] = X %>% 
-        ggboxplot(x="Variant_Classification", y="event_mut_freq_per_kb", 
-                  fill="type", outlier.size=0.1, palette=c("grey",PAL_SINGLE_LIGHT)) +
-        yscale("log10", .format=TRUE) +
-        stat_compare_means(aes(group=type), label.y=log10(500), 
-                           method="wilcox.test", label="p.signif", 
-                           size=FONT_SIZE, family=FONT_FAMILY) +
-        geom_text(aes(y=1500, label=n), 
-                  X %>% filter(type=="Real") %>% count(Variant_Classification), 
-                  size=FONT_SIZE, family=FONT_FAMILY) +
-        labs(x="Mutation Effect", y="log10(Mut. Freq. per Event Kb)", fill="Dataset Type") +
-        theme_pubr(x.text.angle=70)
+#     plts[["model_val-mutation_event_frequency_vs_random"]] = X %>% 
+#         ggboxplot(x="Variant_Classification", y="event_mut_freq_per_kb", 
+#                   fill="type", outlier.size=0.1, palette=c("grey",PAL_SINGLE_LIGHT)) +
+#         yscale("log10", .format=TRUE) +
+#         stat_compare_means(aes(group=type), label.y=log10(500), 
+#                            method="wilcox.test", label="p.signif", 
+#                            size=FONT_SIZE, family=FONT_FAMILY) +
+#         geom_text(aes(y=1500, label=n), 
+#                   X %>% filter(type=="Real") %>% count(Variant_Classification), 
+#                   size=FONT_SIZE, family=FONT_FAMILY) +
+#         labs(x="Mutation Effect", y="log10(Mut. Freq. per Event Kb)", fill="Dataset Type") +
+#         theme_pubr(x.text.angle=70)
     
-    x = X %>% 
-        mutate(random_iteration = replace_na(random_iteration, "real")) %>% 
-        group_by(Variant_Classification, random_iteration) %>% 
-        summarize(med = median(event_mut_freq_per_kb, na.rm=TRUE)) %>% 
-        ungroup()
+#     x = X %>% 
+#         mutate(random_iteration = replace_na(random_iteration, "real")) %>% 
+#         group_by(Variant_Classification, random_iteration) %>% 
+#         summarize(med = median(event_mut_freq_per_kb, na.rm=TRUE)) %>% 
+#         ungroup()
     
-    x %>% ggviolin(x="Variant_Classification", y="med") + yscale("log10") + geom_point(data=x %>% filter(random_iteration=="real")) + theme_pubr(x.text.angle = 70)
+#     x %>% ggviolin(x="Variant_Classification", y="med") + yscale("log10") + geom_point(data=x %>% filter(random_iteration=="real")) + theme_pubr(x.text.angle = 70)
     
     return(plts)
 }
@@ -1357,6 +1358,8 @@ main = function(){
     randsel_events = read_tsv(randsel_events_file)
     randsel_genes = read_tsv(randsel_genes_file)
     
+    gc()
+    
     # log normalize gene expression
     genexpr = genexpr %>% mutate_at(vars(-("ID")), function(x){ log2(x+1) })
     
@@ -1439,18 +1442,22 @@ main = function(){
     harm_stats = get_spldep_stats(harm %>% rownames_to_column("index"), models)
     
     # plot
-    plts = make_plots(models, rnai_stats, cancer_events, 
-                      eval_pvalue, eval_corr, 
-                      enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
-                      gene_mut_freq, event_mut_freq, randsel_genes, randsel_events,
-                      rnai, spldep, splicing, genexpr, metadata)
+    plts = make_plots(
+        models, rnai_stats, cancer_events, 
+        eval_pvalue, eval_corr, 
+        enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+        gene_mut_freq, event_mut_freq, randsel_genes, randsel_events,
+        rnai, spldep, splicing, genexpr, metadata
+    )
 
     # make figdata
-    figdata = make_figdata(models, rnai_stats, cancer_events, 
-                      eval_pvalue, eval_corr, 
-                      enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
-                      gene_mut_freq, event_mut_freq, randsel_genes, randsel_events,
-                      rnai, spldep, splicing, genexpr, metadata)
+    figdata = make_figdata(
+        models, rnai_stats, cancer_events, 
+        eval_pvalue, eval_corr, 
+        enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+        gene_mut_freq, event_mut_freq, randsel_genes, randsel_events,
+        rnai, spldep, splicing, genexpr, metadata
+    )
     
     # save
     save_plots(plts, figs_dir)

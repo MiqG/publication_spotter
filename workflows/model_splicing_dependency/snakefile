@@ -23,7 +23,13 @@ RESULTS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
+
+
 EVENT_TYPES = ["EX"] # ['EX','ALTA','ALTD','INT']
+N_SAMPLES = {
+    "Thomas2020": 2,
+    "Hart2015": 12
+}
 
 # model selection parameters
 THRESH_PVALUE = 0.025
@@ -87,7 +93,7 @@ rule all:
         
         # Exon CRISPR screen (Thomas 2020)
         ## compute splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','Thomas2020','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','{dataset}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, dataset=["Thomas2020","Hart2015"]),
         
         # Achilles Gene dependencies
         expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES),
@@ -656,13 +662,13 @@ rule harm_score_encore:
                    .to_csv(output.harm_score_rel, sep="\t", index=False, compression="gzip")
 
         
-rule compute_splicing_dependency_Thomas2020:
+rule compute_splicing_dependency_exon_crispr_screen_datsets:
     input:
-        psi = os.path.join(RAW_DIR,'articles','Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
-        genexpr = os.path.join(RAW_DIR,'articles','Thomas2020','vast_out','TPM-hg38-2.tab.gz'),
+        psi = os.path.join(RAW_DIR,'articles','{dataset}','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = lambda wildcards: os.path.join(RAW_DIR,'articles','{dataset}','vast_out','TPM-hg38-{n_samples}.tab.gz').format(dataset=wildcards.dataset, n_samples=N_SAMPLES[wildcards.dataset]),
         coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:
-        directory(os.path.join(RESULTS_DIR,'files','Thomas2020','splicing_dependency-{event_type}'))
+        directory(os.path.join(RESULTS_DIR,'files','{dataset}','splicing_dependency-{event_type}'))
     threads: 15
     resources:
         runtime = 86400, # seconds = 24h = 1 day
