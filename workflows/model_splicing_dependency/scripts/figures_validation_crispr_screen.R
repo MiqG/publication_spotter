@@ -54,6 +54,7 @@ plot_summary = function(crispr, selected_events){
         filter(EVENT %in% selected_events) %>% 
         mutate(log10_pvalue=-log10(pvalue),
                event_gene = paste0(EVENT,"_",geneName))
+    n_events = X %>% distinct(EVENT) %>% nrow()
     
     plts = list()
     plts[["summary-scatters"]] = X %>% 
@@ -61,7 +62,7 @@ plot_summary = function(crispr, selected_events){
                   size="log10_pvalue", color="cell_line") + 
         facet_wrap(~comparison) + 
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
-        labs(x="Event & Gene", y="Event Dependency", 
+        labs(x=sprintf("Event & Gene (n=%s)", n_events), y="Event Dependency", 
              color="Cell Line", size="-log10(p-value)") + 
         coord_flip() +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
@@ -75,6 +76,10 @@ plot_predictions = function(crispr, selected_events, harm){
     X = crispr %>% 
         filter(EVENT %in% selected_events) %>% 
         left_join(harm, by=c("EVENT"="index","cell_line")) %>%
+        drop_na(sign_harm, fitness_score) %>%
+        group_by(comparison, cell_line) %>%
+        mutate(cell_line = sprintf("%s (n=%s)", cell_line, n())) %>%
+        ungroup() %>%
         arrange(cell_line, comparison)
     
     plts = list()
