@@ -45,7 +45,7 @@ FONT_FAMILY = "Arial"
 # psi_file = file.path(RAW_DIR,'articles','Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # spldep_file = file.path(RESULTS_DIR,'files','Thomas2020','splicing_dependency-EX','mean.tsv.gz')
-# figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen')
+# figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020')
 
 
 ##### FUNCTIONS #####
@@ -62,7 +62,7 @@ plot_summary = function(crispr, selected_events){
                   size="log10_pvalue", color="cell_line") + 
         facet_wrap(~comparison) + 
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
-        labs(x=sprintf("Event & Gene (n=%s)", n_events), y="Event Dependency", 
+        labs(x=sprintf("Event & Gene (n=%s)", n_events), y="Obs. Delta Cell Prolif.", 
              color="Cell Line", size="-log10(p-value)") + 
         coord_flip() +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
@@ -90,7 +90,7 @@ plot_predictions = function(crispr, selected_events, harm){
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
               aspect.ratio=1) +
         guides(color="none") + 
-        labs(x="Harm Score", y="Event Dependency") +
+        labs(x="Harm Score", y="Obs. Delta Cell Prolif.") +
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
     
     return(plts)
@@ -130,7 +130,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=5.75, height=7)
+    save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=5.75, height=7.5)
     save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=6, height=6)
 }
 
@@ -176,6 +176,13 @@ main = function(){
                sign_harm=(-1)*harm_score) %>%
         left_join(CELL_TYPES, by="sampleID")
     
+    # available events
+    avail_events = intersect(
+        crispr %>% filter(EVENT %in% selected_events) %>% drop_na(fitness_score) %>% pull(EVENT),
+        harm %>% filter(index %in% selected_events) %>% drop_na(sign_harm, cell_line) %>% pull(index)
+    )
+    
+    # plot
     plts = make_plots(crispr, selected_events, harm)
 
     # make figdata

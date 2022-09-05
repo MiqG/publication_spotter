@@ -1470,3 +1470,18 @@ if (sys.nframe() == 0L) {
     main()
     print("Done!")
 }
+
+# events_oi = c("HsaEX1012875","HsaEX6014275","HsaEX0057572","HsaEX6034414")
+# genes_oi = c('SF3B1','USP39','EIF3B','COPA')
+
+# splicing_long = splicing %>% filter(EVENT %in% events_oi) %>% pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi")
+# spldep_long = spldep %>% filter(index %in% events_oi) %>% pivot_longer(-index, names_to="DepMap_ID", values_to="splicing_dependency")
+# rnai_long = rnai %>% filter(index %in% genes_oi) %>% pivot_longer(-index, names_to="DepMap_ID", values_to="gene_dependency")
+# x = splicing_long %>% 
+#     left_join(spldep_long, by=c("DepMap_ID","EVENT"="index")) %>% 
+#     left_join(event_info %>% distinct(EVENT,GENE)) %>% 
+#     left_join(rnai_long, by=c("GENE"="index","DepMap_ID"))
+
+# x %>% drop_na(psi, gene_dependency) %>% ggscatter(x="psi", y="gene_dependency") + facet_wrap(~GENE, scales="free")
+# cells_oi = x %>% filter(gene_dependency > 1 & GENE=="SF3B1") %>% pull(DepMap_ID)
+# metadata %>% filter(DepMap_ID %in% cells_oi)
