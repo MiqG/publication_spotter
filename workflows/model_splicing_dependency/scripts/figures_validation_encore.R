@@ -87,6 +87,7 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         drop_na()
     
     dtpm = metadata %>%
+        distinct(sampleID, KD) %>%
         drop_na(KD) %>% # remove negative controls
         left_join(
             diff_tpm %>% 
@@ -120,12 +121,14 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
             by="sampleID"
         ) %>%
         left_join(genedep, by=c("KD","DepMap_ID")) %>% 
+        left_join(dtpm, by=c("KD","sampleID")) %>%
         drop_na(deltaPSI, demeter2) %>%
         # summarize replicates
         group_by(cell_line, KD, demeter2, index) %>%
         summarize(deltaPSI = mean(deltaPSI),
                   spldep = mean(spldep),
-                  harm = (-1) * mean(harm)) %>%
+                  harm = (-1) * mean(harm),
+                  fcTPM = mean(fcTPM)) %>%
                   # harm = (-1) * sign(deltaPSI) * spldep) %>%
         ungroup() %>%
         group_by(cell_line, KD) %>%
@@ -133,7 +136,8 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         mutate(harm_rank = row_number()) %>%
         ungroup()
     
-    plts[["encore_val-diff_genexpr_kd-violin"]] = dtpm %>%
+    plts[["encore_val-diff_genexpr_kd-violin"]] = X %>%
+        distinct(cell_line, fcTPM) %>%
         ggviolin(x="cell_line", y="fcTPM", trim=TRUE,
                  fill="cell_line", color=NA, palette=PAL_DUAL) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
@@ -168,6 +172,7 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
     set.seed(RANDOM_SEED)
     correls = lapply(seq(1,100,2), function(x){
         corr_real = X %>% 
+            # filter(fcTPM < -1) %>% # ideally, consider only KDs comparable to Demeter2...
             filter(harm_rank <= x) %>% 
             group_by(cell_line, KD, demeter2) %>% 
             summarize(pred = sum(harm),
