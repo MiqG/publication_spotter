@@ -77,6 +77,9 @@ rule all:
         ## compute splicing dependencies
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
+        ## compute delta TPM
+        os.path.join(RESULTS_DIR,'files','ENCORE','diff_tpm.tsv.gz'),
+        
         ## compute delta PSI
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi_rel-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
@@ -99,9 +102,9 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # Shortest path length from selected genes to cancer-driver genes vs random selection
-        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz'), event_type=EVENT_TYPES),
-        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz'), event_type=EVENT_TYPES, it=list(range(N_RANDOM_MODELS))),
-        expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','merged.tsv.gz'), event_type=EVENT_TYPES)
+#         expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz'), event_type=EVENT_TYPES),
+#         expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz'), event_type=EVENT_TYPES, it=list(range(N_RANDOM_MODELS))),
+#         expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','merged.tsv.gz'), event_type=EVENT_TYPES)
         
         # Validation
         ## CRISPR event KO dataset (Thomas 2020)
@@ -482,6 +485,47 @@ rule compute_splicing_dependency_encore:
                     --n_jobs={threads} \
                     --log_transform
         """
+        
+        
+rule diff_tpm_encore:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        genexpr = os.path.join(RAW_DIR,'ENCODE','ENCORE','vast_out','TPM-hg38-1097.tab.gz')
+    output:
+        diff_tpm = os.path.join(RESULTS_DIR,'files','ENCORE','diff_tpm.tsv.gz')
+    run:
+        import pandas as pd
+        import numpy as np
+        
+        metadata = pd.read_table(input.metadata)
+        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
+        
+        genexpr = np.log2(genexpr + 1)
+        genexpr.columns = [c.replace("_1","") for c in genexpr.columns]
+        
+        # as the difference between conditions and the mean of the conditions
+        diff_tpm = {}
+        for sample_oi in metadata["sampleID"]:
+            # get the controls of the sample
+            ctls = metadata.loc[metadata["sampleID"]==sample_oi, "control_samples"].values[0]
+            
+            # controls will be np.nan
+            if isinstance(ctls,str):
+                ctls = ctls.split(",")
+                tpm_ctls = genexpr[ctls].mean(axis=1)
+                
+                # compute log2 fold-change
+                dtpm = genexpr[sample_oi] - tpm_ctls
+                
+                diff_tpm[sample_oi] = dtpm
+                
+                del dtpm, tpm_ctls, ctls
+                
+        
+        diff_tpm = pd.DataFrame(diff_tpm)
+        
+        # save
+        diff_tpm.reset_index().to_csv(output.diff_tpm, sep="\t", index=False, compression="gzip")
         
         
 rule delta_psi_encore:

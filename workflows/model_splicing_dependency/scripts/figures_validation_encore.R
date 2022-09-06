@@ -51,34 +51,49 @@ FONT_FAMILY = "Arial"
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
+# diff_tpm_file = file.path(RESULTS_DIR,'files','ENCORE','diff_tpm.tsv.gz')
 # delta_psi_file = file.path(RESULTS_DIR,'files','ENCORE','delta_psi-EX.tsv.gz')
 # spldep_file = file.path(RESULTS_DIR,'files','ENCORE','splicing_dependency-EX','mean.tsv.gz')
 # harm_score_file = file.path(RESULTS_DIR,"files","ENCORE","harm_score-EX.tsv.gz")
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
+# gene_annot_file = file.path(RAW_DIR,"HGNC","gene_annotations.tsv.gz")
 # metadata_file = file.path(PREP_DIR,'metadata','ENCORE.tsv.gz')
 # ontology_file = file.path(RESULTS_DIR,'files','ENCORE','kd_gene_sets-EX.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_encore')
 # crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
 
 ##### FUNCTIONS #####
-plot_encore_validation = function(metadata, event_info, rnai, delta_psi, 
+plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_psi, 
                                   harm_score, selected_events, ontology,
                                   events_crispr, spldep){
     plts = list()
     
     cells_oi = metadata %>% pull(DepMap_ID) %>% unique()
+    event_annot = event_info %>% distinct(GENE, EVENT)   
+    metadata = metadata %>% 
+        mutate(
+            KD = ifelse(KD=="GNB2L1","RACK1",KD), # GNB2L1 is RACK1 in the latest annotation
+            kd_lab = paste0(KD,"_",cell_line)
+        )
     genes_kd = metadata %>% pull(KD) %>% unique() %>% na.omit()
-    event_annot = event_info %>% distinct(GENE, EVENT)
-    metadata = metadata %>% mutate(kd_lab=paste0(KD,"_",cell_line))
     
     genedep = rnai %>% 
-        filter(index%in%genes_kd) %>% 
+        filter(index %in% genes_kd) %>% 
         dplyr::select(c("index",all_of(cells_oi))) %>% 
         pivot_longer(-index, names_to="DepMap_ID", values_to="demeter2") %>% 
         rename(KD=index) %>%
         distinct() %>%
         drop_na()
+    
+    dtpm = metadata %>%
+        drop_na(KD) %>% # remove negative controls
+        left_join(
+            diff_tpm %>% 
+                filter(NAME %in% genes_kd) %>% 
+                pivot_longer(-c(ID,NAME), names_to="sampleID", values_to="fcTPM"),
+            by = c("KD"="NAME", "sampleID")
+        )    
     
     dpsi = delta_psi %>%
         filter(EVENT%in%selected_events) %>%
@@ -117,6 +132,13 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
         arrange(cell_line, KD, harm) %>%
         mutate(harm_rank = row_number()) %>%
         ungroup()
+    
+    plts[["encore_val-diff_genexpr_kd-violin"]] = dtpm %>%
+        ggviolin(x="cell_line", y="fcTPM", trim=TRUE,
+                 fill="cell_line", color=NA, palette=PAL_DUAL) + 
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        guides(fill="none") + 
+        labs(x="Cell Line", y="log2FC Gene Expr. KDs")
     
     # how many selected events change in each KD?
     plts[["encore_val-n_selected_events-violin"]] = X %>% 
@@ -403,11 +425,11 @@ plot_encore_validation = function(metadata, event_info, rnai, delta_psi,
 }
 
 
-make_plots = function(metadata, event_info, rnai, delta_psi, 
+make_plots = function(metadata, event_info, rnai, diff_tpm, delta_psi, 
                       harm_score, selected_events, ontology,
                       events_crispr, spldep){
     plts = list(
-        plot_encore_validation(metadata, event_info, rnai, delta_psi, 
+        plot_encore_validation(metadata, event_info, rnai, diff_tpm, delta_psi, 
                                harm_score, selected_events, ontology,
                                events_crispr, spldep)
     )
@@ -440,6 +462,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 save_plots = function(plts, figs_dir){
     # correlations of predictions
+    save_plt(plts, "encore_val-diff_genexpr_kd-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=12)
     save_plt(plts, "encore_val-n_selected_events-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-demeter2-violin", ".pdf", figs_dir, width=5, height=5)
@@ -490,6 +513,7 @@ main = function(){
     # load
     metadata = read_tsv(metadata_file)
     spldep = read_tsv(spldep_file)
+    diff_tpm = read_tsv(diff_tpm_file)
     delta_psi = read_tsv(delta_psi_file)
     rnai = read_tsv(rnai_file)
     harm_score = read_tsv(harm_score_file)
@@ -500,7 +524,7 @@ main = function(){
     
     events_crispr = crispr %>% pull(EVENT) %>% unique()
     
-    plts = make_plots(metadata, event_info, rnai, delta_psi, 
+    plts = make_plots(metadata, event_info, rnai, diff_tpm, delta_psi, 
                       harm_score, selected_events, ontology,
                       events_crispr, spldep)
 
