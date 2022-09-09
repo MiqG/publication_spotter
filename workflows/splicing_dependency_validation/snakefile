@@ -18,6 +18,7 @@ import pandas as pd
 
 # variables
 ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+SRC_DIR = os.path.join(ROOT,"src")
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_validation')
@@ -42,6 +43,26 @@ EVENTS_OI = [
     "HsaEX0071941",
 ]
 
+EVENT_GENES_OI = {
+    #'HsaEX0006970': 'ATP6V0A2',
+    #'HsaEX0008092': 'BIN1',
+    'HsaEX0020455': 'DNM2',
+    #'HsaEX0022946': 'ERBIN',
+    'HsaEX0026116': 'FNBP1',
+    'HsaEX0034998': 'KRAS',
+    #'HsaEX0043609': 'NPNT',
+    'HsaEX0044398': 'NUP85',
+    #'HsaEX0044468': 'NVL',
+    'HsaEX0049558': 'PPP1R12A',
+    'HsaEX0050345': 'PRPF18',
+    'HsaEX0052877': 'RCC1',
+    #'HsaEX0056284': 'SATB2',
+    #'HsaEX0066096': 'TMTC1',
+    'HsaEX0070392': 'VLDLR',
+    'HsaEX0071941': 'YAP1'
+}
+
+
 event_info = pd.read_table(os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"))
 EVENTS_INFO = {
     event: {
@@ -65,11 +86,15 @@ METHODS_KWS = {
 ##### RULES #####
 rule all:
     input:
+        # infer structures
+        expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
+        expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
+        
         # fit gene dependencies and get empirical distributions of coefficients
-        expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"), event=EVENTS_OI, method=METHODS_KWS.keys()),
-        expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI)
-    
-    
+        #expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"), event=EVENTS_OI, method=METHODS_KWS.keys()),
+        #expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI),
+
+        
 rule get_splicing_enhancers:
     input:
         reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz"),
@@ -133,4 +158,25 @@ rule get_exon_sequences:
                         --margin_out={params.margin_out} \
                         --reference_file={input.reference} \
                         --output_file={output}
+        """
+        
+        
+rule structure_inference_get_proteoforms:
+    input:
+        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
+        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38.tab.gz")
+    output:
+        df = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'),
+        fasta = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta')
+    params:
+        script_dir = os.path.join(SRC_DIR,"python"),
+        event_oi = "{event}"
+    shell:
+        """
+        nice python {params.script_dir}/get_proteoforms.py \
+                    --event_oi={params.event_oi} \
+                    --annotation_file={input.annotation} \
+                    --event_info_file={input.event_info} \
+                    --output_df_file={output.df} \
+                    --output_fasta_file={output.fasta}
         """

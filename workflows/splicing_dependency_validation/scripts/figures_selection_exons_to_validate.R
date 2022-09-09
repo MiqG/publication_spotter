@@ -43,7 +43,7 @@ THRESH_DRUGS_FDR = 0.1
 THRESH_DRUGS_NOBS = 20
 
 SELECTED_CELL_LINES = c(
-    "A549_LUNG",
+    "A549_LUNG", # on-going
     "HT29_LARGE_INTESTINE",
     "MDAMB231_BREAST"
 )
@@ -758,9 +758,9 @@ main = function(){
     
     available_cells = read_tsv(available_cells_file) %>%
         drop_na(DepMap_ID) %>%
-        left_join(ccle_metadata, by="DepMap_ID") %>%
-        distinct(DepMap_ID, culture_type) %>%
-        filter(culture_type != "Suspension") %>% # we don't want suspension
+        left_join(ccle_metadata, by=c("DepMap_ID","CCLE_Name")) %>%
+        distinct(CCLE_Name, DepMap_ID, culture_type) %>%
+        filter(culture_type %in% c("Adherent",NA)) %>% # we don't want suspension
         pull(DepMap_ID) %>%
         unique()
     

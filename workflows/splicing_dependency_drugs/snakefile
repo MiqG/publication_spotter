@@ -18,6 +18,7 @@ import pandas as pd
 
 # variables
 ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+SRC_DIR = os.path.join(ROOT,"src")
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
@@ -32,21 +33,31 @@ DRUG_SCREENS = {
     'GDSC2': pd.read_table(os.path.join(PREP_DIR,'drug_screens','train','GDSC2.tsv.gz'))["ID"].unique()
 }
 
+EVENT_GENES_OI = {
+    "HsaEX0038400": "MDM2",
+    "HsaEX0025679": "FGFR2",
+    #"HsaEX6022386": "ERBB2"
+}
+
 ##### RULES #####
 rule all:
     input:
+        # predict structures
+        expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
+        expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
+        
         # associations drug responses and splicing dependencies
-        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
-        expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
+        #expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
+        #expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
         
         # concatenate model summaries
-        expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # concatenate drug rankings
-        expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # write selected models
-        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         
         # embed association coefficients
         # expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz'), event_type=EVENT_TYPES),
@@ -64,10 +75,11 @@ rule all:
         
         # Shortest path lengths in PPIs between drug targets and associations
         ## real
-        expand(os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ## random
         # os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz'),
         
+
         # plot models
         # os.path.join(RESULTS_DIR,'figures','model_drug_screens')
 
@@ -365,4 +377,26 @@ rule shortest_paths_random:
                     --output_file={output} \
                     --n_random_sources={params.n_random_sources} \
                     --n_jobs={threads}
+        """
+        
+        
+        
+rule structure_inference_get_proteoforms:
+    input:
+        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
+        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38.tab.gz")
+    output:
+        df = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'),
+        fasta = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta')
+    params:
+        script_dir = os.path.join(SRC_DIR,"python"),
+        event_oi = "{event}"
+    shell:
+        """
+        nice python {params.script_dir}/get_proteoforms.py \
+                    --event_oi={params.event_oi} \
+                    --annotation_file={input.annotation} \
+                    --event_info_file={input.event_info} \
+                    --output_df_file={output.df} \
+                    --output_fasta_file={output.fasta}
         """
