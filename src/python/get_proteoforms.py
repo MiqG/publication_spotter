@@ -7,6 +7,7 @@
 # Given a VastDB exon, get all isoforms including it or not.
 
 import argparse
+import os
 import pandas as pd
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -111,29 +112,14 @@ def get_proteoforms(event_oi, annot, event_info):
     # delete event
     df["aa_noevent"] = df["aa"].str.replace(event_aa, "")
 
-    # prepare fasta of the canonical with and without the event sequence
-    #     if any(df["is_canonical"] & df["event_included"]):
-    #         sel = df.loc[df["is_canonical"]]
-    #         fasta = [
-    #             sel["id_new"].values[0] + " | event_included=True",
-    #             sel["aa"].values[0],
-    #             sel["id_new"].values[0] + " | event_included=False",
-    #             sel["aa_noevent"].values[0],
-    #         ]
-        
     if any(df["event_included"]):
         sel = df.loc[df["event_included"]]
         
-        fasta = []
+        fasta = {}
         for idx, row in sel.iterrows():
-            fasta.append([
-                row["id_new"] + " | event_included=True",
-                row["aa"],
-                row["id_new"] + " | event_included=False",
-                row["aa_noevent"],
-            ])
-        fasta = sum(fasta,[])
-        
+            identifier = row["id"].replace(" ","__")
+            fasta[identifier + "__|__event_included=True"] = row["aa"]
+            fasta[identifier + "__|__event_included=False"] = row["aa_noevent"]
     else:
         print("The canonical proteoform does not contain the event!")
 
@@ -173,9 +159,17 @@ def main():
     # save
     print("Saving proteoforms...")
     df.to_csv(output_df_file, sep="\t", compression="gzip", index=False)
-    with open(output_fasta_file, "w") as f:
-        f.writelines("\n".join(fasta) + "\n")
 
+    # write fasta separately and together
+    for identifier, seq in fasta.items():
+        output_dir = os.path.dirname(output_fasta_file)
+        filename = os.path.join(output_dir,identifier+".fasta").replace(">","")
+        with open(filename, "w") as f:
+            f.writelines("\n".join([identifier, seq]) + "\n")
+            
+    fastas = "\n".join(sum([[k,v] for k,v in fasta.items()],[]))+"\n"
+    with open(output_fasta_file, "w") as f:
+            f.writelines(fastas)
 
 ##### SCRIPT #####
 if __name__ == "__main__":
