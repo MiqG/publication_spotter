@@ -40,6 +40,8 @@ require(ggplotify)
 require(gridExtra)
 require(clusterProfiler)
 require(writexl)
+require(ggtext)
+require(ggnewscale)
 
 ROOT = here::here()
 source(file.path(ROOT,"src","R","utils.R"))
@@ -82,6 +84,8 @@ FONT_FAMILY = "Arial"
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
+# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
+
 
 
 ##### FUNCTIONS #####
@@ -102,9 +106,19 @@ load_drug_screens = function(drug_screens_dir){
 }
 
 
-load_ontologies = function(msigdb_dir){
+load_ontologies = function(msigdb_dir, protein_impact_file){
     ontologies = list(
-        "reactome" = read.gmt(file.path(msigdb_dir,"c2.cp.reactome.v7.4.symbols.gmt"))
+        "reactome" = read.gmt(file.path(msigdb_dir,"c2.cp.reactome.v7.4.symbols.gmt")),
+        "protein_impact" = read_tsv(protein_impact_file) %>%
+            dplyr::rename(EVENT=EventID, term=ONTO) %>%
+            dplyr::select(term,EVENT) %>%
+            mutate(term_clean=gsub(" \\(.*","",term),
+                   term_clean=gsub("ORF disruption upon sequence exclusion",
+                                   "ORF disruption (exclusion)",term_clean),
+                   term_clean=gsub("ORF disruption upon sequence inclusion",
+                                   "ORF disruption (inclusion)",term_clean),
+                   term_clean=gsub("In the CDS, with uncertain impact",
+                                   "In the CDS (uncertain)",term_clean))
     )
     return(ontologies)
 }
@@ -207,7 +221,7 @@ evaluate_reactome = function(models, drug_targets, ontology){
 plot_eda_associations = function(models, drug_screen){
     top_n = 25
     X = models %>% 
-        left_join(drug_screen %>% distinct(DRUG_ID,DRUG_NAME) %>% drop_na(), by="DRUG_ID")
+        left_join(drug_screen %>% distinct(DRUG_ID, DRUG_NAME) %>% drop_na(), by="DRUG_ID")
     
     plts = list()
     
@@ -504,33 +518,57 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
                DRUG_ID = paste0(DRUG_ID),
                name = reorder_within(event_gene, spldep_coefficient, DRUG_ID))
     
+    # color axis labels based on protein impact
+    p_imp_colors = setNames(get_palette("jco", 4), x %>% pull(term_clean) %>% unique())
+    
     plts[["mediators-on_target-spldep_coef"]] = x %>% 
         mutate(lab = sprintf("%s | %s", round(spldep_coefficient, 3), DRUG_NAME)) %>%
         ggbarplot(x="name", y="spldep_coefficient", 
-              color="drug_screen", fill="DRUG_ID", palette=get_palette(PAL_DUAL, 8), 
-              position=position_dodge(0.7)) +
+              color="drug_screen", fill="is_target", palette=PAL_SINGLE_LIGHT, 
+              position=position_dodge(0.8)) +
         color_palette(c("black","white")) + 
-        geom_text(aes(y=1.5, label=lab, group=drug_screen), 
-                  position=position_dodge(0.7),
+        geom_text(aes(y=1.5, label=lab, group=drug_screen), hjust=0.2,
+                  position=position_dodge(0.8),
                   size=FONT_SIZE, family=FONT_FAMILY) +
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
+        coord_flip(clip="off", ylim=c(-0.55, 1.5)) +
         scale_x_reordered() +
-        labs(x="Event & Gene" , y="Spl. Dep. Coefficient", color="Drug Screen", fill="Drug Id") +
-        coord_flip()
+        labs(x="Event & Gene" , y="Spl. Dep. Coefficient", 
+             color="Drug Screen", fill="Is Target") +
+        new_scale_color() +
+        geom_text(aes(y=-1.8,label=event_gene, group=drug_screen, color=term_clean), 
+                  position=position_dodge(0), alpha=1,
+                  size=FONT_SIZE, family=FONT_FAMILY) +
+        color_palette(name="Protein Impact", palette=p_imp_colors) +
+        guides(color=guide_legend(nrow=2)) +
+        theme(
+            axis.text.y = element_blank(),
+            axis.title.y = element_blank()
+        )
     
     plts[["mediators-on_target-event_coef"]] = x %>% 
-        distinct(event_gene, event_coefficient_mean) %>%
+        distinct(event_gene, event_coefficient_mean, is_target, term_clean) %>%
         mutate(lab = round(event_coefficient_mean, 3)) %>%
         ggbarplot(x="event_gene", y="event_coefficient_mean", 
-                  color=NA, fill=PAL_SINGLE_LIGHT,
+                  color=NA, fill="is_target", palette=PAL_SINGLE_LIGHT,
                   position=position_dodge(0.7)) +
-        geom_text(aes(y=sign(event_coefficient_mean)*(abs(event_coefficient_mean)+0.015), label=lab),
+        geom_text(aes(y=sign(event_coefficient_mean)*(abs(event_coefficient_mean)+0.015), 
+                      label=lab),
                   position=position_dodge(0.7),
                   size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
         scale_x_reordered() +
-        labs(x="Event & Gene" , y="PSI Coefficient") +
-        coord_flip()
+        labs(x="Event & Gene" , y="PSI Coefficient", fill="Is Target") +
+        coord_flip(clip="off", ylim=c(-0.17, 0.07)) +
+        new_scale_color() +
+        geom_text(aes(y=-0.32, label=event_gene, color=term_clean), 
+                  size=FONT_SIZE, family=FONT_FAMILY) +
+        color_palette(name="Protein Impact", palette=p_imp_colors) +
+        guides(color=guide_legend(nrow=2)) +
+        theme(
+            axis.text.y = element_blank(),
+            axis.title.y = element_blank()
+        )
     
     # - mediator up/downstream (off target)
     x = assocs_oi %>%
@@ -931,8 +969,8 @@ save_plots = function(plts, figs_dir){
     
     # mediators
     save_plt(plts, "mediators-bar-n_selected", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "mediators-on_target-spldep_coef", ".pdf", figs_dir, width=6.5, height=11)
-    save_plt(plts, "mediators-on_target-event_coef", ".pdf", figs_dir, width=5.5, height=4)
+    save_plt(plts, "mediators-on_target-spldep_coef", ".pdf", figs_dir, width=7, height=9)
+    save_plt(plts, "mediators-on_target-event_coef", ".pdf", figs_dir, width=7, height=7)
     save_plt(plts, "mediators-on_target-top_assocs_spldep_all", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_spldep_pos", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_spldep_neg", ".pdf", figs_dir, width=15, height=13)
@@ -994,7 +1032,7 @@ main = function(){
     paths_real = read_tsv(paths_real_file)
     spldep_models = read_tsv(spldep_models_file) %>%
         filter(EVENT %in% unique(models[["EVENT"]]))
-    ontologies = load_ontologies(msigdb_dir)
+    ontologies = load_ontologies(msigdb_dir, protein_impact_file)
     splicing = read_tsv(splicing_file)
 
     # prep inputs
@@ -1009,6 +1047,10 @@ main = function(){
         ungroup()
     ## ReactomeDB
     eval_reactome = evaluate_reactome(models, drug_targets, ontologies[["reactome"]])
+    
+    ## protein impact
+    models = models %>%
+        left_join(ontologies[["protein_impact"]], by="EVENT")
     
     # make plots
     plts = make_plots(models, drug_screen,

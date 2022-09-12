@@ -176,7 +176,6 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         correl = lapply(seq(1,100,2), function(x){
             corr_real = X %>% 
                 filter(fcTPM < thresh_dtpm) %>% # ideally, consider only KDs comparable to Demeter2...
-                #slice_min(harm_rank, n=x) %>% # most harmful changes
                 filter(harm_rank <= x) %>% 
                 group_by(cell_line, KD, demeter2) %>% 
                 summarize(pred = sum(harm),
@@ -249,7 +248,7 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         mutate(thresh_dtpm_lab = factor(
             thresh_dtpm_lab, levels=paste0("fcTPM<", threshs_dtpm))
         ) %>%
-        filter(thresh_dtpm_lab %in% paste0("fcTPM<", c(0.5, -1, -2))) %>%
+        filter(thresh_dtpm %in% c(0.5, -2)) %>%
         ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
                   size="log10_pvalue", color="cell_line", alpha=0.5) + 
         labs(x="N Harmful Exons", y="Pearson Correlation", 
