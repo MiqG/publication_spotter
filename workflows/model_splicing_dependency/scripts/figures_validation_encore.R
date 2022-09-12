@@ -170,55 +170,72 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
     
     # how does correlation change summing different top maximum?
     set.seed(RANDOM_SEED)
-    correls = lapply(seq(1,100,2), function(x){
-        corr_real = X %>% 
-            # filter(fcTPM < -1) %>% # ideally, consider only KDs comparable to Demeter2...
-            filter(harm_rank <= x) %>% 
-            group_by(cell_line, KD, demeter2) %>% 
-            summarize(pred = sum(harm),
-                      nobs = n()) %>% 
-            ungroup() %>% 
-            group_by(cell_line) %>% 
-            summarize(correlation = cor(demeter2, pred, method="pearson"), 
-                      pvalue=cor.test(demeter2, pred, method="pearson")[["p.value"]],
-                      log10_pvalue = -log10(pvalue),
-                      thresh = x,
-                      dataset = "real")
-        
-        corr_rev = X %>% 
-            group_by(cell_line, KD, demeter2) %>% 
-            slice_min(-harm, n=x) %>% # less harmful changes
-            summarize(pred = sum(harm),
-                      nobs = n()) %>% 
-            ungroup() %>% 
-            group_by(cell_line) %>% 
-            summarize(correlation = cor(demeter2, pred, method="pearson"), 
-                      pvalue=cor.test(demeter2, pred, method="pearson")[["p.value"]],
-                      log10_pvalue = -log10(pvalue),
-                      thresh = x,
-                      dataset = "reversed")
-        
-        corr_null = X %>% 
-            group_by(cell_line, KD, demeter2) %>% 
-            slice_sample(n=x) %>% 
-            slice_min(harm, n=x) %>% 
-            summarize(pred = sum(harm),
-                      nobs = n()) %>% 
-            ungroup() %>% 
-            group_by(cell_line) %>% 
-            summarize(correlation = cor(demeter2, pred, method="pearson"), 
-                      pvalue = cor.test(demeter2, pred, method="pearson")[["p.value"]],
-                      log10_pvalue = -log10(pvalue),
-                      thresh = x,
-                      dataset = "random")
-        
-        corr = rbind(corr_real, corr_rev, corr_null)
-        
-        return(corr)
+    
+    threshs_dtpm = c(0.5, 0, -0.5, -1, -1.5, -2)
+    correls = lapply(threshs_dtpm, function(thresh_dtpm){
+        correl = lapply(seq(1,100,2), function(x){
+            corr_real = X %>% 
+                filter(fcTPM < thresh_dtpm) %>% # ideally, consider only KDs comparable to Demeter2...
+                #slice_min(harm_rank, n=x) %>% # most harmful changes
+                filter(harm_rank <= x) %>% 
+                group_by(cell_line, KD, demeter2) %>% 
+                summarize(pred = sum(harm),
+                          nobs = n()) %>% 
+                ungroup() %>% 
+                group_by(cell_line) %>% 
+                summarize(correlation = cor(demeter2, pred, method="pearson"), 
+                          pvalue = cor.test(demeter2, pred, method="pearson")[["p.value"]],
+                          log10_pvalue = -log10(pvalue),
+                          thresh = x,
+                          dataset = "real")
+
+            corr_rev = X %>% 
+                filter(fcTPM < thresh_dtpm) %>%
+                group_by(cell_line, KD, demeter2) %>% 
+                slice_min(-harm, n=x) %>% # less harmful changes
+                summarize(pred = sum(harm),
+                          nobs = n()) %>% 
+                ungroup() %>% 
+                group_by(cell_line) %>% 
+                summarize(correlation = cor(demeter2, pred, method="pearson"), 
+                          pvalue = cor.test(demeter2, pred, method="pearson")[["p.value"]],
+                          log10_pvalue = -log10(pvalue),
+                          thresh = x,
+                          dataset = "reversed")
+
+            corr_null = X %>% 
+                filter(fcTPM < thresh_dtpm) %>%
+                group_by(cell_line, KD, demeter2) %>% 
+                slice_sample(n=x, replace=TRUE) %>%
+                distinct() %>%
+                slice_min(harm, n=x) %>% 
+                summarize(pred = sum(harm),
+                          nobs = n()) %>% 
+                ungroup() %>% 
+                group_by(cell_line) %>% 
+                summarize(correlation = cor(demeter2, pred, method="pearson"), 
+                          pvalue = cor.test(demeter2, pred, method="pearson")[["p.value"]],
+                          log10_pvalue = -log10(pvalue),
+                          thresh = x,
+                          dataset = "random")
+
+            corr = rbind(corr_real, corr_rev, corr_null)
+
+            return(corr)
+        })
+        correl = do.call(rbind, correl)
+        correl = correl %>%
+            mutate(
+                thresh_dtpm = thresh_dtpm,
+                thresh_dtpm_lab = sprintf("fcTPM<%s",thresh_dtpm)
+            )
+        return(correl)
     })
     correls = do.call(rbind, correls)
     
+    
     plts[["encore_val-thresh_vs_pearsons"]] = correls %>% 
+        filter(thresh_dtpm == max(threshs_dtpm)) %>%
         ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
                   size="log10_pvalue", color="cell_line", alpha=0.5) + 
         labs(x="N Harmful Exons", y="Pearson Correlation", 
@@ -227,7 +244,21 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         theme(aspect.ratio=1) + 
         facet_wrap(~dataset, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-        
+    
+    plts[["encore_val-thresh_vs_pearsons_vs_fcTPM"]] = correls %>% 
+        mutate(thresh_dtpm_lab = factor(
+            thresh_dtpm_lab, levels=paste0("fcTPM<", threshs_dtpm))
+        ) %>%
+        filter(thresh_dtpm_lab %in% paste0("fcTPM<", c(0.5, -1, -2))) %>%
+        ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
+                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
+        labs(x="N Harmful Exons", y="Pearson Correlation", 
+             color="Cell Line", size="-log10(p-value)") +
+        scale_size(range=c(0.1,1.5)) +
+        theme(aspect.ratio=1) + 
+        facet_grid(dataset ~ thresh_dtpm_lab) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
     # evaluate predictions with different dynamic ranges
     plts[["encore_val-harm-hist"]] = X %>% 
         gghistogram(x="harm_rank", fill="cell_line", palette=PAL_DUAL, color=NA) + 
@@ -469,6 +500,7 @@ save_plots = function(plts, figs_dir){
     # correlations of predictions
     save_plt(plts, "encore_val-diff_genexpr_kd-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-thresh_vs_pearsons", ".pdf", figs_dir, width=6, height=12)
+    save_plt(plts, "encore_val-thresh_vs_pearsons_vs_fcTPM", ".pdf", figs_dir, width=12, height=12)
     save_plt(plts, "encore_val-n_selected_events-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-demeter2-violin", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "encore_val-top1-scatters", ".pdf", figs_dir, width=5, height=10)
