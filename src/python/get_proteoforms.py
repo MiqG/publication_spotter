@@ -25,6 +25,7 @@ ROOT = '/home/miquel/projects/publication_splicing_dependency'
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 event_oi = "HsaEX0050345"
+gene_oi = "PRPF18"
 annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 event_info_file = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38.tab.gz")
 """
@@ -37,7 +38,7 @@ def fasta_to_pandas(fasta_list):
     seqs = [fasta_list[i] for i in range(1, len(fasta_list), 2)]
 
     # make df
-    df = pd.DataFrame({"id": ids, "aa": seqs})
+    df = pd.DataFrame({"description": ids, "aa": seqs})
 
     return df
 
@@ -61,13 +62,13 @@ def longestSubstring(str1, str2):
     return match_seq
             
             
-def get_proteoforms(event_oi, annot, event_info):
+def get_proteoforms(event_oi, gene_oi, annot, event_info):
     # get ensembl id
-    gene_oi = annot.loc[annot["EVENT"] == event_oi, "ENSEMBL"].to_list()
+    ensembl_id = annot.loc[annot["EVENT"] == event_oi, "ENSEMBL"].to_list()
 
     # get aa sequences of the gene
-    canonical = gget.seq(gene_oi, translate=True, isoforms=False)
-    isoforms = gget.seq(gene_oi, translate=True, isoforms=True)
+    canonical = gget.seq(ensembl_id, translate=True, isoforms=False)
+    isoforms = gget.seq(ensembl_id, translate=True, isoforms=True)
 
     # transform to a dataframe
     df = fasta_to_pandas(isoforms)
@@ -105,21 +106,31 @@ def get_proteoforms(event_oi, annot, event_info):
     # add info to id
     df["id_new"] = [
         "%s | is_canonical=%s | event_included=%s"
-        % (row["id"], row["is_canonical"], row["event_included"])
+        % (row["description"], row["is_canonical"], row["event_included"])
         for idx, row in df.iterrows()
     ]
 
     # delete event
     df["aa_noevent"] = df["aa"].str.replace(event_aa, "")
-
+    
+    # add more info
+    df["EVENT"] = event_oi
+    df["GENE"] = gene_oi
+    df["ENSEMBL"] = ensembl_id[0]
+    
+    # add identifier
+    df = df.reset_index()
+    df["id"] = df["GENE"] + "_" + df["EVENT"] + "-iso" + df["index"].astype("str")
+    
+    # prepare sequences in fasta format
     if any(df["event_included"]):
         sel = df.loc[df["event_included"]]
         
         fasta = {}
         for idx, row in sel.iterrows():
-            identifier = row["id"].replace(" ","__")
-            fasta[identifier + "__|__event_included=True"] = row["aa"]
-            fasta[identifier + "__|__event_included=False"] = row["aa_noevent"]
+            identifier = str(row["id"])
+            fasta[">" + identifier + "-included"] = row["aa"]
+            fasta[">" + identifier + "-excluded"] = row["aa_noevent"]
     else:
         print("The canonical proteoform does not contain the event!")
 
@@ -129,6 +140,7 @@ def get_proteoforms(event_oi, annot, event_info):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--event_oi", type=str)
+    parser.add_argument("--gene_oi", type=str)
     parser.add_argument("--annotation_file", type=str)
     parser.add_argument("--event_info_file", type=str)
     parser.add_argument("--output_df_file", type=str)
@@ -142,6 +154,7 @@ def parse_args():
 def main():
     args = parse_args()
     event_oi = args.event_oi
+    gene_oi = args.gene_oi
     annotation_file = args.annotation_file
     event_info_file = args.event_info_file
     output_df_file = args.output_df_file
@@ -154,7 +167,7 @@ def main():
 
     # get the proteoforms of interest
     print("Getting proteoforms...")
-    df, fasta = get_proteoforms(event_oi, annot, event_info)
+    df, fasta = get_proteoforms(event_oi, gene_oi, annot, event_info)
 
     # save
     print("Saving proteoforms...")

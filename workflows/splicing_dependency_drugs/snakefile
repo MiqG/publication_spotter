@@ -34,9 +34,7 @@ DRUG_SCREENS = {
 }
 
 EVENT_GENES_OI = {
-    "HsaEX0038400": "MDM2",
-    "HsaEX0025679": "FGFR2",
-    #"HsaEX6022386": "ERBB2"
+    "HsaEX0038400": "MDM2"
 }
 
 ##### RULES #####
@@ -390,11 +388,13 @@ rule structure_inference_get_proteoforms:
         fasta = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta')
     params:
         script_dir = os.path.join(SRC_DIR,"python"),
-        event_oi = "{event}"
+        event_oi = "{event}",
+        gene_oi = "{gene}"
     shell:
         """
         nice python {params.script_dir}/get_proteoforms.py \
                     --event_oi={params.event_oi} \
+                    --gene_oi={params.gene_oi} \
                     --annotation_file={input.annotation} \
                     --event_info_file={input.event_info} \
                     --output_df_file={output.df} \
