@@ -1,0 +1,64 @@
+"""
+Author: Miquel Anglada Girotto
+Contact: miquelangladagirotto [at] gmail [dot] com
+Last Update: 2021-01-12
+
+Workflow purpose
+--------------
+Workflow to analyze putative associations between exons and cancer at single-exon level.
+
+
+Outline
+-------
+- infer splicing dependency
+- differential PSI tumor vs normal by cancer type
+
+"""
+
+import os
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_treatments')
+SRC_DIR = os.path.join(ROOT,'src')
+MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+DRUG_ASSOC_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
+TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
+
+EVENT_TYPES = ["EX"]
+
+##### RULES #####
+rule all:
+    input:
+        # compute splicing dependencies TCGA
+        expand(os.path.join(RESULTS_DIR,'files','Zhang2022','splicing_dependency-{event_type}'), event_type=EVENT_TYPES)
+
+        
+rule compute_splicing_dependency_zhang2022:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','Zhang2022-{event_type}.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','Zhang2022.tsv.gz'),
+        coefs_dir = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','Zhang2022','splicing_dependency-{event_type}'))
+    threads: 15
+    resources:
+        runtime = 86400, # seconds = 24h = 1 day
+        memory = 30
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """
+        

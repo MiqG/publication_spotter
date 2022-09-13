@@ -142,7 +142,15 @@ rule all:
         os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz"),
         
         # make COSMIC gene set
-        os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt")
+        os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt"),
+        
+        # preprocess Zhang2022
+        os.path.join(PREP_DIR,'metadata','Zhang2022.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','Zhang2022-EX.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','Zhang2022-ALTA.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','Zhang2022-ALTD.tsv.gz'),
+        os.path.join(PREP_DIR,'event_psi','Zhang2022-INT.tsv.gz'),
+        os.path.join(PREP_DIR,'genexpr_tpm','Zhang2022.tsv.gz')
         
         
 rule prepare_metadata_ccle:
@@ -857,4 +865,73 @@ rule make_cosmic_gene_set:
         df = pd.read_table(input.cosmic)
         gene_set = df["Gene Symbol"]
         gene_set.to_csv(output.cosmic, sep="\t", index=False, header=None)
+        
+        
+rule preprocess_Zhang2022:
+    input:
+        metadata_pietila = os.path.join(RAW_DIR,'articles','Zhang2022','metadata-EGAD00001006456-Pietila2021.tsv'),
+        metadata_zhang = os.path.join(RAW_DIR,'articles','Zhang2022','metadata-EGAD00001006456-Zhang2022.tsv'),
+        psi = os.path.join(RAW_DIR,'articles','Zhang2022','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'articles','Zhang2022','vast_out','TPM-hg38-329.tab.gz')
+    output:
+        metadata = os.path.join(PREP_DIR,'metadata','Zhang2022.tsv.gz'),
+        psi_EX = os.path.join(PREP_DIR,'event_psi','Zhang2022-EX.tsv.gz'),
+        psi_ALTA = os.path.join(PREP_DIR,'event_psi','Zhang2022-ALTA.tsv.gz'),
+        psi_ALTD = os.path.join(PREP_DIR,'event_psi','Zhang2022-ALTD.tsv.gz'),
+        psi_INT = os.path.join(PREP_DIR,'event_psi','Zhang2022-INT.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','Zhang2022.tsv.gz')
+    run:
+        import gc
+        import pandas as pd
+        import numpy as np
+        
+        # load
+        print("Loading data...")
+        metadata_pietila = pd.read_table(input.metadata_pietila)
+        metadata_zhang = pd.read_table(input.metadata_zhang)
+        psi = pd.read_table(input.psi, index_col=0)
+        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
+        
+        gc.collect()
+        
+        # preprocess metadata
+        # TODO
+        
+        # PSI
+        print("Processing PSI matrix...")
+        ## drop empty rows
+        is_na = psi.isnull()
+        non_missing = is_na.shape[1] - is_na.sum(1)
+        to_keep = non_missing >= 1
+        psi = psi.loc[to_keep]
+        
+        ## remove vast-tools' suffix
+        psi.columns = [c.replace('_1','') for c in psi.columns]
+        
+        ## split by event type
+        event_types = ["EX","ALTA","ALTD","INT"]
+        psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
+        
+        # TPM
+        print("Processing TPM matrix...")
+        ## remove vast-tools' suffix
+        genexpr.columns = [c.replace('_1','') for c in genexpr.columns]
+        
+        # save
+        print("Saving...")
+        
+        ## metadata
+        metadata_pietila.to_csv(output.metadata, **SAVE_PARAMS)
+        
+        ## PSIs
+        psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
+        psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
+        psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
+        psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
+        
+        ## TPMs
+        genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)        
+        
+        print("Done!")
+        
         
