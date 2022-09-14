@@ -46,6 +46,7 @@ rule all:
         # predict structures
         expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
         expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
+        expand(os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz'))
         
         # associations drug responses and splicing dependencies
         #expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
@@ -403,3 +404,17 @@ rule structure_inference_get_proteoforms:
                     --output_df_file={output.df} \
                     --output_fasta_file={output.fasta}
         """
+        
+
+rule merge_proteoforms:
+    input:
+        dfs = [os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz').format(event=e, gene=g) for e, g in EVENT_GENES_OI.items()]
+    output:
+        os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz')
+    run:
+        import pandas as pd
+        
+        merged = pd.concat([pd.read_table(df) for df in input.dfs])
+        merged.to_csv(output[0], sep="\t", compression="gzip", index=False)
+
+        print("Done!")
