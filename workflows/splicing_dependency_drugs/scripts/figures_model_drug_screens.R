@@ -43,6 +43,12 @@ require(writexl)
 require(ggtext)
 require(ggnewscale)
 
+require(ggraph)
+require(igraph)
+require(graphlayouts)
+
+require(statebins)
+
 ROOT = here::here()
 source(file.path(ROOT,"src","R","utils.R"))
 
@@ -61,6 +67,14 @@ LINE_SIZE = 0.25
 
 FONT_SIZE = 2 # for additional labels
 FONT_FAMILY = "Arial"
+
+PAL_PROT_IMP = setNames(
+    get_palette("jco", 10),
+    c("NonCoding", "5\' UTR", "ORF disruption (exclusion)", "Alternative protein isoforms", 
+      "ORF disruption (inclusion)", "In the CDS (uncertain)", "3\' UTR", "NA", 
+      "ORF disruption when splice site is used", "Protein isoform when splice site is used"
+    )
+)
 
 # Development
 # -----------
@@ -85,8 +99,9 @@ FONT_FAMILY = "Arial"
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
-
-
+# ppi_file = file.path(PREP_DIR,'ppi','STRINGDB.tsv.gz')
+# event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
+# gene_info_file = file.path(RAW_DIR,"ENSEMBL","gene_annotation-hg38.tsv.gz")
 
 ##### FUNCTIONS #####
 load_drug_screens = function(drug_screens_dir){
@@ -475,6 +490,131 @@ plot_ppi = function(models, shortest_paths){
 }
 
 
+plot_net_drug_target = function(x, drug_oi){
+    
+    # make networks
+    events_sel = x %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_max(spldep_coefficient, n=10) %>% 
+        ungroup() %>%
+        mutate(node=GENE) %>%
+        filter(DRUG_NAME == drug_oi)
+    genes_sel = events_sel %>% pull(GENE) %>% unique()
+    targets_sel = events_sel %>% filter(is_target) %>% pull(GENE) %>% unique()
+    
+    # make big network
+    ppi_net = graph_from_data_frame(ppi, directed=FALSE)
+    
+    # prepare edges
+    ## find possible shortest paths
+    notfound = setdiff(genes_sel, names(V(ppi_net)))
+    print(sprintf("Genes not found in stringdb: %s", paste0(notfound, collapse=", ")))
+    
+    r = lapply(intersect(genes_sel, names(V(ppi_net))), function(from){
+        r = lapply(targets_sel, function(to){
+            path_edges = shortest_paths(ppi_net, from, to, output="both")[["epath"]][[1]]
+            edges_oi = subgraph.edges(ppi_net, path_edges) %>% as_data_frame()
+            return(edges_oi)
+        })
+        r = do.call(rbind, r)
+        return(r)
+    })
+    edges = do.call(rbind, r) %>% distinct()
+    
+    ## prepare nodes
+    nodes = data.frame(
+            node = edges[,c("from","to")] %>% unlist() %>% unique()
+        ) %>%
+        left_join(events_sel %>% distinct(GENE, is_target), by=c("node"="GENE")) %>%
+        mutate(is_target = replace_na(is_target, FALSE))
+    
+    net = graph_from_data_frame(edges, directed=FALSE, nodes)
+    
+    pal_colors = setNames(PAL_DUAL, c(FALSE, TRUE))
+    set.seed(1234)
+    lay = net %>% create_layout(layout = "stress")
+    
+    plt = lay %>% 
+        ggraph() + 
+        geom_edge_link(color="darkgray", alpha=0.5, width=0.2) + 
+        geom_node_point(aes(color=is_target, shape=is_target), alpha=0.8) + 
+        geom_node_text(aes(label=name), repel=TRUE, family="Arial", size=2, 
+                       segment.size=0.1, box.padding=0.1, force=1) +
+        scale_color_manual(values=pal_colors) +
+        theme_void() +
+        labs(color="Is Target", shape="Is Target", title=drug_oi) +
+        theme(
+            aspect.ratio = 1,
+            plot.title = element_text(hjust = 0.5)
+        )
+    
+    return(plt)
+}
+
+
+plot_gene_structure = function(gene, events, event_info, gene_info, prot_imp){
+    coords_gene = gene_info %>%
+        filter(Gene %in% gene)
+    coords_events = event_info %>%
+        filter(EVENT %in% events) %>%
+        mutate(
+            chr = gsub(":.*", "", COORD_o),
+            coords = gsub(".*:", "", COORD_o),
+            Start = as.integer(gsub("-.*", "", coords)),
+            End = as.integer(gsub(".*-","", coords)),
+            event_gene = paste0(EVENT,"_",GENE)
+        ) %>%
+        left_join(prot_imp %>% mutate(term_clean=replace_na(term_clean,"NA")), by="EVENT")
+    chromosome = coords_events %>% pull(chr) %>% unique()
+    #impacts = coords_events %>% pull(term_clean) %>% unique()
+    
+    plt = coords_gene %>%
+        ggplot() +
+        ggchicklet:::geom_rrect(
+            aes(xmin=Start, xmax=End, ymin=-0.3, ymax=0.3),
+            fill="gray90",
+            color="black",
+            radius=unit(1,"pt"),
+            size=0.2
+        ) +
+        geom_rect(
+            aes(xmin=Start, xmax=End, ymin=-1, ymax=1, fill=term_clean, color=term_clean),
+            coords_events,
+        ) +
+        geom_text_repel(
+            aes(x=Start, y=1, label=EVENT, color=term_clean),
+            coords_events,
+            ylim=c(2,10),
+            segment.size=0.1,
+            force=100,
+            arrow=arrow(length=unit(1, "mm"), type="closed", ),
+            size=FONT_SIZE,
+            family=FONT_FAMILY
+        ) +
+        fill_palette(palette=PAL_PROT_IMP) +
+        color_palette(palette=PAL_PROT_IMP) +
+        ylim(-6,6) +
+        scale_x_continuous(labels=scales::label_comma()) +
+        guides(color="none") +
+        labs(x=chromosome, title=gene, fill="Protein Impact") +
+        theme_void() +
+        theme(
+            aspect.ratio = 0.3,
+            plot.title = element_text(hjust=0.5, family=FONT_FAMILY, size=8),
+            legend.position = "top",
+            legend.text = element_text(family=FONT_FAMILY, size=6),
+            legend.title = element_text(family=FONT_FAMILY, size=6),
+            axis.line.x = element_line(size=0.5),
+            axis.ticks.x = element_line(),
+            axis.ticks.length.x = unit(0.1, "cm"),
+            axis.text.x = element_text(angle=45, hjust=1, vjust=1, family=FONT_FAMILY, size=6),
+            axis.title.x = element_text(family=FONT_FAMILY, size=8)
+        )
+    
+    return(plt)
+}
+
+
 plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_targets){
     
     X = models %>%
@@ -519,8 +659,6 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
                name = reorder_within(event_gene, spldep_coefficient, DRUG_ID))
     
     # color axis labels based on protein impact
-    p_imp_colors = setNames(get_palette("jco", 4), x %>% pull(term_clean) %>% unique())
-    
     plts[["mediators-on_target-spldep_coef"]] = x %>% 
         mutate(lab = sprintf("%s | %s", round(spldep_coefficient, 3), DRUG_NAME)) %>%
         ggbarplot(x="name", y="spldep_coefficient", 
@@ -539,7 +677,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         geom_text(aes(y=-1.8,label=event_gene, group=drug_screen, color=term_clean), 
                   position=position_dodge(0), alpha=1,
                   size=FONT_SIZE, family=FONT_FAMILY) +
-        color_palette(name="Protein Impact", palette=p_imp_colors) +
+        color_palette(name="Protein Impact", palette=PAL_PROT_IMP) +
         guides(color=guide_legend(nrow=2)) +
         theme(
             axis.text.y = element_blank(),
@@ -563,7 +701,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         new_scale_color() +
         geom_text(aes(y=-0.32, label=event_gene, color=term_clean), 
                   size=FONT_SIZE, family=FONT_FAMILY) +
-        color_palette(name="Protein Impact", palette=p_imp_colors) +
+        color_palette(name="Protein Impact", palette=PAL_PROT_IMP) +
         guides(color=guide_legend(nrow=2)) +
         theme(
             axis.text.y = element_blank(),
@@ -577,8 +715,8 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         left_join(spldep_models %>% 
             distinct(EVENT, event_coefficient_mean), by="EVENT") %>%
         filter(is_sel) %>% 
-        distinct(DRUG_NAME, EVENT, event_gene, lr_padj, spldep_coefficient,
-                 event_coefficient_mean, drug_screen, is_target, path_lab)
+        distinct(DRUG_NAME, EVENT, GENE, event_gene, lr_padj, spldep_coefficient,
+                 event_coefficient_mean, drug_screen, is_target, path_lab, term_clean)
     
     plts[["mediators-on_target-top_assocs_spldep_all"]] = x %>% 
         group_by(DRUG_NAME) %>% 
@@ -699,6 +837,32 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         coord_flip() +
         labs(x="Event & Gene", y="PSI Coefficient", fill="Is Target", color="Drug Screen") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+
+    ## PPI MOA
+    plts[["mediators-drugs_oi-top_assocs_ppi_pos"]] = list(
+            "NUTLIN-3A" = plot_net_drug_target(x, "NUTLIN-3A (-)"),
+            "AZD4547" = plot_net_drug_target(x, "AZD4547")
+        ) %>% ggarrange(plotlist = ., common.legend=TRUE)
+    
+    ## gene structures
+    genes_sel = x %>% 
+        group_by(DRUG_NAME) %>% 
+        slice_max(spldep_coefficient, n=10) %>% 
+        ungroup() %>%
+        filter(DRUG_NAME=="NUTLIN-3A (-)") %>%
+        pull(GENE) %>% unique()
+    plts[["mediators-drugs_oi-gene_structs"]] = lapply(genes_sel, function(gene_sel){
+        print(gene_sel)
+        events_sel = x %>% 
+            group_by(DRUG_NAME) %>% 
+            slice_max(spldep_coefficient, n=10) %>% 
+            ungroup() %>%
+            filter(DRUG_NAME=="NUTLIN-3A (-)" & GENE==gene_sel) %>%
+            pull(EVENT) %>% unique()
+        plt = plot_gene_structure(gene_sel, events_sel, event_info, gene_info, ontologies[["protein_impact"]])
+        return(plt)
+    }) %>% ggarrange(plotlist=., common.legend=TRUE)
+    
     
     ## co-splicing
     drugs_oi = c("NUTLIN-3A (-)","AZD4547")
@@ -932,7 +1096,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
     if (format){
         plt = ggpar(plt, font.title=8, font.subtitle=8, font.caption=8, 
                     font.x=8, font.y=8, font.legend=6,
-                    font.tickslab=6, font.family=FONT_FAMILY, device=cairo_pdf)    
+                    font.tickslab=6, font.family=FONT_FAMILY)    
     }
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
@@ -977,6 +1141,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "mediators-on_target-top_assocs_event_coef_all", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_event_coef_pos", ".pdf", figs_dir, width=15, height=13)
     save_plt(plts, "mediators-on_target-top_assocs_event_coef_neg", ".pdf", figs_dir, width=15, height=13)
+    save_plt(plts, "mediators-drugs_oi-gene_structs", ".pdf", figs_dir, width=10, height=10)
+    save_plt(plts, "mediators-drugs_oi-top_assocs_ppi_pos", ".pdf", figs_dir, width=8, height=5)
     save_plt(plts, "mediators-drugs_oi-cosplicing-AZD4547", ".pdf", figs_dir, width=12, height=10)
     save_plt(plts, "mediators-drugs_oi-cosplicing-nutlin", ".pdf", figs_dir, width=12, height=10)
     save_plt(plts, "mediators-events_oi-synergy", ".pdf", figs_dir, width=10, height=5)
@@ -1034,6 +1200,9 @@ main = function(){
         filter(EVENT %in% unique(models[["EVENT"]]))
     ontologies = load_ontologies(msigdb_dir, protein_impact_file)
     splicing = read_tsv(splicing_file)
+    ppi = read_tsv(ppi_file)
+    event_info = read_tsv(event_info_file)
+    gene_info = read_tsv(gene_info_file)
 
     # prep inputs
     ## IC50

@@ -34,7 +34,10 @@ DRUG_SCREENS = {
 }
 
 EVENT_GENES_OI = {
-    "HsaEX0038400": "MDM2"
+    "HsaEX0038400": "MDM2",
+    "HsaEX0038402": "MDM2",
+    "HsaEX6035888": "KIF21B",
+    "HsaEX6091888": "TJP3"
 }
 
 ##### RULES #####
