@@ -3,3 +3,4 @@
 .done
 *.pyc
 *snakejob*
+*.mcr
