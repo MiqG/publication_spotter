@@ -46,7 +46,9 @@ rule all:
         # predict structures
         expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
         expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
-        expand(os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz'))
+        os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz'),
+        
+        os.path.join(RESULTS_DIR,'figures','structure_inference','MDM2'),
         
         # associations drug responses and splicing dependencies
         #expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
@@ -418,3 +420,29 @@ rule merge_proteoforms:
         merged.to_csv(output[0], sep="\t", compression="gzip", index=False)
 
         print("Done!")
+        
+        
+rule figures_stuctures:
+    input:
+        pdb_inc = os.path.join(SUPPORT_DIR,"MDM2_HsaEX0038400-iso0-included_unrelaxed_rank_1_model_3.pdb"),
+        pdb_exc = os.path.join(SUPPORT_DIR,"MDM2_HsaEX0038400-iso0-excluded_unrelaxed_rank_1_model_3.pdb"),
+        metadata = os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','structure_inference','MDM2'))
+    params:
+        gene_oi = "MDM2",
+        seq_id = "",
+        margin = 10,
+        yasara_path = "~/yasara/yasara"
+    shell:
+        """
+        nice python scripts/figures_drug-event_structures.py \
+                    --pdb_inc_file={input.pdb_inc} \
+                    --pdb_exc_file={input.pdb_exc} \
+                    --metadata_file={input.metadata} \
+                    --gene_oi={params.gene_oi} \
+                    --seq_id={params.seq_id} \
+                    --margin={params.margin} \
+                    --yasara_path={params.yasara_path} \
+                    --figs_dir={output}
+        """

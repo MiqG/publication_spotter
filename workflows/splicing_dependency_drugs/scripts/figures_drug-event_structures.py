@@ -83,7 +83,7 @@ def prepare_data(df_inc, df_exc):
     return df_inc, seq_inc, res_inc, df_exc, seq_exc, res_exc
 
 
-def get_positions_aa(metadata, seq_inc):
+def get_positions_aa(metadata, seq_inc, gene_oi, margin):
     # exon sequences
     seqs_oi = (
         metadata.loc[metadata["GENE"] == gene_oi, ["EVENT", "event_aa"]]
@@ -136,7 +136,7 @@ def get_positions_aa(metadata, seq_inc):
     return seqs_oi, locs_oi_inc, locs_oi_exc
 
 
-def run_yasara(yasara_path, pdb_inc_file, pdb_exc_file, locs_oi_inc, locs_oi_exc):
+def run_yasara(yasara_path, pdb_inc_file, pdb_exc_file, locs_oi_inc, locs_oi_exc, figs_dir):
     events = list(locs_oi_inc.keys())
 
     # included
@@ -153,15 +153,15 @@ def run_yasara(yasara_path, pdb_inc_file, pdb_exc_file, locs_oi_inc, locs_oi_exc
     cmd_coloring = [
         [
             "ColorRes {start}-{end},Blue".format(
-                start=locs_oi_inc[event]["upstream_start"],
-                end=locs_oi_inc[event]["upstream_end"],
+                start=locs_oi_inc[event]["upstream_start"]+1,
+                end=locs_oi_inc[event]["upstream_end"]+1,
             ),  # upstream
             "ColorRes {start}-{end},154".format(
-                start=locs_oi_inc[event]["start"], end=locs_oi_inc[event]["end"]
+                start=locs_oi_inc[event]["start"]+1, end=locs_oi_inc[event]["end"]+1
             ),  # exon
             "ColorRes {start}-{end},Green".format(
-                start=locs_oi_inc[event]["downstream_start"],
-                end=locs_oi_inc[event]["downstream_end"],
+                start=locs_oi_inc[event]["downstream_start"]+1,
+                end=locs_oi_inc[event]["downstream_end"]+1,
             ),  # downstream
             "PosOriObj 01, {orientation}".format(orientation=ORIENTATION[event]["inc"]) # orientation
         ]
@@ -201,12 +201,12 @@ def run_yasara(yasara_path, pdb_inc_file, pdb_exc_file, locs_oi_inc, locs_oi_exc
     cmd_coloring = [
         [
             "ColorRes {start}-{end},Blue".format(
-                start=locs_oi_exc[event]["upstream_start"],
-                end=locs_oi_exc[event]["upstream_end"],
+                start=locs_oi_exc[event]["upstream_start"]+1,
+                end=locs_oi_exc[event]["upstream_end"]+1,
             ),  # upstream
             "ColorRes {start}-{end},Green".format(
-                start=locs_oi_exc[event]["downstream_start"],
-                end=locs_oi_exc[event]["downstream_end"],
+                start=locs_oi_exc[event]["downstream_start"]+1,
+                end=locs_oi_exc[event]["downstream_end"]+1,
             ),  # downstream
             "PosOriObj 01, {orientation}".format(orientation=ORIENTATION[event]["exc"]) # orientation
 
@@ -272,12 +272,12 @@ def main():
     # prepare
     print("Preparing...")
     df_inc, seq_inc, res_inc, df_exc, seq_exc, res_exc = prepare_data(df_inc, df_exc)
-    seqs_oi, locs_oi_inc, locs_oi_exc = get_positions_aa(metadata, seq_inc)
+    seqs_oi, locs_oi_inc, locs_oi_exc = get_positions_aa(metadata, seq_inc, gene_oi, margin)
 
     # visualize
     print("Saving data...")
     os.makedirs(figs_dir, exist_ok=True)
-    exit = run_yasara(yasara_path, pdb_inc_file, pdb_exc_file, locs_oi_inc, locs_oi_exc)
+    exit = run_yasara(yasara_path, pdb_inc_file, pdb_exc_file, locs_oi_inc, locs_oi_exc, figs_dir)
     assert exit==1
     
 
