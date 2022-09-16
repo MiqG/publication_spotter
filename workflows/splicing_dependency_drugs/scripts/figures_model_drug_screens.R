@@ -532,7 +532,7 @@ plot_net_drug_target = function(x, drug_oi){
     
     net = graph_from_data_frame(edges, directed=FALSE, nodes)
     
-    pal_colors = setNames(PAL_DUAL, c(FALSE, TRUE))
+    pal_colors = PAL_IS_TARGET
     set.seed(1234)
     lay = net %>% create_layout(layout = "stress")
     
