@@ -27,16 +27,23 @@ MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 DRUG_ASSOC_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 
+DRUG_SCREENS = ['GDSC1','GDSC2']
+
 EVENT_TYPES = ["EX"]
+
 
 ##### RULES #####
 rule all:
     input:
         # compute splicing dependencies TCGA
-        expand(os.path.join(RESULTS_DIR,'files','Zhang2022','splicing_dependency-{event_type}'), event_type=EVENT_TYPES)
+        expand(os.path.join(RESULTS_DIR,'files','Zhang2022','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
+        
+        # estimate drug responses
+        expand(os.path.join(RESULTS_DIR,'files','Zhang2022','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS),
+        expand(os.path.join(RESULTS_DIR,'files','Zhang2022','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS)
 
         
-rule compute_splicing_dependency_zhang2022:
+rule compute_splicing_dependency:
     input:
         psi = os.path.join(PREP_DIR,'event_psi','Zhang2022-{event_type}.tsv.gz'),
         genexpr = os.path.join(PREP_DIR,'genexpr_tpm','Zhang2022.tsv.gz'),
@@ -62,3 +69,44 @@ rule compute_splicing_dependency_zhang2022:
                     --log_transform
         """
         
+        
+rule predict_drug_response:
+    input:
+        spldep = os.path.join(RESULTS_DIR,'files','Zhang2022','splicing_dependency-{event_type}','mean.tsv.gz'),
+        fitted_dir = os.path.join(DRUG_ASSOC_DIR,'files','models_drug_response-{drug_screen}-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','Zhang2022','estimated_drug_response-{drug_screen}-{event_type}'))
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter drugassoc_predict \
+                    --splicing_dependency_file={input.spldep} \
+                    --model_summaries_file={input.fitted_dir}/model_summaries.tsv.gz \
+                    --fitted_growth_rates_file={input.fitted_dir}/growth_rates.tsv.gz \
+                    --fitted_spldep_file={input.fitted_dir}/fitted_splicing_dependency.tsv.gz \
+                    --output_dir={output}
+        """
+
+
+rule combine_drug_rankings:
+    input:
+        [os.path.join(RESULTS_DIR,'files','Zhang2022','estimated_drug_response-{drug_screen}-{event_type}').format(drug_screen=drug_screen, event_type='{event_type}') for drug_screen in DRUG_SCREENS]
+    output:
+        os.path.join(RESULTS_DIR,'files','Zhang2022','estimated_drug_response_by_drug-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for d in input:
+            cancer_type = os.path.basename(os.path.dirname(d))
+            drug_screen = os.path.basename(d).replace('estimated_drug_response-','')[:5]
+            print(drug_screen, cancer_type)
+            filename = os.path.join(d,'estimated_drug_response_by_drug.tsv.gz')
+            df = pd.read_table(filename)
+            df["cohort"] = cancer_type
+            df["drug_screen"] = drug_screen
+            dfs.append(df)
+            
+        dfs = pd.concat(dfs)    
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
