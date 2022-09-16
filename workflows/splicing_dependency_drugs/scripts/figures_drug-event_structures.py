@@ -17,7 +17,7 @@ from Bio.Seq import Seq
 from yasara_macro import yasara_macro as ys
 
 # variables
-SAVE_PARAMS = "X=1024,Y=1024,Zoom=1.0,Atoms=Balls,LabelShadow=No,SecAlpha=100,Display=Yes,Outline=0.0,Background=No"
+SAVE_PARAMS = "X=1024,Y=1024,Zoom=1.0,Atoms=Balls,LabelShadow=No,SecAlpha=100,Display=Yes,Outline=0.0,Background=No" # fog, lighning, 
 ORIENTATION = {
     "HsaEX0038400": {
         "inc": "X=-8.257, Y=-26.379, Z=71.680, Alpha=-36.979, Beta=-139.042, Gamma=10.970",
