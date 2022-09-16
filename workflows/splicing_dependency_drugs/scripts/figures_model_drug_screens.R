@@ -63,6 +63,8 @@ PAL_SINGLE_ACCENT = "orange"
 PAL_SINGLE_LIGHT = "#6AC2BF"
 PAL_SINGLE_DARK = "#716454"
 PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
+PAL_IS_TARGET = get_palette(PAL_DUAL, 4)[3:4]
+PAL_IN_DEMETER2 = setNames(c(PAL_SINGLE_LIGHT,"orange"), c(FALSE,TRUE))
 LINE_SIZE = 0.25
 
 FONT_SIZE = 2 # for additional labels
@@ -382,14 +384,14 @@ plot_targets = function(models, drug_targets){
     
     # - p-value and betas of drugs with target (sign. associated or not)
     plts[["targets-violin-lr_pvalue"]] = X %>% 
-        ggviolin(x="is_target", y="lr_pvalue", trim=TRUE, fill="is_target", color=NA, palette=PAL_DUAL) + 
+        ggviolin(x="is_target", y="lr_pvalue", trim=TRUE, fill="is_target", color=NA, palette=PAL_IS_TARGET) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
         stat_compare_means(method="wilcox", size=FONT_SIZE, family=FONT_FAMILY) + 
         labs(x="Is Target", y="LR p-value")
     
     plts[["targets-violin-lr_padj"]] = X %>% 
-        ggviolin(x="is_target", y="lr_padj", trim=TRUE, fill="is_target", color=NA, palette=PAL_DUAL) + 
+        ggviolin(x="is_target", y="lr_padj", trim=TRUE, fill="is_target", color=NA, palette=PAL_IS_TARGET) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
         stat_compare_means(method="wilcox", size=FONT_SIZE, family=FONT_FAMILY) + 
@@ -397,7 +399,7 @@ plot_targets = function(models, drug_targets){
     
     plts[["targets-violin-spldep_coef"]] = X %>% 
         ggviolin(x="is_target", y="spldep_coefficient", trim=TRUE, color=NA, 
-                 fill="is_target", palette=PAL_DUAL) + 
+                 fill="is_target", palette=PAL_IS_TARGET) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
         stat_compare_means(method="wilcox", size=FONT_SIZE, family=FONT_FAMILY) + 
@@ -406,7 +408,7 @@ plot_targets = function(models, drug_targets){
     plts[["targets-violin-spldep_coef_filt"]] = X %>% 
         filter(n_obs > THRESH_NOBS) %>%
         ggviolin(x="is_target", y="spldep_coefficient", trim=TRUE, color=NA, 
-                 fill="is_target", palette=PAL_DUAL) + 
+                 fill="is_target", palette=PAL_IS_TARGET) + 
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
         stat_compare_means(method="wilcox", size=FONT_SIZE, family=FONT_FAMILY) + 
@@ -725,7 +727,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         mutate(DRUG_NAME = as.factor(DRUG_NAME),
                name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
         ggbarplot(x="name", y="spldep_coefficient", 
-                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  color="drug_screen", fill="is_target", palette=PAL_IS_TARGET, 
                   position=position_dodge(0.7)) + 
         geom_text(aes(y=(abs(spldep_coefficient)+0.08)*sign(spldep_coefficient),
                       label=path_lab, group=drug_screen), 
@@ -735,7 +737,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         facet_wrap(~DRUG_NAME, scales="free") + 
         scale_x_reordered() +
         coord_flip() +
-        labs(x="Event & Gene", y="Spl. Dep. Coef.",, fill="Is Target", color="Drug Screen") +
+        labs(x="Event & Gene", y="Spl. Dep. Coef.", fill="Is Target", color="Drug Screen") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     plts[["mediators-on_target-top_assocs_event_coef_all"]] = x %>% 
@@ -745,7 +747,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         mutate(DRUG_NAME = as.factor(DRUG_NAME),
                name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
         ggbarplot(x="name", y="event_coefficient_mean", 
-                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  color="drug_screen", fill="is_target", palette=PAL_IS_TARGET, 
                   position=position_dodge(0.7)) + 
         geom_text(aes(y=(abs(event_coefficient_mean)+0.01)*sign(event_coefficient_mean), 
                       label=path_lab, group=drug_screen), 
@@ -765,7 +767,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         mutate(DRUG_NAME = as.factor(DRUG_NAME),
                name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
         ggbarplot(x="name", y="spldep_coefficient", 
-                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  color="drug_screen", fill="is_target", palette=PAL_IS_TARGET, 
                   position=position_dodge(0.7)) + 
         geom_text(aes(y=(abs(spldep_coefficient)+0.08)*sign(spldep_coefficient),
                       label=path_lab, group=drug_screen), 
@@ -785,7 +787,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         mutate(DRUG_NAME = as.factor(DRUG_NAME),
                name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
         ggbarplot(x="name", y="event_coefficient_mean", 
-                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  color="drug_screen", fill="is_target", palette=PAL_IS_TARGET, 
                   position=position_dodge(0.7)) + 
         geom_text(aes(y=(abs(event_coefficient_mean)+0.01)*sign(event_coefficient_mean), 
                       label=path_lab, group=drug_screen), 
@@ -805,7 +807,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         mutate(DRUG_NAME = as.factor(DRUG_NAME),
                name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
         ggbarplot(x="name", y="spldep_coefficient", 
-                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  color="drug_screen", fill="is_target", palette=PAL_IS_TARGET, 
                   position=position_dodge(0.7)) + 
         geom_text(aes(y=(abs(spldep_coefficient)+0.08)*sign(spldep_coefficient),
                       label=path_lab, group=drug_screen), 
@@ -825,7 +827,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         mutate(DRUG_NAME = as.factor(DRUG_NAME),
                name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
         ggbarplot(x="name", y="event_coefficient_mean", 
-                  color="drug_screen", fill="is_target", palette=PAL_DUAL, 
+                  color="drug_screen", fill="is_target", palette=PAL_IS_TARGET, 
                   position=position_dodge(0.7)) + 
         geom_text(aes(y=(abs(event_coefficient_mean)+0.01)*sign(event_coefficient_mean), 
                       label=path_lab, group=drug_screen), 
@@ -871,7 +873,7 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         group_by(DRUG_NAME) %>% 
         slice_max(spldep_coefficient, n=10) %>% 
         ungroup() %>%
-        distinct(EVENT, event_gene, DRUG_NAME)
+        distinct(EVENT, event_gene, DRUG_NAME, is_target, spldep_coefficient)
     
     corrs = sapply(drugs_oi, function(drug_oi){
         corr = events_oi %>% 
@@ -911,6 +913,24 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         grid.grabExpr() %>%
         as.ggplot()
     
+    
+    plts[["mediators-drugs_oi-box-splicing"]] = events_oi %>% 
+        filter(DRUG_NAME %in% drugs_oi) %>%
+        left_join(splicing, by="EVENT") %>%
+        pivot_longer(-one_of(c("EVENT","DRUG_NAME","event_gene","is_target","spldep_coefficient")), 
+                     names_to = "sampleID", values_to="psi") %>%
+        drop_na(psi) %>%
+        mutate(DRUG_NAME = as.factor(DRUG_NAME),
+               name = reorder_within(event_gene, spldep_coefficient, DRUG_NAME)) %>%
+        ggplot(aes(x=name, y=psi)) +
+        geom_boxplot(aes(color=is_target), width=0.8, outlier.size=0.1) +
+        color_palette(palette=PAL_IS_TARGET) +
+        facet_wrap(~DRUG_NAME, ncol=1, scales="free_y") +
+        labs(x="Event & Gene", y="PSI", color="Is Target") +
+        scale_x_reordered() +
+        theme_pubr() +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        coord_flip()
     
     # - examples exon-drug synergy
     x = X %>%
@@ -997,7 +1017,7 @@ plot_drug_rec = function(estimated_response, drug_screen, models){
                    group=interaction(drug_screen,in_demeter2))) +
         geom_violin(aes(fill=in_demeter2), color=NA) +
         geom_boxplot(width=0.1, outlier.size=0.1, position=position_dodge(0.9)) +
-        fill_palette(PAL_DUAL) + 
+        fill_palette(palette=PAL_IN_DEMETER2) + 
         labs(x="Drug Screen", y="Pearson Correlation", fill="In Demeter2") +
         geom_text(aes(y=1.00, label=n), 
                   corrs %>% count(in_demeter2, drug_screen), 
@@ -1007,7 +1027,7 @@ plot_drug_rec = function(estimated_response, drug_screen, models){
     
     plts[["drug_rec-npos_vs_corrs"]] = corrs %>% 
         ggscatter(x="n_pos", y="correlation", alpha=0.5, size=1,
-                  color="in_demeter2", palette=PAL_DUAL) + 
+                  color="in_demeter2", palette=PAL_IN_DEMETER2) + 
         facet_wrap(~drug_screen+in_demeter2, scales="free_x") +
         labs(x="N. Associations per Sample", y="Pearson Correlation", color="In Demeter2") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
@@ -1040,7 +1060,7 @@ plot_reactome = function(eval_reactome){
     
     plts[["reactome-violin-hits_in_pathway"]] = X %>% 
         ggviolin(x="dataset", y="n", trim=TRUE, 
-                 fill="dataset", color=NA, palette = PAL_DUAL) + 
+                 fill="dataset", color=NA, palette=c("gray","#6CA29B")) + 
         geom_boxplot(width=0.1, outlier.size=0.1) +
         stat_compare_means(method="wilcox.test", family=FONT_FAMILY, size=FONT_SIZE) +
         guides(fill="none") + 
@@ -1145,6 +1165,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "mediators-drugs_oi-top_assocs_ppi_pos", ".pdf", figs_dir, width=8, height=5)
     save_plt(plts, "mediators-drugs_oi-cosplicing-AZD4547", ".pdf", figs_dir, width=12, height=10)
     save_plt(plts, "mediators-drugs_oi-cosplicing-nutlin", ".pdf", figs_dir, width=12, height=10)
+    save_plt(plts, "mediators-drugs_oi-box-splicing", ".pdf", figs_dir, width=5.5, height=9)
     save_plt(plts, "mediators-events_oi-synergy", ".pdf", figs_dir, width=10, height=5)
     save_plt(plts, "mediators-drugs_oi-synergy", ".pdf", figs_dir, width=5, height=5)
     
