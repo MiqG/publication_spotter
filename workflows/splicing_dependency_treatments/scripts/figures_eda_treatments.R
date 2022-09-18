@@ -4,41 +4,51 @@
 #
 # Script purpose
 # --------------
-# EDA of gene dependencies regressed on event PSI and gene TPMs.
+# - clinical trial: https://clinicaltrials.gov/ct2/show/NCT01276574
+# - NACT regimens (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6020442/; https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4206650/, https://www.cancer.org/cancer/ovarian-cancer/treating/chemotherapy.html): 
+#   PACLITAXEL, DOCETAXEL, FLUOROURACIL, CYCLOPHOSPHAMIDE, CARBOPLATIN, CISPLATIN,
+#   ALTRETAMINE, Capecitabine, Etoposide, Gemcitabine, Ifosfamide, Irinotecan,
+#   DOXORUBICIN, MELPHALAN, PEMETREXED, TOPOTECAN, VINORELBINE
+# - HGSC = high grade serous ovarian carcinoma; N/A = no information; a = death due other than cancer; NACT = neoadjuvant chemotherapy; PDS = primary debulking surgery; IDS = interval debulking surgery;
+#   CP = platinum; DX = doxorubicin; TX = taxane; BV = bevacizumab; GEM = gemcitabine; 
+#   PD = progressive disease; PR = partial response; SD = stable disease; b = ongoing follow-up; Relapse type = relapse type in ascites samples derived at progressive disease phase; IHC = immunohistochemistry; RNAseq = RNA sequencing; c = in vitro.
 # 
 # Outline
 # -------
-# EDA associations
-# - pvalues
-# - n drug/events significantly associated
-# - association agreement between GDSC1 and GDSC2
-# - overlaps with cell lines used to model splicing dependency
-# - overlaps with cell lines used in GDSC1 and GDSC2
 # 
-# Rankings
-# - significant associations with drug target(s)
-# - significant associations distance from drug target(s)
-# - significant associations better than with drug target(s)
-# - drugs that share target(s) ? 
-# - significant associations with drug whose target is not significantly associated
-#   at similar overall ranking levels
-#
-# Association profiles
-# - splicing dependency coefficients separate drugs in clusters that separate 
-#   their targets (splicing dependencies that differentiate the clusters?)
 
-require(argparse)
+require(optparse)
 require(tidyverse)
 require(ggpubr)
 require(scattermore)
+require(survival)
+require(survminer)
 
 ROOT = here::here()
 
 # variables
-THRESH_FDR = 0.1
-THRESH_PVALUE = 0.05
-THRESH_NOBS = 20
-RANDOM_SEED = 1234
+NACT_DRUGS = c("PACLITAXEL", "DOCETAXEL", "5-FLUOROURACIL", 
+               "CYCLOPHOSPHAMIDE", "CISPLATIN", "CARBOPLATIN", # carboplatin not found
+               "ALTRETAMINE", "CAPECITABINE", "ETOPOSIDE", "GEMCITABINE", "IFOSFAMIDE", 
+               "IRINOTECAN", "DOXORUBICIN", "MELPHALAN", "PEMETREXED", "TOPOTECAN", "VINORELBINE")
+REGIMENS = c(
+    "CISPLATIN" = "CP", # a.k.a. platinum (CISPLATIN or CARBOPLATIN)
+    "CARBOPLATIN" = "CP",
+    "DOXORUBICIN" = "DX",
+    "PACLITAXEL" = "TX", # a.k.a. taxane (PACLITAXEL or DOCETAXEL)
+    "DOCETAXEL" = "TX",
+    "BEVACIZUMAB" = "BV", # a.k.a. bevacizumab
+    "GEMCITABINE" = "GEM"
+) %>% enframe("DRUG_NAME","chemotherapy_regimen")
+
+TREATMENT_OUTCOMES = c(
+    "Progressive Disease" = "PD",
+    "Progressive Disease" = "PD after NACT",
+    "Partial Response" = "PR",
+    "Stable Disease" = "SD",
+    "Chemotherapy Resistant" = "CR", # ?????
+    "Progressive Disease" = "PDb" # on-going follow up
+) %>% enframe("treatment_outcome_lab", "treatment_outcome")
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
@@ -63,10 +73,28 @@ FONT_FAMILY = "Arial"
 # spldep_file = file.path(RESULTS_DIR,'files','Zhang2022','splicing_dependency-EX','mean.tsv.gz')
 # splicing_file = file.path(PREP_DIR,"event_psi","Zhang2022-EX.tsv.gz")
 # estimated_response_file = file.path(RESULTS_DIR,"files","Zhang2022","estimated_drug_response_by_drug-EX.tsv.gz")
+# drug_screens_dir = file.path(PREP_DIR,'drug_screens')
 
 # figs_dir = file.path(RESULTS_DIR,"figures","eda_treatments")
 
 ##### FUNCTIONS #####
+load_drug_screens = function(drug_screens_dir){
+    filenames = cbind(
+        drug_screens_dir,
+        expand_grid(c("train","test"),c("GDSC1.tsv.gz","GDSC2.tsv.gz")
+                   )
+    )
+    dfs = apply(filenames, 1, function(x){
+        x = as.vector(x)
+        f = file.path(x[1],x[2],x[3])
+        df = read_tsv(f)
+        return(df)
+    })
+    dfs = do.call(rbind,dfs)
+    return(dfs)
+}
+
+
 plot_eda_metadata = function(metadata){
     X = metadata 
     X[["sample_type_num"]] = as.numeric(X[["sample_type"]]) # cannot do it with dplyr, weird
@@ -82,7 +110,7 @@ plot_eda_metadata = function(metadata){
         
     plts = list()
     
-    # 
+    # patient vs sample type vs treatment vs sample location vs regimen
     plts[["eda_metadata-sample_info-balloon"]] = X %>% 
         ggplot(aes(x=patientID, y=sample_type, group=patientID)) + 
         geom_point(aes(color=treatment, size=n)) + 
@@ -92,8 +120,68 @@ plot_eda_metadata = function(metadata){
         coord_flip() + 
         theme_pubr(x.text.angle = 45)
     
+    # responder vs non-responder
+    X %>% count(sample_type)
+    
+    X %>% 
+        group_by(patientID) %>%
+        mutate(has_relapsed = any(sample_type == "Relapse")) %>%
+        ungroup() %>%
+        filter(sample_type=="Pre-chemo") %>%
+        count(treatment, sample_location, has_relapsed)
+    
     return(plts)
 }
+
+
+# differences between samples that responded or not
+plot_drug_rec = function(metadata, estimated_response){
+    X = metadata %>% 
+        # add estimated_responses
+        left_join(
+            estimated_response,
+            by=c("sampleID","DRUG_NAME")
+        ) %>%
+        drop_na(predicted_ic50) %>%
+        group_by(
+            patientID, treatment, sample_type,
+            chemotherapy_regimen_lab, chemo_sensitivity, 
+            drug_screen, PFI, PFI_status
+        ) %>%
+        summarize(predicted_ic50 = median(predicted_ic50)) %>%
+        ungroup()
+    
+    plts = list()
+    # Can we predict which patients will relapse before?
+    plts[["drug_rec-"]] = X %>%
+        filter(sample_type=="Pre-chemo") %>%
+        ggplot(aes(x=chemo_sensitivity, y=predicted_ic50)) +
+        #geom_violin(aes(fill=has_relapsed), color=NA) +
+        geom_point(aes(color=chemotherapy_regimen_lab), position=position_jitter(0.2)) +
+        geom_boxplot(width=0.1, outlier.shape=NA, outlier.size=0.1, fill=NA) +
+        facet_wrap(~drug_screen, scales="free_y") +
+        #guides(fill="none") +
+        stat_compare_means(method="wilcox.test") +
+        labs(x="Treatment Outcome", y="Predicted log(IC50)", color="Regimen") +
+        theme_pubr(x.text.angle = 45)
+    
+    x = X %>%
+        group_by(drug_screen, treatment, sample_type) %>%
+        mutate(pred_sensitivity = case_when(
+            predicted_ic50 < quantile(predicted_ic50, 0.10) ~ "Sensitive",
+            predicted_ic50 > quantile(predicted_ic50, 0.90) ~ "Resistant",
+            TRUE ~ "Ambiguous"
+        )) %>%
+        filter(sample_type=="Pre-chemo" & treatment=="PDS" & 
+               drug_screen=="GDSC1" & pred_sensitivity!="Ambiguous")
+    fit = survfit(Surv(PFI, PFI_status) ~ pred_sensitivity, data=x)
+    ggsurvplot(fit, data=x, conf.int=TRUE, pval=TRUE, risk.table=TRUE)
+    
+    # deconvolve which exons determined the differential sensitivity: diff splicing of each cancer-driver exon vs Pearson correlation of their model.
+    
+    return(plts)
+}
+
 
 make_plots = function(){
     plts = list(
@@ -161,7 +249,8 @@ main = function(){
     spldep = read_tsv(spldep_file)
     splicing = read_tsv(splicing_file)
     estimated_response = read_tsv(estimated_response_file)
-    
+
+    drug_screen = load_drug_screens(drug_screens_dir)
     drug_targets = read_tsv(drug_targets_file)
     protein_impact = read_tsv(protein_impact_file)
     event_info = read_tsv(event_info_file)
@@ -176,15 +265,34 @@ main = function(){
             treatment_outcome = `Primary therapy outcome`,
             sample_type = `Stage of sampling`,
             sample_location = Sample,
-            relapse_type = `Relapse type`
-            
+            relapse_type = `Relapse type`,
+            chemotherapy_regimen = `Primary chemo regimen`,
+            PFS = `Progression free survival / PFS (months)`,
+            PFI = `Platinum free interval / PFI (days)`,
+            OS = `Overall survival (months)`
         ) %>%
         mutate(
-            sample_type = factor(sample_type, levels = c("Pre-chemo","Post-chemo","Relapse"))
+            sample_type = factor(sample_type, levels = c("Pre-chemo","Post-chemo","Relapse")),
+            chemotherapy_regimen_lab = chemotherapy_regimen,
+            PFI_status = ifelse(str_detect(PFI, "b"), 0, 1),
+            PFI = as.numeric(gsub("b","", PFI)),
+            chemo_sensitivity = ifelse(PFI<=(30*6), "Resistant", "Sensitive"),
         ) %>%
         separate_rows(sampleID, sep="; ") %>%
+        separate_rows(chemotherapy_regimen, sep="-") %>%
         drop_na(sampleID) %>%
+        left_join(REGIMENS, by="chemotherapy_regimen") %>%
+        left_join(TREATMENT_OUTCOMES, by="treatment_outcome") %>%
         distinct()
+    
+    estimated_response = estimated_response %>%
+        left_join(
+            drug_screen %>% distinct(DRUG_NAME, DRUG_ID, ID),
+            by="ID"
+        ) %>%
+        rowwise() %>%
+        mutate(sampleID = paste(strsplit(sample, "_")[[1]][2:5], collapse="_")) %>%
+        ungroup()    
     
     # make plots
     plts = make_plots()
