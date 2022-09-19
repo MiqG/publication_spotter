@@ -989,7 +989,7 @@ plot_drug_rec = function(estimated_response, drug_screen, models){
     
     # all models
     models_oi = models %>%
-        filter(lr_padj<THRESH_FDR  & n_obs>THRESH_NOBS) %>% 
+        filter(lr_padj<THRESH_FDR  & n_obs>THRESH_NOBS) %>% # we don't filter in the estimation
         distinct(ID, pearson_correlation)
     
     X = models_oi %>%
