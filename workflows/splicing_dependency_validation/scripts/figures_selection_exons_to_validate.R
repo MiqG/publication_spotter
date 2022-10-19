@@ -124,6 +124,9 @@ FONT_FAMILY = "Arial"
 
 # models_file = file.path(ROOT,"results","model_splicing_dependency","files","models_gene_dependency-EX","model_summaries.tsv.gz")
 
+# clonogenic_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20221019-clonogenic_assay-od.tsv")
+
+
 ##### FUNCTIONS #####
 from_matrix_to_edgelist = function(X){
     
@@ -548,6 +551,70 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
 }
 
 
+plot_validation = function(){
+    
+    
+    X = ccle_harm_stats %>%
+        filter(event_gene %in% events_oi) %>%
+        mutate(EVENT = gsub("_.*","", event_gene),
+               GENE = gsub(".*_","", event_gene)) %>%
+        left_join(protein_impact, by="EVENT") %>%
+        filter(str_detect(impact_clean, "Alternative protein")) %>%
+        filter(event_gene != "HsaEX1036699_SFPQ") # too long of an exon
+    
+    top_selection = X %>% distinct()
+    top_genes = top_selection %>% pull(GENE) %>% unique()
+    top_events = top_selection %>% pull(event_gene) %>% unique()
+    
+    palette = setNames(get_palette("Paired", length(available_cells)), 
+                       ccle_metadata %>% filter(DepMap_ID %in% available_cells) %>% 
+                       pull(CCLE_Name) %>% unique() %>% sort())
+    
+    plts = list()
+    
+    plts[["validation-od"]] = clonogenic_od %>%
+        group_by(event_gene) %>%
+        mutate(avg_od = mean(od)) %>%
+        ungroup() %>%
+        arrange(desc(avg_od)) %>%
+        ggbarplot(x="event_gene", y="od", add=c("mean_se","jitter")) +
+        labs(x="Condition", y="OD570") +
+        theme_pubr(x.text.angle = 70) +
+        stat_compare_means(ref.group="CONTROL", method="t.test", label="p.format", 
+                           size=FONT_SIZE, family=FONT_FAMILY)
+    
+    x = ccle_harm %>%
+        filter(event_gene %in% top_events) %>%
+        mutate(event_gene = factor(event_gene, levels=top_events)) %>%
+        pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="harm_score") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES)
+    
+    od_ctl = clonogenic_od %>%
+        filter(event_gene=="CONTROL") %>%
+        group_by(cell_line) %>%
+        summarize(od_ctl = mean(od)) %>%
+        ungroup()
+    
+    plts[["validation-od_vs_harm"]] = clonogenic_od %>%
+        left_join(od_ctl, by="cell_line") %>%
+        mutate(od_fc = log2(od / od_ctl)) %>%
+        group_by(cell_line, event_gene) %>%
+        summarize(od_fc = mean(od_fc)) %>%
+        ungroup() %>%
+        left_join(x, by=c("cell_line"="CCLE_Name","event_gene")) %>%
+        drop_na(harm_score,od_fc) %>%
+        ggscatter(x="harm_score", y="od_fc") +
+        facet_wrap(~cell_line) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
+              aspect.ratio=1) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) +
+        labs(x="Harm Score", y="FC Viability")
+    
+    return(plts)
+}
+
 make_plots = function(ccle_stats, genes_oi, events_oi,
                       ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
                       events_genes, protein_impact, available_cells){
@@ -763,6 +830,12 @@ main = function(){
         filter(culture_type %in% c("Adherent",NA)) %>% # we don't want suspension
         pull(DepMap_ID) %>%
         unique()
+    
+    clonogenic_od = read_tsv(clonogenic_od_file) %>%
+        mutate(cell_line="A549_LUNG") %>%
+        group_by(cell_line, event_gene, replicate_technical) %>%
+        summarize(od = mean(od)) %>% # summarize OD replicates
+        ungroup()
     
     # subset cell types
 #     not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")
