@@ -66,6 +66,7 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
     plts[["validation-od_vs_harm"]] = validation_clonogenic %>%
         left_join(od_ctl, by="CCLE_Name") %>%
         mutate(od_fc = log2(od / od_ctl)) %>%
+        #mutate(od_fc = od - od_ctl) %>%
         group_by(CCLE_Name, event_gene) %>%
         summarize(od_fc = mean(od_fc)) %>%
         ungroup() %>%
@@ -76,7 +77,7 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         facet_wrap(~CCLE_Name) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
               aspect.ratio=1) +
-        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        stat_cor(method="pearson", size=FONT_SIZE+1, family=FONT_FAMILY) +
         #geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) +
         labs(x="Harm Score", y="FC Viability")
     
