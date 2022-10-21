@@ -46,6 +46,8 @@ FONT_FAMILY = "Arial"
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # spldep_file = file.path(RESULTS_DIR,'files','Thomas2020','splicing_dependency-EX','mean.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020')
+# ccle_splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
+# ccle_spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 
 
 ##### FUNCTIONS #####
@@ -97,10 +99,36 @@ plot_predictions = function(crispr, selected_events, harm){
 }
 
 
-make_plots = function(crispr, selected_events, spldep){
+plot_predictions_ccle = function(crispr, selected_events, ccle_harm){
+    X = crispr %>% 
+        filter(EVENT %in% selected_events) %>% 
+        left_join(ccle_harm, by=c("EVENT"="index","cell_line")) %>%
+        drop_na(harm_score, fitness_score) %>%
+        group_by(comparison, cell_line) %>%
+        mutate(cell_line = sprintf("%s (n=%s)", cell_line, n())) %>%
+        ungroup() %>%
+        arrange(cell_line, comparison)
+    
+    plts = list()
+    plts[["predictions_ccle-scatters"]] = X %>% 
+        ggscatter(x="harm_score", y="fitness_score", size=1, color="cell_line", palette=PAL_DUAL) + 
+        facet_wrap(~comparison+cell_line, ncol=2) + 
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
+              aspect.ratio=1) +
+        guides(color="none") + 
+        labs(x="Harm Score", y="Obs. Delta Cell Prolif.") +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
+    
+    return(plts)
+}
+
+
+make_plots = function(crispr, selected_events, harm, ccle_harm){
     plts = list(
         plot_summary(crispr, selected_events),
-        plot_predictions(crispr, selected_events, spldep)
+        plot_predictions(crispr, selected_events, harm),
+        plot_predictions_ccle(crispr, selected_events, ccle_harm)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -132,6 +160,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 save_plots = function(plts, figs_dir){
     save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=5.75, height=7.5)
     save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=6, height=6)
+    save_plt(plts, "predictions_ccle-scatters", ".pdf", figs_dir, width=6, height=6)
 }
 
 
@@ -162,8 +191,22 @@ main = function(){
     spldep = read_tsv(spldep_file)
     psi = read_tsv(psi_file)
     
+    ccle_spldep = read_tsv(ccle_spldep_file)
+    ccle_splicing = read_tsv(ccle_splicing_file)
+    
     # subset experiments of interest
     crispr = crispr %>% filter(comparison %in% COMPARISONS_OI)
+    
+    # subset ccle
+    ccle_spldep = ccle_spldep %>% 
+        filter(index %in% (crispr%>%pull(EVENT))) %>% 
+        dplyr::select(c(index,`ACH-001086`,`ACH-000779`)) %>% 
+        dplyr::rename(HeLa=`ACH-001086`, PC9=`ACH-000779`)
+    
+    ccle_splicing = ccle_splicing %>% 
+        filter(EVENT %in% (crispr%>%pull(EVENT))) %>% 
+        dplyr::select(c(EVENT,`ACH-001086`,`ACH-000779`)) %>% 
+        dplyr::rename(HeLa=`ACH-001086`, PC9=`ACH-000779`)
     
     # compute harm score
     harm = spldep %>% 
@@ -176,6 +219,16 @@ main = function(){
                sign_harm=(-1)*harm_score) %>%
         left_join(CELL_TYPES, by="sampleID")
     
+    ccle_harm = ccle_spldep %>% 
+        pivot_longer(-index, names_to="cell_line", values_to="spldep") %>% 
+        left_join(
+            ccle_splicing %>% 
+                pivot_longer(-EVENT, names_to="cell_line", values_to="psi_ctl"), 
+            by=c("index"="EVENT","cell_line")
+        ) %>%  
+        # the amount of change upon cutting out the EVENT
+        mutate(harm_score=(-1)*(0 - psi_ctl)*spldep) 
+    
     # available events
     avail_events = intersect(
         crispr %>% filter(EVENT %in% selected_events) %>% drop_na(fitness_score) %>% pull(EVENT),
@@ -183,7 +236,7 @@ main = function(){
     )
     
     # plot
-    plts = make_plots(crispr, selected_events, harm)
+    plts = make_plots(crispr, selected_events, harm, ccle_harm)
 
     # make figdata
     # figdata = make_figdata(crispr, selected_events, spldep)

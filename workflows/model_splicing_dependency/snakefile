@@ -94,7 +94,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score_rel-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-        # Exon CRISPR screen (Thomas 2020)
+        # Exon CRISPR screens
         ## compute splicing dependencies
         expand(os.path.join(RESULTS_DIR,'files','{dataset}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, dataset=["Thomas2020","Hart2015"]),
         
