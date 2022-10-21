@@ -23,6 +23,7 @@ RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_validation')
 PANGOLIN_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','Pangolin')
+TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 
 EVENTS_OI = [
     "HsaEX0006970",
@@ -83,12 +84,17 @@ METHODS_KWS = {
     }
 }
 
+EVENT_TYPES = ["EX"]
+
 ##### RULES #####
 rule all:
     input:
         # infer structures
         expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
         expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
+        
+        # compute splicing dependencies (mean, median, std)
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # fit gene dependencies and get empirical distributions of coefficients
         #expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"), event=EVENTS_OI, method=METHODS_KWS.keys()),
@@ -181,4 +187,31 @@ rule structure_inference_get_proteoforms:
                     --event_info_file={input.event_info} \
                     --output_df_file={output.df} \
                     --output_fasta_file={output.fasta}
+        """
+        
+
+rule compute_splicing_dependency:
+    input:
+        psi = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso-matrix.tsv"),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        coefs_dir = os.path.join(ROOT,'results','model_splicing_dependency','files','models_gene_dependency-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'))
+    threads: 24
+    resources:
+        runtime = 86400, # seconds = 24h = 1 day
+        memory = 30
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --log_transform
         """
