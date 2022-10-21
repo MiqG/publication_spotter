@@ -100,6 +100,8 @@ PAL_PROT_IMP = setNames(
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
+# genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
+# snv_file = file.path(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv')
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 # ppi_file = file.path(PREP_DIR,'ppi','STRINGDB.tsv.gz')
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
@@ -126,6 +128,7 @@ load_drug_screens = function(drug_screens_dir){
 load_ontologies = function(msigdb_dir, protein_impact_file){
     ontologies = list(
         "reactome" = read.gmt(file.path(msigdb_dir,"c2.cp.reactome.v7.4.symbols.gmt")),
+        "hallmarks" = read.gmt(file.path(msigdb_dir,"h.all.v7.4.symbols.gmt")),
         "protein_impact" = read_tsv(protein_impact_file) %>%
             dplyr::rename(EVENT=EventID, term=ONTO) %>%
             dplyr::select(term,EVENT) %>%
@@ -439,6 +442,7 @@ plot_ppi = function(models, shortest_paths){
                path_lab = ifelse(shortest_path_length>=5,">=5",path_lab),
                path_lab = ifelse(shortest_path_length==1e6,"N.R.",path_lab),
                path_lab = factor(path_lab, levels=c("0","1","2","3","4",">=5","N.R."))) %>%
+        filter(path_lab != "N.R.") %>% # drop those for which we cannot measure a shortest path
         drop_na(is_sel)
     
     plts = list()
@@ -715,9 +719,9 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
         distinct(DRUG_ID) %>%
         left_join(X, by="DRUG_ID") %>% 
         left_join(spldep_models %>% 
-            distinct(EVENT, event_coefficient_mean), by="EVENT") %>%
+            distinct(EVENT, event_coefficient_mean, pearson_correlation_mean), by="EVENT") %>%
         filter(is_sel) %>% 
-        distinct(DRUG_NAME, EVENT, GENE, event_gene, lr_padj, spldep_coefficient,
+        distinct(DRUG_NAME, EVENT, GENE, event_gene, lr_padj, spldep_coefficient, pearson_correlation_mean,
                  event_coefficient_mean, drug_screen, is_target, path_lab, term_clean)
     
     plts[["mediators-on_target-top_assocs_spldep_all"]] = x %>% 
@@ -1070,16 +1074,104 @@ plot_reactome = function(eval_reactome){
 }
 
 
+plot_examples = function(splicing, genexpr, snv, ontology, gene_info){
+    plts = list()
+    
+    # Does the activation of the P53 pathway change with the splicing of HsaEX0038414_MDM4?
+
+    ## get splicing of HsaEX0038414_MDM4 across samples
+    splicing_oi = splicing %>%
+        filter(EVENT == "HsaEX0038414") %>%
+        pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi")
+    
+    ## log-transform TPMs and get genes in P53 pathway only
+    tpm = genexpr %>% 
+        mutate_at(vars(-ID), function(x){log2(x+1)})
+    
+    ## get samples with TP53 mutations
+    muts_oi = snv %>%
+        filter(Hugo_Symbol=="TP53" & Variant_Classification!="Silent") %>%
+        group_by(DepMap_ID) %>%
+        summarize(mutated_tp53 = TRUE) %>%
+        ungroup()
+    
+    ## combine info
+    genes_oi = ontology %>% filter(term == "HALLMARK_P53_PATHWAY") %>% pull(gene)
+    genexpr_pathway = gene_info %>% 
+        filter(Gene %in% genes_oi) %>% 
+        distinct(EnsID,Gene) %>%
+        left_join(tpm, by=c("EnsID"="ID")) %>%
+        pivot_longer(-c(Gene,EnsID), names_to="DepMap_ID", values_to="tpm") %>%
+        left_join(splicing_oi, by="DepMap_ID") %>%
+        mutate(psi_bin = cut(psi, breaks=c(0,25,50,75,100))) %>%
+        drop_na(psi_bin) %>%
+        left_join(muts_oi, by="DepMap_ID") %>% 
+        mutate(
+            mutated_tp53 = replace_na(mutated_tp53, FALSE),
+            mutated_tp53 = ifelse(mutated_tp53, "TP53mut", "WT")
+        )
+    
+    ctl = genexpr_pathway %>%
+        filter(psi_bin == "(75,100]") %>%
+        group_by(Gene) %>%
+        summarize(tpm_ctl = median(tpm)) %>%
+        ungroup()
+    
+    X = genexpr_pathway %>%
+        left_join(ctl) %>%
+        mutate(tpm_fc = tpm - tpm_ctl)
+    
+    ## distribution of event inclusion in each sample
+    plts[["examples-mdm4-psi-distr"]] = X %>%
+        distinct(DepMap_ID, psi) %>%
+        gghistogram(x="psi", fill=PAL_IS_TARGET[1], color=NA) +
+        geom_vline(xintercept=c(25,50,75), linetype="dashed", size=LINE_SIZE) +
+        labs(x="PSI HsaEX0038414_MDM4", y="Count") +
+        theme(aspect.ratio=1)
+    
+    plts[["examples-mdm4-psi-bins"]] = X %>%
+        distinct(DepMap_ID, psi_bin) %>%
+        count(psi_bin) %>%
+        drop_na(psi_bin) %>%
+        ggbarplot(x="psi_bin", y="n", fill=PAL_IS_TARGET[1], color=NA,
+                  label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY) +
+        labs(x="PSI HsaEX0038414_MDM4", y="Count") +
+        theme(aspect.ratio=1)
+    
+    ## distributions of gene expression
+#     comparisons = list(
+#         c("(0,25]","(75,100]"),
+#         c("(25,50]","(75,100]"),
+#         c("(50,75]","(75,100]")
+#     )
+    plts[["examples-mdm4-bins_vs_genexpr_fc_tp53"]] = X %>%
+        filter(Gene=="TP53") %>%
+        ggviolin(x="psi_bin", y="tpm", fill=PAL_SINGLE_DARK, color=NA, trim=TRUE) +
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        geom_text(aes(label=n, y=-0.5), . %>% count(psi_bin,mutated_tp53) %>% mutate(n=sprintf("n=%s",n)), 
+                  size=FONT_SIZE, family=FONT_FAMILY) +
+        stat_compare_means(method="wilcox.test", ref.group="(0,25]", label="p.signif",
+                           size=FONT_SIZE, family=FONT_FAMILY) +
+        facet_wrap(~mutated_tp53) +
+        labs(x="PSI HsaEX0038414_MDM4", y="log2(TPM+1) TP53") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1)
+    
+    return(plts)
+}
+
+
 make_plots = function(models, drug_screen,
                       drug_targets, shortest_paths, shortest_paths_simple,
-                      spldep_models, estimated_drug_response, eval_reactome){
+                      spldep_models, estimated_drug_response, eval_reactome,
+                      splicing, genexpr, snv, ontology, gene_info){
     plts = list(
         plot_eda_associations(models, drug_screen),
         plot_targets(models, drug_targets),
         plot_ppi(models, shortest_paths),
         plot_mediators(spldep_models, models, shortest_paths_simple, drug_targets),
         plot_drug_rec(estimated_response, drug_screen, models),
-        plot_reactome(eval_reactome)
+        plot_reactome(eval_reactome),
+        plot_examples(splicing, genexpr, snv, ontology, gene_info)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -1174,6 +1266,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "drug_rec-correlations", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "drug_rec-npos_vs_corrs", ".pdf", figs_dir, width=6, height=9)
     save_plt(plts, "drug_rec-best_worse", ".pdf", figs_dir, width=7, height=8)
+    
+    # examples
+    save_plt(plts, "examples-mdm4-psi-distr", ".pdf", figs_dir, width=4.5, height=4.5)
+    save_plt(plts, "examples-mdm4-psi-bins", ".pdf", figs_dir, width=4.5, height=4.5)
+    save_plt(plts, "examples-mdm4-bins_vs_genexpr_fc_tp53", ".pdf", figs_dir, width=7.5, height=6)
 }
 
 
@@ -1221,6 +1318,8 @@ main = function(){
         filter(EVENT %in% unique(models[["EVENT"]]))
     ontologies = load_ontologies(msigdb_dir, protein_impact_file)
     splicing = read_tsv(splicing_file)
+    genexpr = read_tsv(genexpr_file)
+    snv = read_csv(snv_file)
     ppi = read_tsv(ppi_file)
     event_info = read_tsv(event_info_file)
     gene_info = read_tsv(gene_info_file)

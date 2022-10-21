@@ -446,3 +446,31 @@ rule figures_stuctures:
                     --yasara_path={params.yasara_path} \
                     --figs_dir={output}
         """
+        
+        
+rule nutlin_structure_analysis_complexes:
+    input:
+        pdb = os.path.join(SUPPORT_DIR,"{structure}.pdb"),
+    output:
+        directory(os.path.join(RESULTS_DIR,"nutlin_structure_analysis"))
+    params:
+        bin_dir = "~/repositories/foldx5",
+        structure_oi = "{structure}"
+    shell:
+        """
+        set -eo pipefail
+        
+        mkdir {output}
+        
+        # repair complexes
+        mkdir {output}/repaired_structures
+        cd {output}/repaired_structures
+        {params.bin_dir}/foldx --command=RepairPDB --pdb={input.pdb} --output-file=""
+
+        # analyze complexes interactions of repaired complexes
+        mkdir {output}/analyze_complexes
+        cd {output}/analyze_complexes
+        {params.bin_dir}/foldx --command=AnalyseComplex --pdb={output}/repaired_structures/{params.structure_oi}.pdb --output-file=""
+        
+        echo "Done!"
+        """
