@@ -50,6 +50,8 @@ rule all:
         
         os.path.join(RESULTS_DIR,'figures','structure_inference','MDM2'),
         
+        os.path.join(RESULTS_DIR,"files","nutlin_structure_analysis_stability"),
+        
         # associations drug responses and splicing dependencies
         #expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
         #expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
@@ -471,6 +473,40 @@ rule nutlin_structure_analysis_complexes:
         mkdir {output}/analyze_complexes
         cd {output}/analyze_complexes
         {params.bin_dir}/foldx --command=AnalyseComplex --pdb={output}/repaired_structures/{params.structure_oi}.pdb --output-file=""
+        
+        echo "Done!"
+        """
+        
+        
+rule nutlin_structure_stability:
+    input:
+        pdbs_dir = SUPPORT_DIR
+    output:
+        directory(os.path.join(RESULTS_DIR,"files","nutlin_structure_analysis_stability"))
+    params:
+        bin_dir = "~/repositories/foldx5",
+        pdb_full = "MDM2_full",
+        pdb_exon = "MDM2_full_only_exon",
+        pdb_noexon = "MDM2_full_no_exon"
+    shell:
+        """
+        set -eo pipefail
+        
+        mkdir {output}
+        
+        # repair complexes
+        mkdir {output}/repaired_structures
+        cd {output}/repaired_structures
+        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdbs_dir} --pdb={params.pdb_full}.pdb
+        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdbs_dir} --pdb={params.pdb_exon}.pdb
+        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdbs_dir} --pdb={params.pdb_noexon}.pdb
+
+        # analyze complexes interactions of repaired complexes
+        mkdir {output}/stability
+        cd {output}/stability
+        {params.bin_dir}/foldx --command=Stability --pdb-dir={output}/repaired_structures --pdb={params.pdb_full}_Repair.pdb
+        {params.bin_dir}/foldx --command=Stability --pdb-dir={output}/repaired_structures --pdb={params.pdb_exon}_Repair.pdb
+        {params.bin_dir}/foldx --command=Stability --pdb-dir={output}/repaired_structures --pdb={params.pdb_noexon}_Repair.pdb
         
         echo "Done!"
         """
