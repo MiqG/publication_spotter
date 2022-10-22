@@ -25,6 +25,7 @@ require(ggrepel)
 require(tidytext)
 require(cowplot)
 require(extrafont)
+require(pROC)
 
 # variables
 # NACT_DRUGS = c("PACLITAXEL", "DOCETAXEL", "5-FLUOROURACIL", 
@@ -83,6 +84,7 @@ FONT_FAMILY = "Arial"
 # gene_info_file = file.path(RAW_DIR,"ENSEMBL","gene_annotation-hg38.tsv.gz")
 # metadata_file = file.path(PREP_DIR,"metadata","Zhang2022.tsv.gz")
 # spldep_file = file.path(RESULTS_DIR,'files','Zhang2022','splicing_dependency-EX','mean.tsv.gz')
+# selected_events_file = file.path(ROOT,"results","model_splicing_dependency","files","selected_models-EX.txt")
 # splicing_file = file.path(PREP_DIR,"event_psi","Zhang2022-EX.tsv.gz")
 # estimated_response_file = file.path(RESULTS_DIR,"files","Zhang2022","estimated_drug_response_by_drug-EX.tsv.gz")
 # drug_screens_dir = file.path(PREP_DIR,'drug_screens')
@@ -121,6 +123,13 @@ plot_eda_metadata = function(metadata){
         gghistogram(x="PFI", fill=PAL_SINGLE_DARK, bins=20, color=NA) +
         geom_vline(xintercept=THRESH_PFI, linetype="dashed", size=LINE_SIZE) +
         labs(x="Progression-Free Interval (PFI)", y="Count") +
+        theme(aspect.ratio=NULL)
+    
+    plts[["eda_metadata-patients-pfi_vs_regimen"]] = X %>%
+        distinct(patientID, PFI, chemotherapy_regimen_lab) %>% 
+        gghistogram(x="PFI", fill="chemotherapy_regimen_lab", bins=20, color=NA, palette=PAL_REGIMEN) +
+        geom_vline(xintercept=THRESH_PFI, linetype="dashed", size=LINE_SIZE) +
+        labs(x="Progression-Free Interval (PFI)", y="Count", fill="Regimen") +
         theme(aspect.ratio=NULL)
     
     # patients vs sensitivity vs regimen
@@ -181,6 +190,78 @@ plot_drug_rec = function(metadata, estimated_response){
             strip.text.x = element_text(size=6, family=FONT_FAMILY)
         )
     
+    # how reliable is our prediction?
+    threshs_pfi = 30*seq(1,10)
+    drug_screens = unique(X[["drug_screen"]])
+    x = lapply(threshs_pfi, function(thresh_pfi_oi){
+        result = lapply(drug_screens, function(drug_screen_oi){
+            result = X %>%
+                filter(sample_type=="Pre-chemo" & drug_screen==drug_screen_oi) %>% 
+                mutate(chemo_sensitivity = ifelse(PFI <= thresh_pfi_oi, "Resistant", "Sensitive")) %>%
+                roc(chemo_sensitivity, predicted_ic50) 
+
+            result = result %>% 
+                coords(transpose=FALSE) %>% 
+                mutate(
+                    fpr = 1 - specificity,
+                    auc = result[["auc"]],
+                    thresh_pfi = thresh_pfi_oi,
+                    drug_screen = drug_screen_oi
+                )
+            return(result)
+        })
+        result = do.call(rbind, result)
+    })
+    x = do.call(rbind, x)
+    
+    plts[["drug_rec-pred_ic50-roc_curves"]] = x %>%
+        mutate(auc_lab = sprintf("AUC(%s)=%s",thresh_pfi,round(auc,2))) %>%
+        ggplot(aes(x=fpr, y=sensitivity)) +
+        geom_line(aes(color=as.factor(thresh_pfi)), alpha=0.5) +
+        geom_line(data=.%>%filter(thresh_pfi==THRESH_PFI), color="orange") +
+        geom_abline(intercept=0, slope=1, linetype="dashed") +
+        geom_text(
+            aes(x=x, y=y, 
+            label=auc_lab, color=as.factor(thresh_pfi)),
+            . %>% distinct(auc_lab, thresh_pfi, drug_screen) %>% 
+                arrange(drug_screen, desc(thresh_pfi)) %>%
+                mutate(x=0.65, y=rep(seq(0,0.5,length.out=10),2)),
+            hjust=0, size=FONT_SIZE, family=FONT_FAMILY
+        ) +
+        color_palette(get_palette(c("lightgrey","darkgreen"),10)) + 
+        theme_pubr() + 
+        facet_wrap(~drug_screen) +
+        theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        labs(x="False Positive Rate (1 - Specificity)", y="True Positive Rate (Sensitivity)",
+             color="Thresh. PFI (days)")
+    
+    
+    # which drugs would we reccomend?
+#     x = metadata %>% 
+#         filter(sample_type=="Pre-chemo") %>%
+#         # add estimated_responses
+#         left_join(
+#             estimated_response %>% 
+#                 group_by(drug_screen,DRUG_NAME,sampleID) %>% 
+#                 slice_min(predicted_ic50,n=1) %>% 
+#                 ungroup(),
+#             by="sampleID",
+#             suffix=c("_regimen","_pred")
+#         ) %>%
+#         drop_na(predicted_ic50, DRUG_NAME_pred) %>%
+#         mutate(administered = DRUG_NAME_pred == DRUG_NAME_regimen)
+    
+#     plts[["drug_rec-pred_ic50-rankings"]] = x %>%
+#         distinct(patientID, predicted_ic50, administered, drug_screen, 
+#                  DRUG_NAME_pred, chemo_sensitivity, DRUG_ID) %>%
+#         group_by(drug_screen, patientID, DRUG_NAME_pred) %>%
+#         slice_max(administered, n=1) %>%
+#         ungroup() %>%
+#         group_by(drug_screen, patientID) %>%
+#         slice_min(predicted_ic50, n=10) %>%
+#         ungroup()
+        
+    
     return(plts)
 }
 
@@ -239,6 +320,126 @@ plot_diff_sens = function(diff_splicing, event_info, protein_impact, drug_models
 }
 
 
+plot_harm_scores = function(spldep, splicing, metadata){
+    # get delta psi between "Post-chemo" - "Pre-chemo"
+    conditions_oi = c("Pre-chemo","Post-chemo")
+    patients_oi = metadata %>%
+        distinct(patientID, sample_type) %>%
+        filter(sample_type %in% conditions_oi) %>%
+        count(patientID) %>%
+        filter(n>1) %>%
+        pull(patientID)
+    delta_psi_postchemo = splicing %>%
+        filter(EVENT %in% spldep[["EVENT"]]) %>%
+        pivot_longer(-EVENT, names_to="sampleID", values_to="psi") %>%
+        drop_na(psi) %>%
+        rowwise() %>%
+        mutate(sampleID = paste(strsplit(sampleID, "_")[[1]][2:5], collapse="_")) %>%
+        ungroup() %>%
+        left_join(metadata %>% filter(patientID %in% patients_oi), by="sampleID") %>%
+        filter(sample_type %in% conditions_oi) %>%
+        drop_na(patientID) %>%
+        group_by(EVENT, patientID, sample_type, chemotherapy_regimen_lab, chemo_sensitivity) %>%
+        summarize(med_psi = median(psi, na.rm=TRUE)) %>%
+        ungroup() %>%
+        pivot_wider(
+            id_cols=c("EVENT","patientID","chemotherapy_regimen_lab","chemo_sensitivity"),
+            names_from="sample_type",
+            values_from="med_psi"
+        ) %>%
+        mutate(
+            dpsi = `Post-chemo` - `Pre-chemo`,
+            comparison = "Postchemo_vs_Prechemo"
+        )
+    
+    
+    # get delta psi between "Relapse" - "Pre-chemo"
+    conditions_oi = c("Pre-chemo","Relapse")
+    patients_oi = metadata %>%
+        distinct(patientID, sample_type) %>%
+        filter(sample_type %in% conditions_oi) %>%
+        count(patientID) %>%
+        filter(n>1) %>%
+        pull(patientID)
+    delta_psi_relapse = splicing %>%
+        filter(EVENT %in% spldep[["EVENT"]]) %>%
+        pivot_longer(-EVENT, names_to="sampleID", values_to="psi") %>%
+        drop_na(psi) %>%
+        rowwise() %>%
+        mutate(sampleID = paste(strsplit(sampleID, "_")[[1]][2:5], collapse="_")) %>%
+        ungroup() %>%
+        left_join(metadata %>% filter(patientID %in% patients_oi), by="sampleID") %>%
+        filter(sample_type %in% conditions_oi) %>%
+        drop_na(patientID) %>%
+        group_by(EVENT, patientID, sample_type, chemotherapy_regimen_lab, chemo_sensitivity) %>%
+        summarize(med_psi = median(psi, na.rm=TRUE)) %>%
+        ungroup() %>%
+        pivot_wider(
+            id_cols=c("EVENT","patientID","chemotherapy_regimen_lab","chemo_sensitivity"),
+            names_from="sample_type",
+            values_from="med_psi"
+        ) %>%
+        mutate(
+            dpsi = `Relapse` - `Pre-chemo`,
+            comparison = "Relapse_vs_Prechemo"
+        )
+    
+    # combine delta PSIs
+    delta_psi = delta_psi_postchemo %>%
+        bind_rows(delta_psi_relapse)
+    
+    # get median splicing dependency at "Pre-chemo"
+    med_spldep = spldep %>%
+        pivot_longer(-EVENT, names_to="sampleID", values_to="spldep") %>%
+        drop_na(spldep) %>%
+        rowwise() %>%
+        mutate(sampleID = paste(strsplit(sampleID, "_")[[1]][2:5], collapse="_")) %>%
+        ungroup() %>%
+        left_join(metadata %>% filter(patientID %in% patients_oi), by="sampleID") %>%
+        filter(sample_type == "Pre-chemo") %>%
+        drop_na(patientID) %>%
+        group_by(EVENT, patientID, sample_type, chemotherapy_regimen_lab, chemo_sensitivity) %>%
+        summarize(med_spldep = median(spldep, na.rm=TRUE)) %>%
+        ungroup()
+    
+    harm_scores = med_spldep %>%
+        left_join(
+            delta_psi %>% distinct(EVENT,patientID,chemotherapy_regimen_lab,chemo_sensitivity,dpsi,comparison), 
+            by=c("EVENT","patientID","chemotherapy_regimen_lab","chemo_sensitivity")
+        ) %>%
+        mutate(
+            harm_score = (-1) * med_spldep * dpsi,
+            label = sprintf("%s | %s", patientID, chemotherapy_regimen_lab)
+        ) %>%
+        group_by(patientID,comparison) %>%
+        arrange(harm_score) %>%
+        mutate(
+            cum_harm_score = cumsum(harm_score),
+            index = row_number()
+        ) %>%
+        ungroup() %>%
+        group_by(chemo_sensitivity,comparison) %>%
+        mutate(chemo_sensitivity = sprintf("%s | n=%s", chemo_sensitivity, n())) %>%
+        ungroup()
+    
+    X = harm_scores
+    
+    plts = list()
+    plts[["harm_scores-"]] = X %>% 
+        ggscatter(
+            x="index", y="cum_harm_score", color="chemotherapy_regimen_lab", alpha=0.1, size=0.5
+        ) + 
+        ylim(NA,10) +
+        xlim(NA,200) +
+        geom_smooth(aes(color=chemo_sensitivity), linetype="dashed") +
+        facet_wrap(~chemo_sensitivity+comparison) +
+        labs(x="Most Harmful Exons", y="Cumulative Harm Score")
+        
+    
+    return(plts)
+}
+
+
 make_plots = function(metadata, estimated_response, diff_splicing, 
                       event_info, protein_impact, drug_models){
     plts = list(
@@ -280,8 +481,10 @@ save_plt = function(plts, plt_name, extension=".pdf",
 save_plots = function(plts, figs_dir){
     # drug-event associations
     save_plt(plts, "eda_metadata-patients-pfi", ".pdf", figs_dir, width=3, height=4)
+    save_plt(plts, "eda_metadata-patients-pfi_vs_regimen", ".pdf", figs_dir, width=3, height=4)
     save_plt(plts, "eda_metadata-patients-sensitivity", ".pdf", figs_dir, width=8, height=6)
     save_plt(plts, "drug_rec-pred_ic50-boxplot", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "drug_rec-pred_ic50-roc_curves", ".pdf", figs_dir, width=10, height=10)
     save_plt(plts, "diff_sens-res_vs_sens-scatter", ".pdf", figs_dir, width=5, height=6)
     save_plt(plts, "diff_sens-event_contribution-bar", ".pdf", figs_dir, width=6.2, height=5.5)
 }
@@ -310,6 +513,8 @@ main = function(){
     metadata = read_tsv(metadata_file)
 
     splicing = read_tsv(splicing_file)
+    spldep = read_tsv(spldep_file)
+    selected_events = readLines(selected_events_file)
     estimated_response = read_tsv(estimated_response_file)
     drug_models = read_tsv(drug_models_file)
     drug_screen = load_drug_screens(drug_screens_dir)
@@ -373,6 +578,10 @@ main = function(){
     
     drug_models = drug_models %>%
         left_join(drug_screen %>% distinct(DRUG_NAME, DRUG_ID, ID), by=c("ID","DRUG_ID"))
+    
+    spldep = spldep %>% 
+        dplyr::rename(EVENT = index) %>%
+        filter(EVENT %in% selected_events)
     
     # differential splicing cancer-driver events: resistant vs sensitive patients
     events_oi = drug_models %>% pull(EVENT) %>% unique()
