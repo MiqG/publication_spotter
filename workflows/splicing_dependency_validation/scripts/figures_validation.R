@@ -32,61 +32,90 @@ FONT_FAMILY = "Arial"
 
 # validation_splicing_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso.tsv")
 # validation_spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
-# validation_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20221019-clonogenic_assay-od.tsv")
+# validation_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
 
-# figs_dir = file.path(RESULTS_DIR,'figures','selection_exons_to_validate')
+# figs_dir = file.path(RESULTS_DIR,'figures','validation')
 
 
 ##### FUNCTIONS #####
 plot_validation = function(validation_clonogenic, validation_harm_scores){
     
-    palette = setNames(get_palette("Paired", length(available_cells)), 
-                       ccle_metadata %>% filter(DepMap_ID %in% available_cells) %>% 
-                       pull(CCLE_Name) %>% unique() %>% sort())
+    PAL_REPLICATES = setNames(get_palette("jco",2), 1:2)
     
     plts = list()
     
+    
     plts[["validation-od"]] = validation_clonogenic %>%
-        group_by(event_gene) %>%
-        mutate(avg_od = mean(od)) %>%
-        ungroup() %>%
-        arrange(desc(avg_od)) %>%
-        ggbarplot(x="event_gene", y="od", add=c("mean_se","jitter")) +
-        labs(x="Condition", y="OD570") +
+        mutate(event_gene = fct_reorder(event_gene, -od, mean)) %>%
+        ggplot(aes(x=event_gene, y=od)) +
+        geom_boxplot(width=0.5, outlier.shape=NA) +
+        geom_jitter(aes(color=as.factor(replicate_biological)), size=1, width=0.1) +
+        color_palette(PAL_REPLICATES) +
+        labs(x="Condition", y="OD570", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
         stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.format", 
                            size=FONT_SIZE, family=FONT_FAMILY)
     
     od_ctl = validation_clonogenic %>%
         filter(event_gene=="WATER") %>%
-        group_by(CCLE_Name) %>%
-        summarize(od_ctl = mean(od)) %>%
+        group_by(CCLE_Name, replicate_biological) %>%
+        summarize(od_ctl = median(od)) %>%
         ungroup()
     
     plts[["validation-od_vs_harm"]] = validation_clonogenic %>%
-        left_join(od_ctl, by="CCLE_Name") %>%
+        left_join(od_ctl, by=c("CCLE_Name","replicate_biological")) %>%
         mutate(od_fc = log2(od / od_ctl)) %>%
         #mutate(od_fc = od - od_ctl) %>%
-        group_by(CCLE_Name, event_gene) %>%
-        summarize(od_fc = mean(od_fc)) %>%
+        group_by(CCLE_Name, event_gene, replicate_biological) %>%
+        summarize(
+            od_fc = median(od_fc),
+            replicate_biological = as.factor(replicate_biological)
+        ) %>%
         ungroup() %>%
+        distinct() %>%
         left_join(validation_harm_scores, by=c("CCLE_Name","event_gene")) %>%
-        drop_na(harm_score,od_fc) %>%
-        ggscatter(x="harm_score", y="od_fc") +
-        geom_text_repel(aes(label=event_gene), size=FONT_SIZE+3, family=FONT_FAMILY) +
-        facet_wrap(~CCLE_Name) +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY),
-              aspect.ratio=1) +
-        stat_cor(method="pearson", size=FONT_SIZE+1, family=FONT_FAMILY) +
-        #geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) +
-        labs(x="Harm Score", y="FC Viability")
+        drop_na(harm_score, od_fc) %>%
+        ggplot(aes(x=harm_score, y=od_fc)) +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) +
+        geom_point(aes(color=replicate_biological)) +
+        geom_text_repel(aes(label=event_gene), size=FONT_SIZE, family=FONT_FAMILY, segment.size=0.1) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        facet_wrap(~CCLE_Name+replicate_biological) +
+        color_palette(PAL_REPLICATES) +
+        theme_pubr() +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
+        labs(x="Harm Score", y="Obs. Cell Prolif. Effect", color="Replicate")
     
     return(plts)
 }
 
+
+make_plots = function(validation_clonogenic, validation_harm_scores){
+    plts = list(
+        plot_validation(validation_clonogenic, validation_harm_scores)
+    )
+    plts = do.call(c,plts)
+    return(plts)
+}
+
+
+save_plt = function(plts, plt_name, extension='.pdf', 
+                    directory='', dpi=350, format=FALSE,
+                    width = par("din")[1], height = par("din")[2]){
+    plt = plts[[plt_name]]
+    if (format){
+        plt = ggpar(plt, font.title=10, font.subtitle=10, font.caption=10, 
+                    font.x=8, font.y=8, font.legend=8,
+                    font.tickslab=6, font.family='Arial')    
+    }
+    filename = file.path(directory,paste0(plt_name,extension))
+    save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm')
+}
+
+
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "validation-od", '.pdf', figs_dir, width=13, height=8)
-    save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, "validation-od", '.pdf', figs_dir, width=18, height=12)
+    save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=9)
 }
 
 
@@ -124,8 +153,7 @@ main = function(){
         left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
         dplyr::select(-index)
     validation_clonogenic = read_tsv(validation_od_file) %>%
-        mutate(CCLE_Name="A549_LUNG") %>%
-        group_by(CCLE_Name, event_gene, replicate_technical) %>%
+        group_by(CCLE_Name, event_gene, replicate_technical, replicate_biological) %>%
         summarize(od = mean(od)) %>% # summarize OD replicates
         ungroup()
     
@@ -142,11 +170,11 @@ main = function(){
     plts = make_plots(validation_clonogenic, validation_harm_scores)
     
     # make figdata
-    figdata = make_figdata()
+    #figdata = make_figdata()
 
     # save
     save_plots(plts, figs_dir)
-    save_figdata(figdata, figs_dir)
+    #save_figdata(figdata, figs_dir)
 }
 
 
