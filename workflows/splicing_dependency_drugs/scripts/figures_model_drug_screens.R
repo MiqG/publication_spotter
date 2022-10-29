@@ -1126,8 +1126,7 @@ plot_examples = function(splicing, genexpr, snv, ontology, gene_info){
         distinct(DepMap_ID, psi) %>%
         gghistogram(x="psi", fill=PAL_IS_TARGET[1], color=NA) +
         geom_vline(xintercept=c(25,50,75), linetype="dashed", size=LINE_SIZE) +
-        labs(x="PSI HsaEX0038414_MDM4", y="Count") +
-        theme(aspect.ratio=1)
+        labs(x="PSI HsaEX0038414_MDM4", y="Count")
     
     plts[["examples-mdm4-psi-bins"]] = X %>%
         distinct(DepMap_ID, psi_bin) %>%
@@ -1268,7 +1267,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "drug_rec-best_worse", ".pdf", figs_dir, width=7, height=8)
     
     # examples
-    save_plt(plts, "examples-mdm4-psi-distr", ".pdf", figs_dir, width=4.5, height=4.5)
+    save_plt(plts, "examples-mdm4-psi-distr", ".pdf", figs_dir, width=4.35, height=1.5)
     save_plt(plts, "examples-mdm4-psi-bins", ".pdf", figs_dir, width=4.5, height=4.5)
     save_plt(plts, "examples-mdm4-bins_vs_genexpr_fc_tp53", ".pdf", figs_dir, width=7.5, height=6)
 }
