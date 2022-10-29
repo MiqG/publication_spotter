@@ -26,19 +26,19 @@ source(file.path(ROOT,'src','R','utils.R'))
 
 # Development
 # -----------
-RAW_DIR = file.path(ROOT,'data','raw')
-PREP_DIR = file.path(ROOT,'data','prep')
-RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
-metadata_file = file.path(PREP_DIR,'metadata','PANCAN.tsv.gz')
-figs_dir = file.path(RESULTS_DIR,'figures','personalization')
-pers_spldep_file = file.path(RESULTS_DIR,'files','Seryakov2021','splicing_dependency-EX','mean.tsv.gz')
-pers_diff_deltas_file = file.path(RESULTS_DIR,'files','Seryakov2021','onediff-EX','deltas.tsv.gz')
-pers_diff_pvalues_file = file.path(RESULTS_DIR,'files','Seryakov2021','onediff-EX','pvalues.tsv.gz')
-pers_psi_file = file.path(RAW_DIR,'articles','Seryakov2021','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
-selected_events_file = file.path(ROOT,'results','model_splicing_dependency','files','selected_models-EX.txt')
-event_info_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
-drug_response_file = file.path(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response_by_drug-EX.tsv.gz')
-drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
+# RAW_DIR = file.path(ROOT,'data','raw')
+# PREP_DIR = file.path(ROOT,'data','prep')
+# RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
+# metadata_file = file.path(PREP_DIR,'metadata','PANCAN.tsv.gz')
+# figs_dir = file.path(RESULTS_DIR,'figures','personalization')
+# pers_spldep_file = file.path(RESULTS_DIR,'files','Seryakov2021','splicing_dependency-EX','mean.tsv.gz')
+# pers_diff_deltas_file = file.path(RESULTS_DIR,'files','Seryakov2021','onediff-EX','deltas.tsv.gz')
+# pers_diff_pvalues_file = file.path(RESULTS_DIR,'files','Seryakov2021','onediff-EX','pvalues.tsv.gz')
+# pers_psi_file = file.path(RAW_DIR,'articles','Seryakov2021','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+# selected_events_file = file.path(ROOT,'results','model_splicing_dependency','files','selected_models-EX.txt')
+# event_info_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
+# drug_response_file = file.path(RESULTS_DIR,'files','Seryakov2021','estimated_drug_response_by_drug-EX.tsv.gz')
+# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 
 ##### FUNCTIONS #####
 plot_personalization_example = function(diff_result, harm, 
