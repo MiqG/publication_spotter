@@ -481,11 +481,11 @@ save_plt = function(plts, plt_name, extension=".pdf",
 save_plots = function(plts, figs_dir){
     # drug-event associations
     save_plt(plts, "eda_metadata-patients-pfi", ".pdf", figs_dir, width=3, height=4)
-    save_plt(plts, "eda_metadata-patients-pfi_vs_regimen", ".pdf", figs_dir, width=3, height=4)
+    save_plt(plts, "eda_metadata-patients-pfi_vs_regimen", ".pdf", figs_dir, width=3, height=5)
     save_plt(plts, "eda_metadata-patients-sensitivity", ".pdf", figs_dir, width=8, height=6)
-    save_plt(plts, "drug_rec-pred_ic50-boxplot", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "drug_rec-pred_ic50-boxplot", ".pdf", figs_dir, width=7, height=5.25)
     save_plt(plts, "drug_rec-pred_ic50-roc_curves", ".pdf", figs_dir, width=10, height=10)
-    save_plt(plts, "diff_sens-res_vs_sens-scatter", ".pdf", figs_dir, width=5, height=6)
+    save_plt(plts, "diff_sens-res_vs_sens-scatter", ".pdf", figs_dir, width=4.5, height=5)
     save_plt(plts, "diff_sens-event_contribution-bar", ".pdf", figs_dir, width=6.2, height=5.5)
 }
 
