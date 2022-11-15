@@ -82,6 +82,7 @@ FONT_FAMILY = "Arial"
 # gene_mut_freq_file = file.path(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz")
 # event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
+# ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
 # indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
@@ -1350,6 +1351,7 @@ main = function(){
     genexpr = read_tsv(genexpr_file)
     splicing = read_tsv(splicing_file)
     cancer_events = read_tsv(cancer_events_file)
+    ascanceratlas = read_tsv(ascanceratlas_file)
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
     ppi_closeness = read_tsv(ppi_closeness_file) %>% 
@@ -1359,6 +1361,17 @@ main = function(){
     randsel_genes = read_tsv(randsel_genes_file)
     
     gc()
+    
+    # prep cancer events
+    ascanceratlas = ascanceratlas %>%
+        dplyr::rename(EVENT = EVENT_perf) %>%
+        left_join(
+            event_info %>% distinct(EVENT,GENE),
+            by=c("EVENT")
+        )
+    
+    cancer_events = cancer_events %>%
+        bind_rows(ascanceratlas)
     
     # log normalize gene expression
     genexpr = genexpr %>% mutate_at(vars(-("ID")), function(x){ log2(x+1) })
