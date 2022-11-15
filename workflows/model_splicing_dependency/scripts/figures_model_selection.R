@@ -79,6 +79,7 @@ FONT_FAMILY = "Arial"
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 # cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
+# event_mut_file = file.path(PREP_DIR,'event_snv','CCLE-EX.tsv.gz')
 # gene_mut_freq_file = file.path(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz")
 # event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
@@ -919,7 +920,6 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         # Fold change difference 
         mutate(fc_mut_freq = log2(event_mut_freq_per_kb / notsel_mut_freq))
       
-    
     ## do the same with a null distribution of 1000 random exons
     null = models %>%
         left_join(event_mut_freq, by=c("EVENT","GENE")) %>%
@@ -1075,6 +1075,63 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
     return(plts)
 }
 
+
+plot_mutation_distances = function(event_mut, margin=500){
+    X = event_mut %>%
+        group_by(Variant_Classification) %>%
+        mutate(
+            on_event = sign(distance_to_3ss) != sign(distance_to_5ss),
+            var_class_lab = sprintf("%s (n=%s)", Variant_Classification, n())
+        ) %>%
+        filter(sum(is_selected)>5) %>%
+        ungroup() 
+    
+    plts = list()
+    
+    plts[["mutation_dists-closest_ss-distrs"]] = X %>%
+        filter(abs(distance_to_closest_ss)<margin) %>% 
+        ggdensity(x="distance_to_closest_ss", color="is_selected", fill=NA) + 
+        geom_text(
+            aes(x=-250, y=0.004, label=label, color=is_selected), 
+            . %>% count(Variant_Classification, is_selected) %>%
+            mutate(label = sprintf("%s (n=%s)", is_selected, n)),
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
+        color_palette(PAL_DUAL) + 
+        facet_wrap(~Variant_Classification, scales="free_y") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
+        labs(x="Distance to Closest Splice Site", y="Density", color="Selected Model")
+    
+    plts[["mutation_dists-5ss-distrs"]] = X %>% 
+        filter(abs(distance_to_5ss)<margin) %>% 
+        ggdensity(x="distance_to_5ss", color="is_selected", fill=NA) + 
+        geom_text(
+            aes(x=-250, y=0.004, label=label, color=is_selected), 
+            . %>% count(Variant_Classification, is_selected) %>%
+            mutate(label = sprintf("%s (n=%s)", is_selected, n)),
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
+        color_palette(PAL_DUAL) + 
+        facet_wrap(~Variant_Classification, scales="free_y") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
+        labs(x="Distance to Closest Splice Site", y="Density", color="Selected Model")
+    
+    plts[["mutation_dists-3ss-distrs"]] = X %>% 
+        filter(abs(distance_to_3ss)<margin) %>% 
+        ggdensity(x="distance_to_3ss", color="is_selected", fill=NA) + 
+        geom_text(
+            aes(x=-250, y=0.004, label=label, color=is_selected), 
+            . %>% count(Variant_Classification, is_selected) %>%
+            mutate(label = sprintf("%s (n=%s)", is_selected, n)),
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
+        color_palette(PAL_DUAL) + 
+        facet_wrap(~Variant_Classification, scales="free_y") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
+        labs(x="Distance to Closest Splice Site", y="Density", color="Selected Model")
+    
+    return(plts)
+}
 
 plot_event_oi = function(event_oi, gene_oi, ensembl_oi, 
                          rnai, spldep, splicing, genexpr, patt){
@@ -1296,6 +1353,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_val-mutation_gene_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
     
+    # event mutation distances
+    save_plt(plts, "mutation_dists-closest_ss-distrs", ".pdf", figs_dir, width=12, height=14)
+    save_plt(plts, "mutation_dists-5ss-distrs", ".pdf", figs_dir, width=12, height=14)
+    save_plt(plts, "mutation_dists-3ss-distrs", ".pdf", figs_dir, width=12, height=14)
+    
     # events oi
     genes_oi = c("KRAS","SMNDC1","NUMB","NUMB_lung")
     lapply(genes_oi, function(gene_oi){
@@ -1343,6 +1405,7 @@ main = function(){
     models = read_tsv(models_file)
     ccle_stats = read_tsv(ccle_stats_file)
     indices = read_tsv(indices_file) %>% filter(index_name %in% c("stemness"))
+    event_mut = read_tsv(event_mut_file)
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% dplyr::rename(GENE=Hugo_Symbol)
     event_mut_freq = read_tsv(event_mut_freq_file)
     ontologies = load_ontologies(msigdb_dir, protein_impact_file, cosmic_genes_file)
@@ -1434,6 +1497,10 @@ main = function(){
     
     ## GSEA of selected events correlating with transcriptomic indices
     indices_enrich = run_enrichments_indices(indices, selected_events, event_info)
+    
+    ## mutations affecting selected events
+    event_mut = event_mut %>%
+        mutate(is_selected = EVENT %in% selected_events)
     
     # compute harm score
     ## H.S. = (-1) * SplDep * DeltaPSI

@@ -432,14 +432,13 @@ rule annotate_mutations_to_events:
         os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz')
     params:
         event_type = '{event_type}',
-        margin = 100
+        #margin = 100
     shell:
         """
         nice python scripts/annotate_mutations_to_events.py \
                         --mutations_file={input.mutations} \
                         --annotation_file={input.exon_annotation} \
                         --event_type={params.event_type} \
-                        --margin={params.margin} \
                         --output_file={output}
         """
         

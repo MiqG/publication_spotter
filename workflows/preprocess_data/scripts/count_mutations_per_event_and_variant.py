@@ -10,7 +10,6 @@
 # is an exon more/less mutated than expected?
 
 
-from sso_targets import config, util
 import pandas as pd
 import numpy as np
 import argparse
