@@ -1,0 +1,320 @@
+"""
+Author: Miquel Anglada Girotto
+Contact: miquelangladagirotto [at] gmail [dot] com
+Last Update: 2021-01-12
+
+Workflow purpose
+--------------
+Workflow to analyze putative associations between exons and cancer at single-exon level.
+
+
+Outline
+-------
+- infer splicing dependency
+- differential PSI tumor vs normal by cancer type
+
+"""
+
+import os
+
+# variables
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+RAW_DIR = os.path.join(ROOT,'data','raw')
+PREP_DIR = os.path.join(ROOT,'data','prep')
+RESULTS_DIR = os.path.join(ROOT,'results','streamlined_therapy_dev')
+SRC_DIR = os.path.join(ROOT,'src')
+MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
+TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
+
+EVENT_TYPES = ['EX']
+CANCER_TYPES = [
+    'BRCA',
+    'COAD',
+    'GBM',
+    'HNSC',
+    'KICH',
+    'KIRC',
+    'KIRP',
+    'LGG',
+    'LIHC',
+    'LUAD',
+    'LUSC',
+    'PRAD',
+    'READ',
+    'THCA',
+    'UCEC',
+    'UCS'
+]
+
+
+CANCER_SUBTYPES = {
+    'brca_NotBasal': 'BRCA',
+    'brca_Basal': 'BRCA',
+    'brca_Her2': 'BRCA',
+    'crc_MSS': 'READ',
+    'crc_MSI': 'READ',
+    'crc_POLE': 'READ',
+    'gmb_IDH_wildtype': 'GBM',
+    'gbm_IDH_mutant': 'GBM',
+    'lgg_IDH_mutant': 'LGG',
+    'lgg_IDH_mutant_codeletion': 'LGG',
+    'lgg_IDH_wildtype': 'LGG',
+    'ucec_CN_low': 'UCEC',
+    'ucec_CN_high': 'UCEC',
+    'ucec_POLE': 'UCEC',
+    'ucec_MSI': 'UCEC'
+}
+
+
+DATASETS = ['psi','spldep']
+COMPARISONS = ['PrimaryTumor_vs_SolidTissueNormal']
+PADJ_METHOD = 'fdr_bh'
+SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
+
+
+##### RULES #####
+rule all:
+    input:
+        # compute splicing dependencies TCGA
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
+        
+        # summarize splicing dependencies TCGA
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+        # differential sample type TCGA
+        ## PSI
+        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
+        ## PSI (cancer subtype)
+        expand(os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), subtype=CANCER_SUBTYPES.keys()),
+        
+        # combine differential analyses
+        ## cancer type
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        ## cancer subtype
+        expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        
+
+rule compute_splicing_dependency_tcga:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_counts','{cancer}.tsv'),
+        coefs_dir = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'))
+    threads: 6
+    params:
+        script_dir = TS_DIR,
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --normalize_counts
+        """
+        
+        
+rule summarize_splicing_dependency_by_cancer_type:
+    input:
+        spldeps = [os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}').format(cancer=cancer, event_type='{event_type}') for cancer in CANCER_TYPES],
+        metadatas = [os.path.join(PREP_DIR,'metadata','{cancer}.tsv').format(cancer=cancer) for cancer in CANCER_TYPES]
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for spldep_dir, metadata_file in zip(input.spldeps, input.metadatas):
+            spldep_file = os.path.join(spldep_dir,"mean.tsv.gz")
+            cancer_type = os.path.basename(os.path.dirname(os.path.dirname(spldep_file)))
+            print(cancer_type)
+            
+            spldep = pd.read_table(spldep_file, index_col=0)
+            metadata = pd.read_table(metadata_file)
+            
+            # only Primary Tumors
+            samples_oi = metadata.loc[metadata["sample_type"]=="Primary Tumor","sampleID"].values
+            samples_oi = set(spldep.columns).intersection(samples_oi)
+            print(samples_oi)
+            
+            df = pd.DataFrame({
+                "EVENT": spldep.index,
+                "mean": spldep[samples_oi].mean(axis=1),
+                "median": spldep[samples_oi].median(axis=1),
+                "std": spldep[samples_oi].std(axis=1),
+                "q25": spldep[samples_oi].quantile(0.25, axis=1),
+                "q75": spldep[samples_oi].quantile(0.75, axis=1),
+                "nobs": len(samples_oi)
+            })
+            df["cancer_type"] = cancer_type
+            dfs.append(df)
+        dfs = pd.concat(dfs)
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+        
+rule summarize_splicing_dependency_by_cancer_subtype:
+    input:
+        spldeps = [os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}').format(cancer=c, event_type='{event_type}') for c in set(CANCER_SUBTYPES.values())],
+        metadatas = [os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv').format(cancer=c) for c in set(CANCER_SUBTYPES.values())]
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for spldep_dir, metadata_file in zip(input.spldeps, input.metadatas):
+            spldep_file = os.path.join(spldep_dir,"mean.tsv.gz")
+            cancer_type = os.path.basename(os.path.dirname(os.path.dirname(spldep_file)))
+            spldep = pd.read_table(spldep_file, index_col=0)
+            metadata = pd.read_table(metadata_file)
+            
+            cancer_subtypes = set(metadata["cancer_subtype"].dropna().unique()) - {"STN"}
+            for cancer_subtype in cancer_subtypes:
+                print(cancer_subtype)
+                # only Primary Tumors and cancer subtype
+                idx = (metadata["sample_type"]=="Primary Tumor") & \
+                      (metadata["cancer_subtype"]==cancer_subtype)
+                samples_oi = metadata.loc[idx,"sampleID"].values
+                samples_oi = set(spldep.columns).intersection(samples_oi)
+
+                df = pd.DataFrame({
+                    "EVENT": spldep.index,
+                    "mean": spldep[samples_oi].mean(axis=1),
+                    "median": spldep[samples_oi].median(axis=1),
+                    "std": spldep[samples_oi].std(axis=1),
+                    "q25": spldep[samples_oi].quantile(0.25, axis=1),
+                    "q75": spldep[samples_oi].quantile(0.75, axis=1),
+                    "nobs": len(samples_oi)
+                })
+                df["cancer_type"] = cancer_type
+                df["cancer_subtype"] = cancer_subtype
+                dfs.append(df)
+                
+                del df
+                
+        dfs = pd.concat(dfs)
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+        
+rule differential_psi_sample_type_by_cancer_type:
+    input:
+        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv')
+    output:
+        os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        padj_method = PADJ_METHOD
+    shell:
+        """
+        python {params.script_dir}/MannWhitneyU.py \
+                    --data_file={input.psi} \
+                    --metadata_file={input.metadata} \
+                    --sample_col='sampleID' \
+                    --comparison_col='sample_type' \
+                    --condition_a='Primary Tumor' \
+                    --condition_b='Solid Tissue Normal' \
+                    --output_file={output} \
+                    --padj_method={params.padj_method} 
+        """
+        
+        
+rule combine_differential_analyses_sample_type_by_cancer_type:
+    input:
+        psi_files = [os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz').format(cancer=cancer, event_type='{event_type}')
+                     for cancer in CANCER_TYPES],
+    params:
+        event_type = '{event_type}'
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        
+        event_type = params.event_type
+        
+        dfs = []
+        for psi_file in input.psi_files:
+            # combine
+            psi = pd.read_table(psi_file).set_index('EVENT').add_prefix('psi__')
+            psi = psi.loc[psi.index.str.contains(event_type)].copy() # filter event types
+            df = psi.reset_index()
+            
+            # add cancer type
+            cancer_type = os.path.basename(os.path.dirname(psi_file))
+            print(cancer_type)
+            df['cancer_type'] = cancer_type
+            
+            dfs.append(df)
+            
+            del psi, df
+            
+        dfs = pd.concat(dfs)  
+        dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        
+rule differential_psi_sample_type_by_cancer_subtype:
+    input:
+        psi = lambda wildcards: os.path.join(PREP_DIR,'event_psi','{cancer}.tsv').format(cancer=CANCER_SUBTYPES[wildcards.subtype]),
+        metadata = lambda wildcards: os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv').format(cancer=CANCER_SUBTYPES[wildcards.subtype])
+    output:
+        os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
+    params:
+        script_dir=os.path.join(SRC_DIR,'python'),
+        padj_method = PADJ_METHOD,
+        subtype = '{subtype}'
+    shell:
+        """
+        python {params.script_dir}/MannWhitneyU.py \
+                    --data_file={input.psi} \
+                    --metadata_file={input.metadata} \
+                    --sample_col='sampleID' \
+                    --comparison_col='sample_type' \
+                    --condition_a='Primary Tumor' \
+                    --condition_b='Solid Tissue Normal' \
+                    --output_file={output} \
+                    --subset_col='cancer_subtype' \
+                    --subset_values='{params.subtype},STN' \
+                    --padj_method={params.padj_method} 
+        """
+        
+        
+rule combine_differential_analyses_sample_type_by_cancer_subtype:
+    input:
+        psi_files = [os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz').format(subtype=subtype, event_type='{event_type}')
+                     for subtype in CANCER_SUBTYPES.keys()],
+    params:
+        event_type = '{event_type}'
+    output:
+        os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        
+        event_type = params.event_type
+        
+        dfs = []
+        for psi_file in input.psi_files:
+            # combine
+            psi = pd.read_table(psi_file).set_index('EVENT').add_prefix('psi__')
+            psi = psi.loc[psi.index.str.contains(event_type)].copy() # filter event types
+            df = psi.reset_index()
+            
+            # add cancer type
+            cancer_subtype = os.path.basename(os.path.dirname(psi_file))
+            cancer_type = CANCER_SUBTYPES[cancer_subtype]
+            print(cancer_type, cancer_subtype)
+            df['cancer_type'] = cancer_type
+            df['cancer_subtype'] = cancer_subtype
+            
+            dfs.append(df)
+            
+            del psi, df
+            
+        dfs = pd.concat(dfs)  
+        dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
