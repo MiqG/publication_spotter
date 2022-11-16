@@ -42,37 +42,16 @@ CANCER_TYPES = [
     "UCS"
 ]
 
-CANCER_TYPES = [
-    "UCS","UCEC", "LGG","GBM",
-    "LUAD","KICH","KIRP","KIRC",
-    "SKCM","TGCT","THCA","THYM","UVM",
-    "ACC","BLCA","CESC","CHOL","COAD",
-    "DLBC","HNSC","LIHC","MESO",
-    "LUSC","PAAD","PCPG","PRAD",
-    "READ","SARC","BRCA"
-]
-
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
 DEPMAP_RAW = {
     "demeter2": os.path.join(RAW_DIR,"DepMap","demeter2","D2_combined_gene_dep_scores.csv"),
     "achilles": os.path.join(RAW_DIR,"DepMap","achilles_ccle","Achilles_gene_effect_transposed.tsv.gz")
-    #"genexpr_tpm": os.path.join(RAW_DIR,"DepMap","achilles_ccle","CCLE_expression_transposed.tsv.gz")
 }
 
 tcga_metadata = pd.read_table(os.path.join(RAW_DIR,"TCGA","metadata","PANCAN.tsv.gz"))
 TCGA_N_SAMPLES = tcga_metadata["cancer_type"].value_counts().to_dict()
 
-# get treatment file paths
-# TREATMENT_FILES = {}
-# for c in CANCER_TYPES:
-#     clinical_dir = os.path.join(RAW_DIR,"GDC","TCGA-%s","harmonized","Clinical","Clinical_Supplement") % c
-#     for d in os.listdir(clinical_dir):
-#         f = os.listdir(os.path.join(clinical_dir,d))[0]
-#         if "drug" in f:
-#             treatment_file = os.path.join(clinical_dir,d,f)
-#             TREATMENT_FILES[c]=treatment_file
-            
 ##### RULES #####
 rule all:
     input:
@@ -85,27 +64,17 @@ rule all:
         os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         ## mutations
         os.path.join(PREP_DIR,"mutations","CCLE.tsv.gz"),
-        ## compute transcriptome indices
-        # os.path.join(PREP_DIR,"transcriptome_indices","CCLE.tsv.gz"),
-        ## count mutation frequency on genes
-        # os.path.join(PREP_DIR,"gene_mutation_freq","CCLE.tsv.gz"),
-        ## count mutation frequency on exons
-        # os.path.join(PREP_DIR,"references","EVENT_INFO-hg19_noseqs-wmargins.tsv"),
         expand(os.path.join(PREP_DIR,"event_snv","CCLE-{event_type}.tsv.gz"), event_type=["EX"]),
         expand(os.path.join(PREP_DIR,"event_mutation_freq","CCLE-{event_type}.tsv.gz"), event_type=["EX"]),
-        ## impute CCLE PSI matrix
-        # expand(os.path.join(PREP_DIR,"event_psi_imputed","CCLE-{event_type}.tsv.gz"), event_type=EVENT_TYPES),
 
         # preprocess DepMap data
         ## prep
         expand(os.path.join(PREP_DIR,"{dataset}","CCLE.tsv.gz"), dataset=DEPMAP_RAW.keys()),
-        ## impute RNAi matrix
-        # os.path.join(PREP_DIR,"demeter2_imputed","CCLE.tsv.gz"),
         # make Achilles comparable to Demeter2
         os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz"),
 
         # preprocess Thomas 2020
-        # os.path.join(PREP_DIR,"Thomas2020","crispr_screen.tsv.gz"),
+        os.path.join(PREP_DIR,"Thomas2020","crispr_screen.tsv.gz"),
 
         # preprocess ENCORE
         os.path.join(PREP_DIR,"metadata","ENCORE.tsv.gz"),
@@ -119,29 +88,13 @@ rule all:
         os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt"),
                 
         # preprocess TCGA
-        expand(os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        # merge metadata TCGA
-        # os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
-        ## impute TCGA PSI matrices
-        # expand(os.path.join(PREP_DIR,"event_psi_imputed","{cancer}.tsv.gz"), cancer=CANCER_TYPES),
-        ## harmonize names drug treatments
-        # expand(os.path.join(PREP_DIR,"drug_treatments","{cancer}.tsv.gz"), cancer=CANCER_TYPES),
-        # os.path.join(PREP_DIR,"drug_treatments","PANCAN.tsv.gz"),
+        ## merge metadata TCGA
+        os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
         ## clinically relevant subtypes
         expand(os.path.join(PREP_DIR,"metadata","{cancer}_subtypes.tsv"), cancer=CANCER_TYPES),
         ## merge metadata TCGA subtypes
         os.path.join(PREP_DIR,"metadata","PANCAN_subtypes.tsv.gz"),
-        ## compute transcriptome indices TCGA
-        #expand(os.path.join(PREP_DIR,"transcriptome_indices","{cancer}.tsv.gz"), cancer=CANCER_TYPES),
         
-        # preprocess Moiso 2021
-        # os.path.join(PREP_DIR,"Moiso2021","drug_response.tsv.gz"),
-
         # preprocess drug screens GDSC
         ## clean names
         os.path.join(PREP_DIR,"drug_screens","drug_targets.tsv.gz"),
@@ -152,7 +105,7 @@ rule all:
         os.path.join(PREP_DIR,"drug_screens","test","GDSC2.tsv.gz"),
         
         # preprocess STRINGDB
-        # os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
+        os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
 
         # preprocess Zhang2022
         os.path.join(PREP_DIR,"metadata","Zhang2022.tsv.gz"),
@@ -236,45 +189,6 @@ rule preprocess_mutations_ccle:
         """
     
     
-# rule preprocess_genexpr_ccle:
-#     input:
-#         counts = os.path.join(RAW_DIR,'CCLE','STAR','merged_counts.tab.gz'),
-#         metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz')
-#     output:
-#         counts = os.path.join(PREP_DIR,'genexpr_counts','CCLE.tsv.gz')
-#     params:
-#         dataset = 'genexpr_counts'
-#     shell:
-#         """
-#         python scripts/preprocess_ccle.py \
-#                     --dataset={params.dataset} \
-#                     --mat_file={input.counts} \
-#                     --metadata_file={input.metadata} \
-#                     --output_file={output.counts}
-#         """
-
-        
-# rule compute_genexpr_tpm_ccle:
-#     input:
-#         counts = os.path.join(PREP_DIR,'genexpr_counts','CCLE.tsv.gz'),
-#         gene_info = os.path.join(RAW_DIR,'GENCODE','gene_lengths_hg38.tsv.gz')
-#     output:
-#         tpm = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz')
-#     params:
-#         method="TPM",
-#         geneid_col = "gene",
-#         genelen_col="length"
-#     shell:
-#         """
-#         python scripts/normalize_rnaseq.py \
-#                     --method={params.method} \
-#                     --counts_file={input.counts} \
-#                     --gene_info_file={input.gene_info} \
-#                     --geneid_col={params.geneid_col} \
-#                     --genelen_col={params.genelen_col} \
-#                     --output_file={output.tpm}
-#         """
-
 rule preprocess_depmap:
     input:
         lambda wildcards: DEPMAP_RAW[wildcards.dataset]
@@ -288,112 +202,6 @@ rule preprocess_depmap:
                     --raw_achilles_file={input} \
                     --raw_metadata_file={params.metadata_file} \
                     --prep_achilles_file={output}
-        """
-
-        
-rule impute_psi_ccle:
-    input:
-        os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz')
-    output:
-        os.path.join(PREP_DIR,'event_psi_imputed','CCLE-{event_type}.tsv.gz')
-    params:
-        script_dir=os.path.join(SRC_DIR,'python'),
-        method = 'knn',
-        method_kws = '\'{"n_neighbors":5}\'',
-        features_as_rows = True
-    shell:
-        """
-        python {params.script_dir}/impute_nan.py \
-                    --input_file={input} \
-                    --output_file={output} \
-                    --method={params.method} \
-                    --method_kws={params.method_kws} \
-                    --features_as_rows={params.features_as_rows}
-        """
-    
-
-rule impute_rnai_ccle:
-    input:
-        os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
-    output:
-        os.path.join(PREP_DIR,'demeter2_imputed','CCLE.tsv.gz')
-    params:
-        script_dir=os.path.join(SRC_DIR,'python'),
-        method = 'knn',
-        method_kws = '\'{"n_neighbors":5}\'',
-        features_as_rows = True
-    shell:
-        """
-        python {params.script_dir}/impute_nan.py \
-                    --input_file={input} \
-                    --output_file={output} \
-                    --method={params.method} \
-                    --method_kws={params.method_kws} \
-                    --features_as_rows={params.features_as_rows}
-        """
-
-
-rule impute_psi_tcga:
-    input:
-        os.path.join(PREP_DIR,'event_psi','{cancer}.tsv')
-    output:
-        os.path.join(PREP_DIR,'event_psi_imputed','{cancer}.tsv.gz')
-    params:
-        script_dir=os.path.join(SRC_DIR,'python'),
-        method = 'knn',
-        method_kws = '\'{"n_neighbors":5}\'',
-        features_as_rows = True
-    shell:
-        """
-        python {params.script_dir}/impute_nan.py \
-                    --input_file={input} \
-                    --output_file={output} \
-                    --method={params.method} \
-                    --method_kws={params.method_kws} \
-                    --features_as_rows={params.features_as_rows}
-        """
-        
-        
-rule compute_transcriptome_indices_ccle:
-    input:
-        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
-    output:
-        os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
-    params:
-        translate_from = 'ENSEMBL',
-        translate_to = 'GENE'
-    shell:
-        """
-        python scripts/TranscriptomeIndices.py \
-                        --genexpr_file={input.genexpr} \
-                        --output_file={output} \
-                        --annotation_file={input.annotation} \
-                        --translate_from={params.translate_from} \
-                        --translate_to={params.translate_to}
-        """
-        
-        
-rule compute_transcriptome_indices_tcga:
-    input:
-        genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','{cancer}.tsv.gz'),
-        annotation_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
-        gene_lengths = os.path.join(RAW_DIR,'VastDB','assemblies','Hs2','EXPRESSION','Hs2_mRNA-50-SS.eff')
-    output:
-        os.path.join(PREP_DIR,'transcriptome_indices','{cancer}.tsv.gz')
-    params:
-        translate_from = 'ENSEMBL',
-        translate_to = 'GENE'
-    shell:
-        """
-        nice python scripts/TranscriptomeIndices.py \
-                        --genexpr_file={input.genexpr_file} \
-                        --annotation_file={input.annotation_file} \
-                        --translate_from={params.translate_from} \
-                        --translate_to={params.translate_to} \
-                        --output_file={output} \
-                        --normalize_counts \
-                        --gene_lengths_file={input.gene_lengths}
         """
         
 
@@ -417,21 +225,6 @@ rule mutation_frequency:
                     --effect_col={params.effect_col} \
                     --output_file={output}
         """
-        
-        
-# rule redefine_exons_vastdb:
-#     input:
-#         os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg19_noseqs.tsv')
-#     output:
-#         os.path.join(PREP_DIR,'references','EVENT_INFO-hg19_noseqs-wmargins.tsv')
-#     threads: 10
-#     shell:
-#         """
-#         python scripts/redefine_exons_vastdb.py \
-#                     --exon_info_file={input} \
-#                     --output_file={output} \
-#                     --n_jobs={threads}
-#         """
         
         
 rule annotate_mutations_to_events:
@@ -528,40 +321,6 @@ rule prepare_moiso2021:
             """
             
 
-# rule harmonize_drug_treatments:
-#     input:
-#         treatments = lambda wildcards: TREATMENT_FILES[wildcards.cancer],
-#         correction = os.path.join(RAW_DIR,'articles','Spainhour2017','DrugCorrection.csv')
-#     output:
-#         os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz')
-#     shell:
-#         """
-#         python scripts/preprocess_tcga_treatments.py \
-#                     --treatments_file={input.treatments} \
-#                     --drug_correction_file={input.correction} \
-#                     --output_file={output}
-#         """
-        
-        
-# rule combine_drug_treatments:
-#     input:
-#         treatments = [os.path.join(PREP_DIR,'drug_treatments','{cancer}.tsv.gz').format(cancer=cancer) for cancer in CANCER_TYPES]
-#     output:
-#         os.path.join(PREP_DIR,'drug_treatments','PANCAN.tsv.gz')
-#     run:
-#         import os
-#         import pandas as pd
-#         dfs = []
-#         for f in input.treatments:
-#             df = pd.read_table(f)
-#             cancer_type = os.path.basename(f).replace('.tsv.gz','')
-#             df['cancer_type'] = cancer_type
-#             dfs.append(df)
-#             del df
-#         dfs = pd.concat(dfs)
-#         dfs.to_csv(output[0], sep='\t', index=False, compression="gzip")
-        
-
 rule preprocess_gdsc:
     input:
         drug_screen = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
@@ -602,7 +361,7 @@ rule preprocess_gdsc:
 
 rule prep_cancer_subtypes:
     input:
-        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv'),
         subtypes = os.path.join(RAW_DIR,'articles','Mina2017','tcga_subtypes.xls')
     output:
         subtypes = os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv')
@@ -615,7 +374,7 @@ rule prep_cancer_subtypes:
         subtypes = subtypes[["sampleID","cancer_subtype"]]
         
         metadata = pd.read_table(input.metadata)
-        metadata = metadata[["sampleID","cancer_type","sample_type"]]
+        metadata = metadata[["sampleID","cancer","sample_type"]]
         
         df = pd.merge(metadata, subtypes, how="left", on="sampleID")
         
@@ -623,6 +382,8 @@ rule prep_cancer_subtypes:
         df.loc[df["sample_type"]=="Solid Tissue Normal","cancer_subtype"] = "STN"
         
         df.to_csv(output.subtypes, sep="\t", index=False)
+        
+        print("Done!")
         
         
 rule merge_tcga_metadata_subtypes:
@@ -941,72 +702,5 @@ rule preprocess_Zhang2022:
         ## TPMs
         genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)        
         
-        print("Done!")
-        
-        
-rule preprocess_TCGA:
-    input:
-        metadata = os.path.join(RAW_DIR,"TCGA","metadata","{cancer}.tsv.gz"),
-        psi = os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out",'PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
-        genexpr = lambda wildcards: os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out","TPM-hg38-{n_samples}.tab.gz").format(cancer=wildcards.cancer, n_samples=TCGA_N_SAMPLES[wildcards.cancer])
-    output:
-        metadata = os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"),
-        psi_EX = os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"),
-        psi_ALTA = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"),
-        psi_ALTD = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"),
-        psi_INT = os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"),
-        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz")
-    run:
-        import gc
-        import pandas as pd
-        import numpy as np
-        
-        # load
-        print("Loading data...")
-        metadata = pd.read_table(input.metadata)
-        psi = pd.read_table(input.psi, index_col=0)
-        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
-        
-        gc.collect()
-        
-        # preprocess metadata
-        # TODO
-        
-        # PSI
-        print("Processing PSI matrix...")
-        ## drop empty rows
-        is_na = psi.isnull()
-        non_missing = is_na.shape[1] - is_na.sum(1)
-        to_keep = non_missing >= 1
-        psi = psi.loc[to_keep]
-        
-        ## remove vast-tools' suffix
-        psi.columns = [c.replace("_1","") for c in psi.columns]
-        
-        ## split by event type
-        event_types = ["EX","ALTA","ALTD","INT"]
-        psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
-        
-        # TPM
-        print("Processing TPM matrix...")
-        ## remove vast-tools' suffix
-        genexpr.columns = [c.replace("_1","") for c in genexpr.columns]
-        
-        # save
-        print("Saving...")
-        
-        ## metadata
-        metadata.to_csv(output.metadata, **SAVE_PARAMS)
-        
-        ## PSIs
-        psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
-        psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
-        psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
-        psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
-        
-        ## TPMs
-        genexpr.reset_index().drop(columns="NAME").to_csv(output.genexpr, **SAVE_PARAMS)        
-        
-        print("Done!")
-        
+        print("Done!")        
         
