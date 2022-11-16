@@ -1228,6 +1228,7 @@ make_plots = function(models, rnai_stats, cancer_events,
         plot_model_properties(models, enrichment, indices, indices_enrich, 
                               spldep_stats, harm_stats, ppi_closeness),
         plot_model_validation(models, gene_mut_freq, event_mut_freq, randsel_genes, randsel_events),
+        plot_mutation_distances(event_mut),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata)
     )
     plts = do.call(c,plts)
@@ -1347,11 +1348,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_val-mutation_event_count", ".pdf", figs_dir, width=8, height=10)
     save_plt(plts, "model_val-mutation_gene_frequency", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_gene_frequency_silent_norm", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_val-mutation_gene_frequency_random_norm", ".pdf", figs_dir, width=8, height=8)
+    #save_plt(plts, "model_val-mutation_gene_frequency_random_norm", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_frequency", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_event_frequency-by_protein_impact", ".pdf", figs_dir, width=14, height=8)
-    save_plt(plts, "model_val-mutation_gene_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_val-mutation_event_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
+    #save_plt(plts, "model_val-mutation_gene_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
+    #save_plt(plts, "model_val-mutation_event_frequency_vs_random", ".pdf", figs_dir, width=8, height=8)
     
     # event mutation distances
     save_plt(plts, "mutation_dists-closest_ss-distrs", ".pdf", figs_dir, width=12, height=14)
@@ -1550,18 +1551,3 @@ if (sys.nframe() == 0L) {
     main()
     print("Done!")
 }
-
-# events_oi = c("HsaEX1012875","HsaEX6014275","HsaEX0057572","HsaEX6034414")
-# genes_oi = c('SF3B1','USP39','EIF3B','COPA')
-
-# splicing_long = splicing %>% filter(EVENT %in% events_oi) %>% pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi")
-# spldep_long = spldep %>% filter(index %in% events_oi) %>% pivot_longer(-index, names_to="DepMap_ID", values_to="splicing_dependency")
-# rnai_long = rnai %>% filter(index %in% genes_oi) %>% pivot_longer(-index, names_to="DepMap_ID", values_to="gene_dependency")
-# x = splicing_long %>% 
-#     left_join(spldep_long, by=c("DepMap_ID","EVENT"="index")) %>% 
-#     left_join(event_info %>% distinct(EVENT,GENE)) %>% 
-#     left_join(rnai_long, by=c("GENE"="index","DepMap_ID"))
-
-# x %>% drop_na(psi, gene_dependency) %>% ggscatter(x="psi", y="gene_dependency") + facet_wrap(~GENE, scales="free")
-# cells_oi = x %>% filter(gene_dependency > 1 & GENE=="SF3B1") %>% pull(DepMap_ID)
-# metadata %>% filter(DepMap_ID %in% cells_oi)
