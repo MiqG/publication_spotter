@@ -309,7 +309,7 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         scale_size(range=c(0.1,1.5)) +
         theme(aspect.ratio=1) + 
         theme_pubr(x.text.angle = 70) +
-        facet_wrap(~dataset, scales="free_x") +
+        facet_wrap(~dataset, scales="free_x", ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         ylim(0,0.4)
     
@@ -507,7 +507,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "encore_val-top10-bars", ".pdf", figs_dir, width=5, height=6.5)
     
     save_plt(plts, "encore_val-harm-hist", ".pdf", figs_dir, width=6, height=4)
-    save_plt(plts, "encore_val-ranges_vs_pearsons", ".pdf", figs_dir, width=9, height=7)
+    save_plt(plts, "encore_val-ranges_vs_pearsons", ".pdf", figs_dir, width=4.5, height=10.25)
     
     save_plt(plts, "encore_val-harm_rank_vs_dpsi", ".pdf", figs_dir, width=5, height=8)
     save_plt(plts, "encore_val-harm_rank_vs_spldep", ".pdf", figs_dir, width=5, height=8)
