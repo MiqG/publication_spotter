@@ -26,7 +26,8 @@ kras_help = data.frame(
     psi_untreated = c(23.34, 19.1, 3.6),
     psi_treated = 0,
     spldep = c(-0.477429309,-0.408081246,-0.099795567)
-) %>% filter(CCLE_Name == "A549_LUNG")
+)# %>% filter(CCLE_Name == "A549_LUNG")
+
 
 # Development
 # -----------
@@ -34,7 +35,7 @@ kras_help = data.frame(
 # RAW_DIR = file.path(ROOT,'data','raw')
 # PREP_DIR = file.path(ROOT,'data','prep')
 # SUPPORT_DIR = file.path(ROOT,'support')
-# RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_validation')
+# RESULTS_DIR = file.path(ROOT,'results','experimental_validation')
 
 # annotation_file = file.path(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 # event_info_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
@@ -61,11 +62,11 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         mutate(event_gene = fct_reorder(event_gene, -od, mean)) %>%
         ggplot(aes(x=event_gene, y=od)) +
         geom_boxplot(width=0.5, outlier.shape=NA) +
-        geom_jitter(aes(color=as.factor(replicate_biological)), size=1, width=0.1) +
+        geom_jitter(aes(color=as.factor(replicate_biological)), size=0.5, width=0.1) +
         color_palette(PAL_REPLICATES) +
         labs(x="Condition", y="OD570", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
-        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.format", 
+        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
                            size=FONT_SIZE, family=FONT_FAMILY) + 
         facet_wrap(~CCLE_Name, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
@@ -115,7 +116,7 @@ make_plots = function(validation_clonogenic, validation_harm_scores){
 
 
 save_plt = function(plts, plt_name, extension='.pdf', 
-                    directory='', dpi=350, format=FALSE,
+                    directory='', dpi=350, format=TRUE,
                     width = par("din")[1], height = par("din")[2]){
     plt = plts[[plt_name]]
     if (format){
@@ -129,7 +130,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
 
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "validation-od", '.pdf', figs_dir, width=18, height=18)
+    save_plt(plts, "validation-od", '.pdf', figs_dir, width=5, height=10)
     save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=15)
 }
 
@@ -218,6 +219,10 @@ main = function(){
     
     validation_harm_scores = validation_harm_scores %>%
         bind_rows(missing)
+    
+    # drop KRAS because we do not know if the SSO worked
+    validation_clonogenic = validation_clonogenic %>% filter(event_gene != "HsaEX0034998_KRAS")
+    validation_harm_scores = validation_harm_scores %>% filter(event_gene != "HsaEX0034998_KRAS")
     
     # plot
     plts = make_plots(validation_clonogenic, validation_harm_scores)
