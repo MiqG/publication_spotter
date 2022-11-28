@@ -1,0 +1,120 @@
+"""
+Workflow purpose
+----------------
+Combine results from different workflows for publication.
+
+"""
+
+import os
+import pandas as pd
+
+##### VARIABLES #####
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+DATA_DIR = os.path.join(ROOT,'data')
+RAW_DIR = os.path.join(DATA_DIR,'raw')
+PREP_DIR = os.path.join(DATA_DIR,'prep')
+RESULTS_DIR = os.path.join(ROOT,'results')
+
+MODEL_SEL_DIR = os.path.join(RESULTS_DIR,"figures","model_selection","figdata")
+
+##### RULES #####
+rule all:
+    input:
+        os.path.join(RESULTS_DIR,'prepare_publication','files','supplementary_tables')
+
+rule supplementary_tables:
+    input:
+        # model cancer-driver exons
+        ## CCLE RNAi - demeter2
+        suptab01_ccle_demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        ## CCLE tpm
+        suptab02_ccle_tpm = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        ## CCLE psi
+        suptab03_ccle_psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        ## CCLE metadata
+        suptab04_ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        ## model summaries
+        suptab05_model_summaries = os.path.join(MODEL_SEL_DIR,"model_selection","model_summaries.tsv.gz"),
+        ## rnai stats
+        suptab06_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
+        ## known cancer-driver events
+        suptab07_cancer_events = os.path.join(MODEL_SEL_DIR,"model_selection","cancer_events.tsv.gz"),
+        ## lr-tests thresholds
+        suptab08_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
+        ## pearson thresholds
+        suptab09_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
+        ## gsoa
+        suptab10_gsoa = os.path.join(MODEL_SEL_DIR,"model_properties","gsoa_selected.tsv.gz"),
+        ## gene-level mutation frequency
+        suptab11_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
+        ## splicing dependency CCLE
+        suptab12_spldep_ccle = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        ## splicing dependency summary stats
+        suptab14_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
+        
+        # model validation
+        ## Thomas - observed changes in cell proliferation
+        ## Thomas - TPM
+        ## Thomas - PSI
+        ## Thomas - Spl. Dep.
+        ## Thomas - Harm Score
+        ## Gonato - observed changes in cell proliferation
+        ## Gonato - TPM
+        ## Gonato - PSI
+        ## Gonato - Spl. Dep.
+        ## Gonato - Harm Score
+        ## ENCORE - Demeter2 of RBPs
+        ## ENCORE - TPM
+        ## ENCORE - PSI
+        ## ENCORE - Spl. Dep.
+        ## ENCORE - Harm Score
+        ## ENCORE - correlation tables
+        
+        # streamlined drug development
+        ## TCGA - PSI
+        ## TCGA - mRNA level counts
+        ## TCGA - Spl. Dep.
+        ## TCGA - Harm Score
+        ## TCGA - differential splicing (type and subtype)
+        ## SSO - cancer cells PSI
+        ## SSO - cancer cells TPM
+        ## SSO - cancer cells Spl. Dep.
+        ## SSO - cancer cells Harm Score
+        ## SSO - sequences
+        ## SSO - cell proliferation experiments
+        
+        # drug-exon mechanistic interactions
+        ## GDSC - drug sensitivities (training + test)
+        ## GDSC - drug target info
+        ## drug-exon - model summaries
+        ## drug-exon - pathway tests
+        ## drug-exon - shortest path lengths
+        ## nutlin - stability analysis (structures? + results)
+        ## nutlin - PSI MDM4 vs TPM TP53 in CCLE
+        
+        # treatment recommendation
+        ## GDSC - correlations training and test sets
+        ## Pietilla - PSI
+        ## Pietilla - TPM
+        ## Pietilla - Spl. Dep.
+        ## Pietilla - Pred. IC50
+        ## Pietilla - Metadata
+        ## Pietilla - ROC analysis
+        
+    output:
+        directory(os.path.join(RESULTS_DIR,'prepare_publication','files','supplementary_tables'))
+    run:
+        import os
+        import subprocess
+        
+        outdir = output[0]
+        os.makedirs(outdir, exist_ok=True)
+        
+        for key, f in input.items():
+            filename = os.path.basename(f)
+            outfile = os.path.join(outdir,key+"-"+filename)
+            cmd = ["cp", f, outfile]
+            print(cmd)
+            subprocess.call(cmd)
+            
+        print("Done!")

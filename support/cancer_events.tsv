@@ -1,4 +1,4 @@
-EVENT	ENSEMBL	GENE	length	source_authors	source_year	source_doi	description	protein_imact	comments
+EVENT	ENSEMBL	GENE	length	source_authors	source_year	source_doi	description	protein_impact	comments
 HsaEX0034998	ENSG00000133703	KRAS	124	Chen	2021	https://doi.org/10.1038/s41467-021-24498-7	exon 4	ORF disruption upon sequence inclusion (Alt. Stop)	
 HsaEX0023042	ENSG00000157554	ERG	218	Ling	2020	https://doi.org/10.1038/s41416-020-0951-2	exon 4	ORF disruption upon sequence exclusion	skipping exon 4 reduces cell proliferation, migration and apoptosis in VCaP, MG63, xenografts, patient-derived prostate tissue ex vivo
 HsaEX0023045	ENSG00000157554	ERG	72	Hagen	2014	https://doi.org/10.1309/AJCPH88QHXARISUP	exon 7b	Alternative protein isoforms (Ref)	adds, in-frame, 24 amino-acids to the transcriptional transactivation domain

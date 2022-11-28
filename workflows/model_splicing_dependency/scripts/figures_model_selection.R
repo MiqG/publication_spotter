@@ -26,6 +26,7 @@
 # - mutation frequencies at the exon level
 # - selected and not selected exons from the TP set
 
+require(optparse)
 require(tidyverse)
 require(writexl)
 require(ggpubr)
@@ -72,26 +73,24 @@ FONT_FAMILY = "Arial"
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # models_file = file.path(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz")
 # ccle_stats_file = file.path(PREP_DIR,"stats","CCLE.tsv.gz")
-# rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
-# genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
-# splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
-# spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
-# msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
-# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
-# cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
+# indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
 # event_mut_file = file.path(PREP_DIR,'event_snv','CCLE-EX.tsv.gz')
 # gene_mut_freq_file = file.path(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz")
 # event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
+# msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
+# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
+# cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
+# spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
+# rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
+# genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
+# splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 # ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
-# indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
-# metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
-
+# metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # ppi_closeness_file = file.path(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz')
 # randsel_events_file = file.path(RESULTS_DIR,'files','random_model_selection-EX-1000its','events-merged.tsv.gz')
 # randsel_genes_file = file.path(RESULTS_DIR,'files','random_model_selection-EX-1000its','genes-merged.tsv.gz')
-
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
 
@@ -101,6 +100,7 @@ load_ontologies = function(msigdb_dir, protein_impact_file, cosmic_genes_file){
         "hallmarks" = read.gmt(file.path(msigdb_dir,"h.all.v7.4.symbols.gmt")),
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,"c6.all.v7.4.symbols.gmt")),
         "GO_BP" = read.gmt(file.path(msigdb_dir,"c5.go.bp.v7.4.symbols.gmt")),
+        "GO_CC" = read.gmt(file.path(msigdb_dir,"c5.go.cc.v7.4.symbols.gmt")),
         "protein_impact" = read_tsv(protein_impact_file) %>%
             dplyr::rename(EVENT=EventID, term=ONTO) %>%
             dplyr::select(term,EVENT) %>%
@@ -135,6 +135,7 @@ run_enrichment = function(genes, events, universe, ontologies){
     enrichments[["hallmarks"]] = enricher(genes, TERM2GENE=ontologies[["hallmarks"]], universe=universe[["genes"]])
     enrichments[["oncogenic_signatures"]] = enricher(genes, TERM2GENE=ontologies[["oncogenic_signatures"]], universe=universe[["genes"]])
     enrichments[["GO_BP"]] = enricher(genes, TERM2GENE=ontologies[["GO_BP"]], universe=universe[["genes"]])
+    enrichments[["GO_CC"]] = enricher(genes, TERM2GENE=ontologies[["GO_CC"]], universe=universe[["genes"]])
     enrichments[["protein_impact"]] = enricher(events, TERM2GENE=ontologies[["protein_impact"]] %>% dplyr::select(term_clean, EVENT), universe=universe[["events"]], maxGSSize=1e6)
     enrichments[["cosmic"]] = enricher(genes, TERM2GENE=ontologies[["cosmic"]], universe=universe[["genes"]], maxGSSize=1000)
     
@@ -1249,7 +1250,7 @@ make_figdata = function(models, rnai_stats, cancer_events,
             res[["ontology"]] = e
             return(res)
         })
-    )
+    ) %>% filter(ontology=="GO_BP")
     
     figdata = list(
 #         "datasets_CCLE" = list(
@@ -1266,7 +1267,7 @@ make_figdata = function(models, rnai_stats, cancer_events,
             "evaluation_correlation" = eval_corr
         ),
         "model_properties" = list(
-            "gsea_selected" = df_enrichs,
+            "gsoa_selected" = df_enrichs,
             "correlations_transcriptomic_indices" = indices,
             "gsea_corrs_transcriptomic_indices" = indices_enrich,
             "splicing_dependecy_stats" = spldep_stats
@@ -1385,20 +1386,60 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--models_file", type="character"),
+        make_option("--ccle_stats_file", type="character"),
+        make_option("--indices_file", type="character"),
+        make_option("--event_mut_file", type="character"),
+        make_option("--gene_mut_freq_file", type="character"),
+        make_option("--event_mut_freq_file", type="character"),
+        make_option("--msigdb_dir", type="character"),
+        make_option("--spldep_file", type="character"),
+        make_option("--rnai_file", type="character"),
+        make_option("--genexpr_file", type="character"),
+        make_option("--splicing_file", type="character"),
+        make_option("--cancer_events_file", type="character"),
+        make_option("--ascanceratlas_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--metadata_file", type="character"),
+        make_option("--ppi_closeness_file", type="character"),
+        make_option("--randsel_events_file", type="character"),
+        make_option("--randsel_genes_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
+
 
 main = function(){
-    args = getParsedArgs()
-    models_file = args$models_file
-    ccle_stats_file = args$ccle_stats_file
-    msigdb_dir = args$msigdb_dir
-    protein_impact_file = args$protein_impact_file
-    gene_mut_freq_file = args$gene_mut_freq_file
-    event_mut_freq_file = args$event_mut_freq_file
-    spldep_file = args$spldep_file
-    rnai_file = args$rnai_file
-    possible_interactions_file = args$possible_interactions_file
-    cancer_events_file = args$cancer_events_file
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    models_file = args[["models_file"]]
+    ccle_stats_file = args[["ccle_stats_file"]]
+    indices_file = args[["indices_file"]]
+    event_mut_file = args[["event_mut_file"]]
+    gene_mut_freq_file = args[["gene_mut_freq_file"]]
+    event_mut_freq_file = args[["event_mut_freq_file"]]
+    msigdb_dir = args[["msigdb_dir"]]
+    protein_impact_file = args[["protein_impact_file"]]
+    cosmic_genes_file = args[["cosmic_genes_file"]]
+    spldep_file = args[["spldep_file"]]
+    rnai_file = args[["rnai_file"]]
+    genexpr_file = args[["genexpr_file"]]
+    splicing_file = args[["splicing_file"]]
+    cancer_events_file = args[["cancer_events_file"]]
+    ascanceratlas_file = args[["ascanceratlas_file"]]
+    event_info_file = args[["event_info_file"]]
+    metadata_file = args[["metadata_file"]]
+    ppi_closeness_file = args[["ppi_closeness_file"]]
+    randsel_events_file = args[["randsel_events_file"]]
+    randsel_genes_file = args[["randsel_genes_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -1432,10 +1473,16 @@ main = function(){
         left_join(
             event_info %>% distinct(EVENT,GENE),
             by=c("EVENT")
-        )
+        ) %>%
+        drop_na(EVENT) %>%
+        mutate(source="ASCancerAtlas")
     
+    cols_oi = c('EVENT','ENSEMBL','GENE','length','source_authors','source_year','source_doi','description','event_id','source')
     cancer_events = cancer_events %>%
-        bind_rows(ascanceratlas)
+        mutate(source="HandCurated") %>%
+        bind_rows(ascanceratlas) %>%
+        dplyr::select(cols_oi) %>%
+        distinct()
     
     # log normalize gene expression
     genexpr = genexpr %>% mutate_at(vars(-("ID")), function(x){ log2(x+1) })

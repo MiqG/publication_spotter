@@ -50,7 +50,7 @@ rule all:
         # expand(os.path.join(RESULTS_DIR,'files','splicing_dependency_summaries-{event_type}','{field}.tsv.gz'), field=["primary_disease"], event_type=EVENT_TYPES),
         
         # EDA models of splicing dependencies
-        # os.path.join(RESULTS_DIR,'figures','model_selection'),
+        os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # write selected models
         ## as lists
@@ -365,16 +365,27 @@ rule embed_matrices:
         
 rule figures_model_selection:
     input:
-        models = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX','model_summaries.tsv.gz'),
-        rnai = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
-        spldep = os.path.join(RESULTS_DIR,'files','splicing_dependency-EX','mean.tsv.gz'),
-        msigdb = os.path.join(RAW_DIR,'MSigDB','msigdb_v7.4','msigdb_v7.4_files_to_download_locally','msigdb_v7.4_GMTs'),
-        protein_impact = os.path.join(RAW_DIR,'VastDB','PROT_IMPACT-hg38-v3.tab.gz'),
-        gene_mut_freq = os.path.join(PREP_DIR,'gene_mutation_freq','CCLE.tsv.gz'),
-        event_mut_freq = os.path.join(PREP_DIR,'event_mutation_freq','CCLE-EX.tsv.gz'),
-        possible_interactions = os.path.join(SUPPORT_DIR,'possible_pairwise_interaction_categories.tsv'),
-        cancer_events = os.path.join(SUPPORT_DIR,'cancer_events.tsv'),
-        ccle_stats = os.path.join(PREP_DIR,'stats','CCLE.tsv.gz')
+        models_file = os.path.join(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz"),
+        ccle_stats_file = os.path.join(PREP_DIR,"stats","CCLE.tsv.gz"),
+        indices_file = os.path.join(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz"),
+        event_mut_file = os.path.join(PREP_DIR,'event_snv','CCLE-EX.tsv.gz'),
+        gene_mut_freq_file = os.path.join(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz"),
+        event_mut_freq_file = os.path.join(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz"),
+        msigdb_dir = os.path.join(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs"),
+        protein_impact_file = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
+        cosmic_genes_file = os.path.join(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv"),
+        spldep_file = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        rnai_file = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        genexpr_file = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        splicing_file = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        cancer_events_file = os.path.join(ROOT,"support","cancer_events.tsv"),
+        ascanceratlas_file = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz"),
+        event_info_file = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
+        metadata_file = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        ppi_closeness_file = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz'),
+        randsel_events_file = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','events-merged.tsv.gz'),
+        randsel_genes_file = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','genes-merged.tsv.gz')
+        figs_dir = os.path.join(RESULTS_DIR,"figures","model_selection")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_selection'))
     shell:
@@ -382,14 +393,24 @@ rule figures_model_selection:
         Rscript scripts/figures_model_selection.R \
                     --models_file={input.models} \
                     --ccle_stats_file={input.ccle_stats} \
-                    --msigdb_dir={input.msigdb} \
-                    --protein_impact_file={input.protein_impact} \
+                    --indices_file={input.indices} \
+                    --event_mut_file={input.event_mut} \
                     --gene_mut_freq_file={input.gene_mut_freq} \
                     --event_mut_freq_file={input.event_mut_freq} \
-                    --cancer_events_file={input.cancer_events} \
-                    --rnai_file={input.rnai} \
+                    --msigdb_dir={input.msigdb} \
+                    --protein_impact_file={input.protein_impact} \
+                    --cosmic_genes_file={input.cosmic_genes} \
                     --spldep_file={input.spldep} \
-                    --possible_interactions_file={input.possible_interactions} \
+                    --rnai_file={input.rnai} \
+                    --genexpr_file={input.genexpr} \
+                    --splicing_file={input.splicing} \
+                    --cancer_events_file={input.cancer_events} \
+                    --ascanceratlas_file={input.ascanceratlas} \
+                    --event_info_file={input.event_info} \
+                    --metadata_file={input.metadata} \
+                    --ppi_closeness_file={input.ppi_closeness} \
+                    --randsel_events_file={input.randsel_events} \
+                    --randsel_genes_file={input.randsel_genes} \
                     --figs_dir={output}
         """
     
