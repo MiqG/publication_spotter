@@ -10,6 +10,7 @@
 # 1. Real dependencies of our selected exons in different conditions
 # 2. How do our predicted splicing dependencies compare to the real ones?
 
+require(optparse)
 require(tidyverse)
 require(ggrepel)
 require(ggpubr)
@@ -42,7 +43,9 @@ FONT_FAMILY = "Arial"
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
+# event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # psi_file = file.path(RAW_DIR,'articles','Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+# tpm_file = file.path(RAW_DIR,'articles','Thomas2020','vast_out','TPM-hg38-2.tab.gz')
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # spldep_file = file.path(RESULTS_DIR,'files','Thomas2020','splicing_dependency-EX','mean.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020')
@@ -135,8 +138,19 @@ make_plots = function(crispr, selected_events, harm, ccle_harm){
 }
 
 
-make_figdata = function(crispr, selected_events, spldep){
+make_figdata = function(crispr, selected_events, harm, ccle_harm){
+    # crispr screen
+    crispr_screen = crispr %>% 
+        filter(EVENT %in% selected_events) %>% 
+        mutate(log10_pvalue=-log10(pvalue),
+               event_gene = paste0(EVENT,"_",geneName))
+    
     figdata = list(
+        "model_validation" = list(
+            "crispr_screen" = crispr_screen,
+            "spotter_results" = harm,
+            "spotter_results_ccle" = ccle_harm
+        )
     )
     return(figdata)
 }
@@ -179,9 +193,38 @@ save_figdata = function(figdata, dir){
 }
 
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--crispr_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--psi_file", type="character"),
+        make_option("--tpm_file", type="character"),
+        make_option("--selected_events_file", type="character"),
+        make_option("--spldep_file", type="character"),
+        make_option("--ccle_splicing_file", type="character"),
+        make_option("--ccle_spldep_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
+
+
 main = function(){
-    args = getParsedArgs()
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    crispr_file = args[["crispr_file"]]
+    event_info_file = args[["event_info_file"]]
+    psi_file = args[["psi_file"]]
+    tpm_file = args[["tpm_file"]]
+    selected_events_file = args[["selected_events_file"]]
+    spldep_file = args[["spldep_file"]]
+    event_info_file = args[["ccle_splicing_file"]]
+    event_info_file = args[["ccle_spldep_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -190,6 +233,8 @@ main = function(){
     selected_events = readLines(selected_events_file)
     spldep = read_tsv(spldep_file)
     psi = read_tsv(psi_file)
+    tpm = read_tsv(tpm_file)
+    event_info = read_tsv(event_info_file) %>% distinct(GENE,EVENT)
     
     ccle_spldep = read_tsv(ccle_spldep_file)
     ccle_splicing = read_tsv(ccle_splicing_file)
@@ -213,6 +258,11 @@ main = function(){
         pivot_longer(-index, names_to="sampleID", values_to="spldep") %>% 
         left_join(psi %>% 
                       pivot_longer(-EVENT, names_to="sampleID", values_to="psi_ctl"), 
+                  by=c("index"="EVENT","sampleID")) %>%  
+        left_join(tpm %>% 
+                      dplyr::select(-ID) %>%
+                      pivot_longer(-NAME, names_to="sampleID", values_to="tpm_ctl") %>%
+                      left_join(event_info, by=c("NAME"="GENE")), 
                   by=c("index"="EVENT","sampleID")) %>%  
         # the amount of change upon cutting out the EVENT
         mutate(harm_score=spldep*(-psi_ctl),
@@ -239,11 +289,11 @@ main = function(){
     plts = make_plots(crispr, selected_events, harm, ccle_harm)
 
     # make figdata
-    # figdata = make_figdata(crispr, selected_events, spldep)
+    figdata = make_figdata(crispr, selected_events, harm, ccle_harm)
     
     # save
     save_plots(plts, figs_dir)
-    # save_figdata(figdata, figs_dir)
+    save_figdata(figdata, figs_dir)
 }
 
 

@@ -15,7 +15,9 @@ RAW_DIR = os.path.join(DATA_DIR,'raw')
 PREP_DIR = os.path.join(DATA_DIR,'prep')
 RESULTS_DIR = os.path.join(ROOT,'results')
 
-MODEL_SEL_DIR = os.path.join(RESULTS_DIR,"figures","model_selection","figdata")
+MODEL_SEL_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","model_selection","figdata")
+MODEL_VAL_THOMAS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Thomas2020","figdata")
+MODEL_VAL_GONATO_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Gonatopoulos-Pournatzis2020","figdata")
 
 ##### RULES #####
 rule all:
@@ -54,15 +56,13 @@ rule supplementary_tables:
         
         # model validation
         ## Thomas - observed changes in cell proliferation
-        ## Thomas - TPM
-        ## Thomas - PSI
-        ## Thomas - Spl. Dep.
-        ## Thomas - Harm Score
-        ## Gonato - observed changes in cell proliferation
-        ## Gonato - TPM
-        ## Gonato - PSI
-        ## Gonato - Spl. Dep.
-        ## Gonato - Harm Score
+        suptab15_thomas_crispr_screen = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","crispr_screen.tsv.gz"),
+        ## Thomas - spotter results
+        suptab16_thomas_spotter_results = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","spotter_results.tsv.gz"),
+        ## Gonatopoulos - observed changes in cell proliferation
+        suptab15_thomas_crispr_screen = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","crispr_screen.tsv.gz"),
+        ## Gonatopoulos - spotter results
+        suptab16_thomas_spotter_results = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","spotter_results.tsv.gz"),
         ## ENCORE - Demeter2 of RBPs
         ## ENCORE - TPM
         ## ENCORE - PSI

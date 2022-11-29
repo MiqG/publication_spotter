@@ -11,6 +11,7 @@
 # - can we predict the proliferation effects of KDs from the changes in splicing?
 # - if we define exon sets from KDs, is any KD enriched in our selected events?
 
+require(optparse)
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
@@ -539,10 +540,43 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--rnai_file", type="character"),
+        make_option("--diff_tpm_file", type="character"),
+        make_option("--delta_psi_file", type="character"),
+        make_option("--spldep_file", type="character"),
+        make_option("--harm_score_file", type="character"),
+        make_option("--selected_events_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--metadata_file", type="character"),
+        make_option("--ontology_file", type="character"),
+        make_option("--crispr_file", type="character"),
+        make_option("--psi_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
 
 main = function(){
-    args = getParsedArgs()
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    rnai_file = args[["rnai_file"]]
+    diff_tpm_file = args[["diff_tpm_file"]]
+    delta_psi_file = args[["delta_psi_file"]]
+    spldep_file = args[["spldep_file"]]
+    harm_score_file = args[["harm_score_file"]]
+    selected_events_file = args[["selected_events_file"]]
+    event_info_file = args[["event_info_file"]]
+    gene_annot_file = args[["gene_annot_file"]]
+    metadata_file = args[["metadata_file"]]
+    ontology_file = args[["ontology_file"]]
+    crispr_file = args[["crispr_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     

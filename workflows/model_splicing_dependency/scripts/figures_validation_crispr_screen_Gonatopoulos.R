@@ -10,6 +10,7 @@
 # 1. Real dependencies of our selected exons in different conditions
 # 2. How do our predicted splicing dependencies compare to the real ones?
 
+require(optparse)
 require(tidyverse)
 require(readxl)
 require(ggrepel)
@@ -42,7 +43,9 @@ FONT_FAMILY = "Arial"
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # crispr_file = file.path(RAW_DIR,"articles","Gonatopoulos-Pournatzis2020","exon_targeting_library_scores.xlsx")
+# event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # psi_file = file.path(RAW_DIR,'articles','Hart2015','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+# tpm_file = file.path(RAW_DIR,'articles','Hart2015','vast_out','TPM-hg38-12.tab.gz')
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # spldep_file = file.path(RESULTS_DIR,'files','Hart2015','splicing_dependency-EX','mean.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020')
@@ -104,8 +107,16 @@ make_plots = function(crispr, avail_events, spldep){
 }
 
 
-make_figdata = function(crispr, avail_events, spldep){
+make_figdata = function(crispr, avail_events, harm){
+    crispr_screen = crispr %>% 
+        filter(EVENT %in% avail_events) %>%
+        drop_na(fitness_score)
+    
     figdata = list(
+        "model_validation" = list(
+            "crispr_screen" = crispr_screen,
+            "spotter_results" = harm
+        )
     )
     return(figdata)
 }
@@ -146,10 +157,33 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--crispr_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--psi_file", type="character"),
+        make_option("--tpm_file", type="character"),
+        make_option("--selected_events_file", type="character"),
+        make_option("--spldep_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
 
 main = function(){
-    args = getParsedArgs()
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    crispr_file = args[["crispr_file"]]
+    event_info_file = args[["event_info_file"]]
+    psi_file = args[["psi_file"]]
+    tpm_file = args[["tpm_file"]]
+    selected_events_file = args[["selected_events_file"]]
+    spldep_file = args[["spldep_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -158,6 +192,8 @@ main = function(){
     selected_events = readLines(selected_events_file)
     spldep = read_tsv(spldep_file)
     psi = read_tsv(psi_file)
+    tpm = read_tsv(tpm_file)
+    event_info = read_tsv(event_info_file) %>% distinct(GENE,EVENT)
     
     # preprocess
     crispr = crispr %>%
@@ -178,6 +214,11 @@ main = function(){
         left_join(psi %>% 
                       pivot_longer(-EVENT, names_to="sampleID", values_to="psi_ctl"), 
                   by=c("index"="EVENT","sampleID")) %>%  
+        left_join(tpm %>% 
+                      dplyr::select(-ID) %>%
+                      pivot_longer(-NAME, names_to="sampleID", values_to="tpm_ctl") %>%
+                      left_join(event_info, by=c("NAME"="GENE")), 
+                  by=c("index"="EVENT","sampleID")) %>%  
         # the amount of change upon cutting out the EVENT
         mutate(harm_score=spldep*(-psi_ctl),
                sign_harm=(-1)*harm_score) %>%
@@ -193,11 +234,11 @@ main = function(){
     plts = make_plots(crispr, avail_events, harm)
 
     # make figdata
-    # figdata = make_figdata(crispr, selected_events, spldep)
+    figdata = make_figdata(crispr, avail_events, harm)
     
     # save
     save_plots(plts, figs_dir)
-    # save_figdata(figdata, figs_dir)
+    save_figdata(figdata, figs_dir)
 }
 
 
