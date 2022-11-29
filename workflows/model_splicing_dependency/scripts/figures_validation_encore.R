@@ -65,10 +65,10 @@ FONT_FAMILY = "Arial"
 # crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
 
 ##### FUNCTIONS #####
-plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_psi, 
-                                  harm_score, selected_events, ontology,
-                                  events_crispr, spldep){
-    plts = list()
+prepare_data = function(
+    metadata, event_info, rnai, diff_tpm, delta_psi, 
+    harm_score, selected_events, ontology, events_crispr, spldep
+){
     
     cells_oi = metadata %>% pull(DepMap_ID) %>% unique()
     event_annot = event_info %>% distinct(GENE, EVENT)   
@@ -137,39 +137,12 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         mutate(harm_rank = row_number()) %>%
         ungroup()
     
-    plts[["encore_val-diff_genexpr_kd-violin"]] = X %>%
-        distinct(cell_line, fcTPM) %>%
-        ggviolin(x="cell_line", y="fcTPM", trim=TRUE,
-                 fill="cell_line", color=NA, palette=PAL_DUAL) + 
-        geom_boxplot(width=0.1, outlier.size=0.1) + 
-        guides(fill="none") + 
-        labs(x="Cell Line", y="log2FC Gene Expr. KDs")
+    return(X)
+}
+
+compute_correls_top_max = function(df){
+    X = df
     
-    # how many selected events change in each KD?
-    plts[["encore_val-n_selected_events-violin"]] = X %>% 
-        count(cell_line, KD) %>% 
-        ggviolin(x="cell_line", y="n", trim=TRUE,
-                 fill="cell_line", color=NA, palette=PAL_DUAL) + 
-        geom_boxplot(width=0.1, outlier.size=0.1) + 
-        guides(fill="none") + 
-        labs(x="Cell Line", y="N. Cancer-Driver Exons in KD")
-    
-    # distribution of Demeter2 scores in RBPs
-    plts[["encore_val-demeter2-violin"]] = X %>% 
-        distinct(cell_line, KD, demeter2) %>% 
-        ggviolin(x="cell_line", y="demeter2", fill="cell_line", 
-                 color=NA, palette=PAL_DUAL, trim=TRUE) + 
-        geom_boxplot(width=0.1, outlier.size=0.1) + 
-        guides(fill="none") + 
-        labs(x="Cell Line", y="Gene Dependency")  +
-        geom_text(aes(y=0.5, label=lab),
-                  X %>% 
-                      distinct(cell_line, KD) %>% 
-                      count(cell_line) %>% 
-                      mutate(lab=paste0("n=",n)),
-                  size=FONT_SIZE, family=FONT_FAMILY)
-    
-    # how does correlation change summing different top maximum?
     set.seed(RANDOM_SEED)
     
     threshs_dtpm = c(0.5, 0, -0.5, -1, -1.5, -2)
@@ -233,40 +206,11 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
     })
     correls = do.call(rbind, correls)
     
-    
-    plts[["encore_val-thresh_vs_pearsons"]] = correls %>% 
-        filter(thresh_dtpm == max(threshs_dtpm)) %>%
-        ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
-                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
-        labs(x="N Harmful Exons", y="Pearson Correlation", 
-             color="Cell Line", size="-log10(p-value)") +
-        scale_size(range=c(0.1,1.5)) +
-        theme(aspect.ratio=1) + 
-        facet_wrap(~dataset, ncol=1) +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-    
-    plts[["encore_val-thresh_vs_pearsons_vs_fcTPM"]] = correls %>% 
-        mutate(thresh_dtpm_lab = factor(
-            thresh_dtpm_lab, levels=paste0("fcTPM<", threshs_dtpm))
-        ) %>%
-        filter(thresh_dtpm %in% c(0.5, -2)) %>%
-        ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
-                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
-        labs(x="N Harmful Exons", y="Pearson Correlation", 
-             color="Cell Line", size="-log10(p-value)") +
-        scale_size(range=c(0.1,1.5)) +
-        theme(aspect.ratio=1) + 
-        facet_grid(dataset ~ thresh_dtpm_lab) +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-    
-    # evaluate predictions with different dynamic ranges
-    plts[["encore_val-harm-hist"]] = X %>% 
-        gghistogram(x="harm_rank", fill="cell_line", palette=PAL_DUAL, color=NA) + 
-        facet_wrap(~cell_line) + 
-        labs(x="Harm Score Rank", y="Count") + 
-        guides(fill="none") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-    
+    return(correls)
+}
+
+compute_correls_dyn_ranges = function(df){
+    X = df
     correls = lapply(seq(0,150,10), function(range_min){
         corr_higher = X %>% 
             filter(harm_rank > range_min) %>% 
@@ -301,8 +245,83 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         return(corr)
     })
     correls = do.call(rbind, correls)
+}
+
+plot_encore_validation = function(
+    df, correls_top_max, correls_dyn_ranges, 
+    event_info, genedep, metadata, enrichment
+){
+    plts = list()
     
-    plts[["encore_val-ranges_vs_pearsons"]] = correls %>% 
+    X = df
+    
+    plts[["encore_val-diff_genexpr_kd-violin"]] = X %>%
+        distinct(cell_line, fcTPM) %>%
+        ggviolin(x="cell_line", y="fcTPM", trim=TRUE,
+                 fill="cell_line", color=NA, palette=PAL_DUAL) + 
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        guides(fill="none") + 
+        labs(x="Cell Line", y="log2FC Gene Expr. KDs")
+    
+    # how many selected events change in each KD?
+    plts[["encore_val-n_selected_events-violin"]] = X %>% 
+        count(cell_line, KD) %>% 
+        ggviolin(x="cell_line", y="n", trim=TRUE,
+                 fill="cell_line", color=NA, palette=PAL_DUAL) + 
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        guides(fill="none") + 
+        labs(x="Cell Line", y="N. Cancer-Driver Exons in KD")
+    
+    # distribution of Demeter2 scores in RBPs
+    plts[["encore_val-demeter2-violin"]] = X %>% 
+        distinct(cell_line, KD, demeter2) %>% 
+        ggviolin(x="cell_line", y="demeter2", fill="cell_line", 
+                 color=NA, palette=PAL_DUAL, trim=TRUE) + 
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        guides(fill="none") + 
+        labs(x="Cell Line", y="Gene Dependency")  +
+        geom_text(aes(y=0.5, label=lab),
+                  X %>% 
+                      distinct(cell_line, KD) %>% 
+                      count(cell_line) %>% 
+                      mutate(lab=paste0("n=",n)),
+                  size=FONT_SIZE, family=FONT_FAMILY)
+    
+    # how does correlation change summing different top maximum?
+    plts[["encore_val-thresh_vs_pearsons"]] = correls_top_max %>% 
+        filter(thresh_dtpm == max(thresh_dtpm)) %>%
+        ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
+                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
+        labs(x="N Harmful Exons", y="Pearson Correlation", 
+             color="Cell Line", size="-log10(p-value)") +
+        scale_size(range=c(0.1,1.5)) +
+        theme(aspect.ratio=1) + 
+        facet_wrap(~dataset, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["encore_val-thresh_vs_pearsons_vs_fcTPM"]] = correls_top_max %>% 
+        mutate(thresh_dtpm_lab = factor(
+            thresh_dtpm_lab, levels=paste0("fcTPM<", sort(unique(thresh_dtpm))))
+        ) %>%
+        filter(thresh_dtpm %in% c(0.5, -2)) %>%
+        ggscatter(x="thresh", y="correlation", palette=PAL_DUAL,
+                  size="log10_pvalue", color="cell_line", alpha=0.5) + 
+        labs(x="N Harmful Exons", y="Pearson Correlation", 
+             color="Cell Line", size="-log10(p-value)") +
+        scale_size(range=c(0.1,1.5)) +
+        theme(aspect.ratio=1) + 
+        facet_grid(dataset ~ thresh_dtpm_lab) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    # evaluate predictions with different dynamic ranges
+    plts[["encore_val-harm-hist"]] = X %>% 
+        gghistogram(x="harm_rank", fill="cell_line", palette=PAL_DUAL, color=NA) + 
+        facet_wrap(~cell_line) + 
+        labs(x="Harm Score Rank", y="Count") + 
+        guides(fill="none") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["encore_val-ranges_vs_pearsons"]] = correls_dyn_ranges %>% 
         ggscatter(x="dyn_range", y="correlation", palette=PAL_DUAL,
                   size="log10_pvalue", color="cell_line", alpha=0.8) + 
         labs(x="Harm Score Rank Range", y="Pearson Correlation", 
@@ -386,7 +405,7 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         count(cell_line, index) %>%
         group_by(cell_line) %>%
         slice_max(n, n=10) %>%
-        left_join(event_annot, by=c("index"="EVENT")) %>%
+        left_join(event_info, by=c("index"="EVENT")) %>%
         mutate(event_gene=paste0(index,"_",GENE))
     plts[["encore_val-top10-bars"]] = x %>% 
         ggbarplot(x="event_gene", y="n", fill="cell_line", 
@@ -397,7 +416,7 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
     # harm scores of Thomas 2020 exons?
     plts[["encore_val-harm-thomas2020"]] = X %>% 
         filter(index %in% events_crispr) %>%
-        left_join(event_annot, by=c("index"="EVENT")) %>%
+        left_join(event_info, by=c("index"="EVENT")) %>%
         mutate(event_gene=paste0(index,"_",GENE)) %>%
         ggboxplot(x="event_gene", y="harm_rank", fill="cell_line", 
                   palette=PAL_DUAL, outlier.size=0.1) + 
@@ -405,8 +424,8 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         coord_flip()
     
     # correlation between cell lines gene dependencies
-    plts[["encore_val-demeter2-scatter"]] = genedep %>% 
-        left_join(metadata %>% distinct(DepMap_ID,cell_line), by="DepMap_ID") %>% 
+    plts[["encore_val-demeter2-scatter"]] = X %>%
+        distinct(cell_line, KD, demeter2) %>% 
         pivot_wider(id_cols="KD", 
                     names_from="cell_line", 
                     values_from="demeter2") %>% 
@@ -415,19 +434,6 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
     
     # are some events changing in KDs enriched in our selected events?
-    ## number of events available in the ontology?
-    ontology %>% filter(EVENT %in% selected_events) %>% distinct(EVENT) %>% nrow()
-    
-    enrichment = enricher(
-        selected_events, TERM2GENE=ontology, 
-        universe=event_annot %>%  filter(str_detect(EVENT,"EX")) %>% 
-          pull(EVENT) %>% unique(), 
-        maxGSSize=Inf) %>%
-        as.data.frame() %>%
-        rowwise() %>%
-        mutate(gene_ratio = eval(parse(text=GeneRatio))) %>%
-        ungroup()
-    
     plts[["encore_val-enrichment-KD-dot"]] = enrichment %>%
         slice_max(gene_ratio, n=10) %>%
         arrange(gene_ratio) %>%
@@ -441,6 +447,8 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
             name="FDR", guide=guide_colorbar(reverse=TRUE)) +
         theme_pubr()
     
+    
+    ## number of events available in the ontology?
     # upset plot of enriched exon sets
     events_oi = enrichment %>% slice_max(gene_ratio, n=10) %>% pull(geneID) %>% str_split("/")
     names(events_oi) = enrichment %>% slice_max(gene_ratio, n=10) %>% pull(Description)
@@ -461,21 +469,36 @@ plot_encore_validation = function(metadata, event_info, rnai, diff_tpm, delta_ps
 }
 
 
-make_plots = function(metadata, event_info, rnai, diff_tpm, delta_psi, 
-                      harm_score, selected_events, ontology,
-                      events_crispr, spldep){
+make_plots = function(
+    df, correls_top_max, correls_dyn_ranges, 
+    event_info, metadata, enrichment
+){
     plts = list(
-        plot_encore_validation(metadata, event_info, rnai, diff_tpm, delta_psi, 
-                               harm_score, selected_events, ontology,
-                               events_crispr, spldep)
+        plot_encore_validation(
+            df, correls_top_max, correls_dyn_ranges, 
+            event_info, metadata, enrichment
+        )
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
 
-make_figdata = function(){
+make_figdata = function(
+    df, correls_top_max, correls_dyn_ranges, enrichment
+){
+    
+    evaluation = correls_top_max %>% 
+        filter(thresh_dtpm == max(thresh_dtpm)) %>%
+        dplyr::select(-c(thresh_dtpm, thresh_dtpm_lab)) %>%
+        bind_rows(correls_dyn_ranges)
+    
     figdata = list(
+        "model_validation" = list(
+            "spotter_results" = df,
+            "evaluation" = evaluation,
+            "esoa" = enrichment
+        )
     )
     return(figdata)
 }
@@ -594,16 +617,38 @@ main = function(){
     
     events_crispr = crispr %>% pull(EVENT) %>% unique()
     
-    plts = make_plots(metadata, event_info, rnai, diff_tpm, delta_psi, 
-                      harm_score, selected_events, ontology,
-                      events_crispr, spldep)
+    df = prepare_data(
+        metadata, event_info, rnai, diff_tpm, delta_psi, 
+        harm_score, selected_events, ontology,
+        events_crispr, spldep
+    )
+    correls_top_max = compute_correls_top_max(df)
+    correls_dyn_ranges = compute_correls_dyn_ranges(df)
+    
+    # number of events available in the ontology?
+    ontology %>% filter(EVENT %in% selected_events) %>% distinct(EVENT) %>% nrow()
+    enrichment = enricher(
+        selected_events, TERM2GENE=ontology, 
+        universe=event_info %>%  filter(str_detect(EVENT,"EX")) %>% 
+          pull(EVENT) %>% unique(), 
+        maxGSSize=Inf) %>%
+        as.data.frame() %>%
+        rowwise() %>%
+        mutate(gene_ratio = eval(parse(text=GeneRatio))) %>%
+        ungroup()
+
+    # make plots
+    plts = make_plots(df, correls_top_max, correls_dyn_ranges, 
+                      event_info, metadata, enrichment)
 
     # make figdata
-    # figdata = make_figdata()
+    figdata = make_figdata(
+        df, correls_top_max, correls_dyn_ranges, enrichment
+    )
     
     # save
     save_plots(plts, figs_dir)
-    # save_figdata(figdata, figs_dir)
+    save_figdata(figdata, figs_dir)
 }
 
 

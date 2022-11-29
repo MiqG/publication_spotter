@@ -18,6 +18,7 @@ RESULTS_DIR = os.path.join(ROOT,'results')
 MODEL_SEL_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","model_selection","figdata")
 MODEL_VAL_THOMAS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Thomas2020","figdata")
 MODEL_VAL_GONATO_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Gonatopoulos-Pournatzis2020","figdata")
+MODEL_VAL_ENCORE = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_encore","figdata")
 
 ##### RULES #####
 rule all:
@@ -50,7 +51,7 @@ rule supplementary_tables:
         ## gene-level mutation frequency
         suptab11_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
         ## splicing dependency CCLE
-        suptab12_spldep_ccle = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        suptab12_spldep_ccle = os.path.join(RESULTS_DIR,"model_splicing_dependency","files","splicing_dependency-EX","mean.tsv.gz"),
         ## splicing dependency summary stats
         suptab14_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
         
@@ -60,15 +61,19 @@ rule supplementary_tables:
         ## Thomas - spotter results
         suptab16_thomas_spotter_results = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","spotter_results.tsv.gz"),
         ## Gonatopoulos - observed changes in cell proliferation
-        suptab15_thomas_crispr_screen = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","crispr_screen.tsv.gz"),
+        suptab17_thomas_crispr_screen = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","crispr_screen.tsv.gz"),
         ## Gonatopoulos - spotter results
-        suptab16_thomas_spotter_results = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","spotter_results.tsv.gz"),
-        ## ENCORE - Demeter2 of RBPs
-        ## ENCORE - TPM
+        suptab18_thomas_spotter_results = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","spotter_results.tsv.gz"),
         ## ENCORE - PSI
-        ## ENCORE - Spl. Dep.
-        ## ENCORE - Harm Score
+        suptab19_encore_psi = os.path.join(PREP_DIR,'event_psi','ENCORE-EX.tsv.gz'),
+        ## ENCORE - TPM
+        suptab20_encore_tpm = os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
+        ## ENCORE - metadata
+        suptab21_encore_metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        ## ENCORE - spotter results
+        suptab22_encore_spotter_results = os.path.join(MODEL_VAL_ENCORE,"model_validation","spotter_results.tsv.gz"),
         ## ENCORE - correlation tables
+        suptab23_encore_evaluation = os.path.join(MODEL_VAL_ENCORE,"model_validation","evaluation.tsv.gz"),
         
         # streamlined drug development
         ## TCGA - PSI
