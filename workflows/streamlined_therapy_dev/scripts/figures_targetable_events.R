@@ -9,7 +9,7 @@
 # Outline
 # -------
 
-
+require(optparse)
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
@@ -96,7 +96,6 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         pivot_longer(c(PT,STN), names_to='sample_type',values_to='n')
     
     plts[['top_samples-sample_counts_cancer']] = X %>% 
-        filter(cancer_type %in% CANCERS_OI) %>%
         ggbarplot(x='cancer_type', y='n', fill='sample_type', color=NA,
                   position=position_dodge(0.7), label=TRUE, lab.size=FONT_SIZE, 
                   lab.family=FONT_FAMILY, palette='lancet') + 
@@ -106,7 +105,6 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
     
     # ranking with differential analyses
     X = diff_result %>%
-        filter(cancer_type %in% CANCERS_OI) %>%
         mutate(sign_dpsi = sign(psi__median_diff),
                sign_spldep = sign(mean),
                event_gene = ifelse(event_gene %in% VALIDATED_EXONS, 
@@ -164,12 +162,6 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         coord_flip()
     
     plts[['top_samples-dpsi_vs_spldep-candidates_harm']] = X %>% 
-        mutate(harm_score = ifelse(mean<0,
-                                   (-1) * mean * (0-`psi__condition_a-median`), # remove
-                                   (-1) * mean * (100-`psi__condition_a-median`)) # include
-               
-               ) %>%
-        filter(cancer_type %in% CANCERS_OI) %>%
         filter(psi__is_significant & 
                ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>%
         arrange(-mean) %>%
@@ -221,14 +213,11 @@ make_plots = function(diff_result_sample, diff_result_subtypes){
 }
 
 
-make_figdata = function(diff_result_sample, 
-                        diff_result_subtypes, 
-                        spldep_stats){
+make_figdata = function(diff_result_sample, diff_result_subtypes){
     figdata = list(
         "targetable_events" = list(
             "differential_analysis-by_cancer_type" = diff_result_sample,
-            "differential_analysis-by_cancer_subtype" = diff_result_subtypes,
-            "splicing_dependency_stats" = spldep_stats
+            "differential_analysis-by_cancer_subtype" = diff_result_subtypes
         )
     )
     return(figdata)
@@ -270,7 +259,6 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'subtypes-top_samples-dpsi_vs_spldep-candidates_psi', '.pdf', figs_dir, width=15, height=15)
 }
 
-
 save_figdata = function(figdata, dir){
     lapply(names(figdata), function(x){
         d = file.path(dir,'figdata',x)
@@ -285,14 +273,37 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--annotation_file", type="character"),
+        make_option("--selected_events_file", type="character"),
+        make_option("--spldep_stats_file", type="character"),
+        make_option("--spldep_stats_subtypes_file", type="character"),
+        make_option("--diff_result_sample_file", type="character"),
+        make_option("--diff_result_subtypes_file", type="character"),
+        make_option("--cancer_events_file", type="character"),
+        make_option("--ascanceratlas_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
 
 main = function(){
-    args = getParsedArgs()
-    diff_result_sample_file = args$diff_result_sample_file
-    diff_result_response_file = args$diff_result_response_file
-    selected_events_file = args$selected_events_file
-    spldep_file = args$spldep_file
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    annotation_file = args[["annotation_file"]]
+    selected_events_file = args[["selected_events_file"]]
+    spldep_stats_file = args[["spldep_stats_file"]]
+    spldep_stats_subtypes_file = args[["spldep_stats_subtypes_file"]]
+    diff_result_sample_file = args[["diff_result_sample_file"]]
+    diff_result_subtypes_file = args[["diff_result_subtypes_file"]]
+    cancer_events_file = args[["cancer_events_file"]]
+    ascanceratlas_file = args[["ascanceratlas_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -327,6 +338,14 @@ main = function(){
     ## cancer types
     diff_result_sample_raw = diff_result_sample
     diff_result_sample = prep_diff_result(diff_result_sample, spldep_stats)
+    diff_result_sample = diff_result_sample %>%
+        filter(cancer_type %in% CANCERS_OI) %>%
+        mutate(
+            harm_score = ifelse(
+                mean<0,
+                (-1) * mean * (0-`psi__condition_a-median`), # remove
+                (-1) * mean * (100-`psi__condition_a-median`)) # include
+        )
     ## cancer subtypes
     diff_result_subtypes_raw = diff_result_subtypes
     diff_result_subtypes = prep_diff_result(
@@ -336,13 +355,22 @@ main = function(){
         spldep_stats_subtypes %>%
             mutate(cancer = cancer_type, 
                    cancer_type = paste0(cancer_type,'_',cancer_subtype)) %>%
-            dplyr::select(-c(cancer, cancer_subtype)))
+            dplyr::select(-c(cancer, cancer_subtype))
+    ) 
+    diff_result_subtypes = diff_result_subtypes %>%
+        filter(cancer_type %in% CANCERS_OI) %>%
+        mutate(
+            harm_score = ifelse(
+                mean<0,
+                (-1) * mean * (0-`psi__condition_a-median`), # remove
+                (-1) * mean * (100-`psi__condition_a-median`)) # include
+       )
     
     # plot
     plts = make_plots(diff_result_sample, diff_result_subtypes)
     
     # make figdata
-    figdata = make_figdata(diff_result_sample, diff_result_subtypes, spldep_stats)
+    figdata = make_figdata(diff_result_sample, diff_result_subtypes)
 
     # save
     save_plots(plts, figs_dir)

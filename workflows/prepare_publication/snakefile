@@ -19,6 +19,8 @@ MODEL_SEL_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","
 MODEL_VAL_THOMAS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Thomas2020","figdata")
 MODEL_VAL_GONATO_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Gonatopoulos-Pournatzis2020","figdata")
 MODEL_VAL_ENCORE = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_encore","figdata")
+TARGET_VAL_TCGA = os.path.join(RESULTS_DIR,"streamlined_therapy_dev","figures","targetable_events","figdata")
+TARGET_VAL_EXP = os.path.join(RESULTS_DIR,"experimental_validation","figures","validation","figdata")
 
 ##### RULES #####
 rule all:
@@ -76,17 +78,20 @@ rule supplementary_tables:
         suptab23_encore_evaluation = os.path.join(MODEL_VAL_ENCORE,"model_validation","evaluation.tsv.gz"),
         
         # streamlined drug development
-        ## TCGA - PSI
-        ## TCGA - mRNA level counts
-        ## TCGA - Spl. Dep.
-        ## TCGA - Harm Score
-        ## TCGA - differential splicing (type and subtype)
-        ## SSO - cancer cells PSI
-        ## SSO - cancer cells TPM
-        ## SSO - cancer cells Spl. Dep.
-        ## SSO - cancer cells Harm Score
-        ## SSO - sequences
+        ## TCGA - PSI (not as sup. tab.)
+        ## TCGA - mRNA level counts (not as sup. tab.)
+        ## TCGA - Differential Splicing, Spl. Dep., Harm Score
+        suptab24_targetable_exons_cancer_types = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_type.tsv.gz"),
+        suptab25_targetable_exons_cancer_subtypes = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_subtype.tsv.gz"),
+        ## SSO - sequences SSO
+        #suptab26_targetable_exons_sso_sequences = ""
+        ## SSO - sequences primers
+        #suptab27_targetable_exons_primer_sequences = ""
+        ## SSO - cancer cells RNA-seq: PSI, TPM, Spl. Dep., Harm Score (TODO)
+        suptab28_targetable_exons_spotter_results = os.path.join(TARGET_VAL_EXP,"experiments","validation_harm_scores.tsv.gz"),
         ## SSO - cell proliferation experiments
+        suptab29_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz")
+        
         
         # drug-exon mechanistic interactions
         ## GDSC - drug sensitivities (training + test)

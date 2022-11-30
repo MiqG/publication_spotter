@@ -94,7 +94,10 @@ rule all:
         ## cancer subtype
         expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-
+        # figures
+        os.path.join(RESULTS_DIR,"figures","targetable_events")
+        
+        
 rule compute_splicing_dependency_tcga:
     input:
         psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
@@ -117,7 +120,6 @@ rule compute_splicing_dependency_tcga:
                     --n_jobs={threads} \
                     --normalize_counts
         """
-        
         
 rule summarize_splicing_dependency_by_cancer_type:
     input:
@@ -156,6 +158,7 @@ rule summarize_splicing_dependency_by_cancer_type:
         dfs = pd.concat(dfs)
         dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
         
+        print("Done!")
         
 rule summarize_splicing_dependency_by_cancer_subtype:
     input:
@@ -200,6 +203,7 @@ rule summarize_splicing_dependency_by_cancer_subtype:
         dfs = pd.concat(dfs)
         dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
         
+        print("Done!")
         
 rule differential_psi_sample_type_by_cancer_type:
     input:
@@ -222,7 +226,6 @@ rule differential_psi_sample_type_by_cancer_type:
                     --output_file={output} \
                     --padj_method={params.padj_method} 
         """
-        
         
 rule combine_differential_analyses_sample_type_by_cancer_type:
     input:
@@ -257,6 +260,7 @@ rule combine_differential_analyses_sample_type_by_cancer_type:
         dfs = pd.concat(dfs)  
         dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
         
+        print("Done!")
         
 rule differential_psi_sample_type_by_cancer_subtype:
     input:
@@ -318,3 +322,32 @@ rule combine_differential_analyses_sample_type_by_cancer_subtype:
             
         dfs = pd.concat(dfs)  
         dfs.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        print("Done!")
+        
+        
+rule figures_targetable_events:
+    input:
+        annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
+        selected_events = os.path.join(ROOT,'results','model_splicing_dependency','files','selected_models-EX.txt'),
+        spldep_stats = os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-EX.tsv.gz'),
+        spldep_stats_subtypes = os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz'),
+        diff_result_sample = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
+        diff_result_subtypes = os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
+        cancer_events = os.path.join(ROOT,"support","cancer_events.tsv"),
+        ascanceratlas = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','targetable_events'))
+    shell:
+        """
+        Rscript scripts/figures_targetable_events.R \
+                    --annotation_file={input.annotation} \
+                    --selected_events_file={input.selected_events} \
+                    --spldep_stats_file={input.spldep_stats} \
+                    --spldep_stats_subtypes_file={input.spldep_stats_subtypes} \
+                    --diff_result_sample_file={input.diff_result_sample} \
+                    --diff_result_subtypes_file={input.diff_result_subtypes} \
+                    --cancer_events_file={input.cancer_events} \
+                    --ascanceratlas_file={input.ascanceratlas} \
+                    --figs_dir={output}        
+        """

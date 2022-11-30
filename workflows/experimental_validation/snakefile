@@ -24,6 +24,7 @@ PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','experimental_validation')
 PANGOLIN_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','Pangolin')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
+CCLE_DIR = os.path.join(ROOT,"results","model_splicing_dependency")
 
 EVENTS_OI = [
     "HsaEX0006970",
@@ -99,6 +100,9 @@ rule all:
         # fit gene dependencies and get empirical distributions of coefficients
         #expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"), event=EVENTS_OI, method=METHODS_KWS.keys()),
         #expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI),
+        
+        # figures
+        os.path.join(RESULTS_DIR,"figures","validation")
 
         
 rule get_splicing_enhancers:
@@ -214,4 +218,32 @@ rule compute_splicing_dependency:
                     --output_dir={output} \
                     --n_jobs={threads} \
                     --log_transform
+        """
+        
+        
+rule figures_validation:
+    input:
+        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
+        event_info = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
+
+        validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso.tsv"),
+        splicing_ccle = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        genexpr_ccle = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        spldep_ccle = os.path.join(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz'),
+        validation_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        validation_od = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','validation'))
+    shell:
+        """
+        Rscript scripts/figures_validation.R \
+                    --annotation_file={input.annotation} \
+                    --event_info_file={input.event_info} \
+                    --validation_splicing_file={input.validation_splicing} \
+                    --splicing_ccle_file={input.splicing_ccle} \
+                    --genexpr_ccle_file={input.genexpr_ccle} \
+                    --spldep_ccle_file={input.spldep_ccle} \
+                    --validation_spldep_file={input.validation_spldep} \
+                    --validation_od_file={input.validation_od} \
+                    --figs_dir={output}
         """

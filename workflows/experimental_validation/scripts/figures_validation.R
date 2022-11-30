@@ -1,3 +1,4 @@
+require(optparse)
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
@@ -42,6 +43,7 @@ kras_help = data.frame(
 
 # validation_splicing_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso.tsv")
 # splicing_ccle_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
+# genexpr_ccle_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
 # validation_spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 # CCLE_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # spldep_ccle_file = file.path(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
@@ -114,6 +116,15 @@ make_plots = function(validation_clonogenic, validation_harm_scores){
     return(plts)
 }
 
+make_figdata = function(validation_clonogenic, validation_harm_scores){
+
+    figdata = list(
+        "experiments" = list(
+            "validation_clonogenic" = validation_clonogenic,
+            "validation_harm_scores" = validation_harm_scores
+        )
+    )
+}
 
 save_plt = function(plts, plt_name, extension='.pdf', 
                     directory='', dpi=350, format=TRUE,
@@ -149,9 +160,37 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--annotation_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--validation_splicing_file", type="character"),
+        make_option("--splicing_ccle_file", type="character"),
+        make_option("--genexpr_ccle_file", type="character"),
+        make_option("--spldep_ccle_file", type="character"),
+        make_option("--validation_spldep_file", type="character"),
+        make_option("--validation_od_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
 
 main = function(){
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    annotation_file = args[["annotation_file"]]
+    event_info_file = args[["event_info_file"]]
+    validation_splicing_file = args[["validation_splicing_file"]]
+    splicing_ccle_file = args[["splicing_ccle_file"]]
+    genexpr_ccle_file = args[["genexpr_ccle_file"]]
+    spldep_ccle_file = args[["spldep_ccle_file"]]
+    validation_spldep_file = args[["validation_spldep_file"]]
+    validation_od_file = args[["validation_od_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -175,6 +214,7 @@ main = function(){
         separate(event_gene, c("EVENT","GENE"), remove=FALSE)
     
     splicing_ccle = read_tsv(splicing_ccle_file)
+    genexpr_ccle = read_tsv(genexpr_ccle_file)
     spldep_ccle = read_tsv(spldep_ccle_file) %>% dplyr::rename(EVENT=index)
     
     # compute harm scores
@@ -192,7 +232,7 @@ main = function(){
     
     # add missing PSI and Spldep from CCLE
     missing = validation_clonogenic %>%
-        distinct(CCLE_Name, event_gene, EVENT) %>%
+        distinct(CCLE_Name, event_gene, EVENT, GENE) %>%
         left_join(validation_harm_scores %>% distinct(CCLE_Name, DepMap_ID), by="CCLE_Name") %>%
         filter(!(CCLE_Name %in% validation_psi[["CCLE_Name"]]))
     
@@ -202,6 +242,13 @@ main = function(){
                 dplyr::select(c(EVENT,unique(missing[["DepMap_ID"]]))) %>%
                 pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi_untreated"),
             by=c("EVENT","DepMap_ID")
+        ) %>%
+        left_join(
+            genexpr_ccle %>% 
+                dplyr::select(c(ID,unique(missing[["DepMap_ID"]]))) %>%
+                left_join(events_genes%>% distinct(ENSEMBL,GENE), by=c("ID"="ENSEMBL")) %>%
+                pivot_longer(-c("ID","GENE"), names_to="DepMap_ID", values_to="tpm_untreated"),
+            by=c("GENE","DepMap_ID")
         ) %>%
         mutate(psi_treated = 0) %>%
         left_join(
@@ -228,11 +275,11 @@ main = function(){
     plts = make_plots(validation_clonogenic, validation_harm_scores)
     
     # make figdata
-    #figdata = make_figdata()
+    figdata = make_figdata(validation_clonogenic, validation_harm_scores)
 
     # save
     save_plots(plts, figs_dir)
-    #save_figdata(figdata, figs_dir)
+    save_figdata(figdata, figs_dir)
 }
 
 
