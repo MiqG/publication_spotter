@@ -225,7 +225,6 @@ rule figures_validation:
     input:
         annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
         event_info = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-
         validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso.tsv"),
         splicing_ccle = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
         genexpr_ccle = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
