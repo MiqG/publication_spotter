@@ -27,6 +27,7 @@
 # - splicing dependency coefficients separate drugs in clusters that separate 
 #   their targets (splicing dependencies that differentiate the clusters?)
 
+require(optparse)
 require(tidyverse)
 require(tidytext)
 require(ggpubr)
@@ -82,30 +83,29 @@ PAL_PROT_IMP = setNames(
 # -----------
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
-# RESULTS_DIR = file.path(ROOT,"results","splicing_dependency_drugs")
+# RESULTS_DIR = file.path(ROOT,"results","exon_drug_interactions")
 # MODELS_DIR = file.path(ROOT,"results","model_splicing_dependency")
+
+# metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # models_file = file.path(RESULTS_DIR,"files","model_summaries_drug_response-EX.tsv.gz")
 # drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
-# figs_dir = file.path(RESULTS_DIR,"figures","model_drug_screens")
-# embedding_file = file.path(RESULTS_DIR,"files","embedded_drug_associations-EX.tsv.gz")
+# rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
 # estimated_response_file = file.path(RESULTS_DIR,"files","estimated_drug_response_by_drug-EX.tsv.gz")
 # drug_screens_dir = file.path(PREP_DIR,'drug_screens')
-# msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
-# clusters_file = file.path(RESULTS_DIR,"files","cluster_estimated_drug_response-merged-EX.tsv.gz")
-# metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
-# spldep_models_file = file.path(MODELS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz")
 # spldep_ccle_file = file.path(MODELS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 # paths_real_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-EX.tsv.gz")
-# paths_random_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-random.tsv.gz")
-# rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
+# spldep_models_file = file.path(MODELS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz")
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
+# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 # splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
 # snv_file = file.path(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv')
-# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 # ppi_file = file.path(PREP_DIR,'ppi','STRINGDB.tsv.gz')
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # gene_info_file = file.path(RAW_DIR,"ENSEMBL","gene_annotation-hg38.tsv.gz")
+# figs_dir = file.path(RESULTS_DIR,"figures","model_drug_screens")
+
+# paths_random_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-random.tsv.gz")
 
 ##### FUNCTIONS #####
 load_drug_screens = function(drug_screens_dir){
@@ -1073,13 +1073,8 @@ plot_reactome = function(eval_reactome){
     return(plts)
 }
 
-
-plot_examples = function(splicing, genexpr, snv, ontology, gene_info){
-    plts = list()
-    
-    # Does the activation of the P53 pathway change with the splicing of HsaEX0038414_MDM4?
-
-    ## get splicing of HsaEX0038414_MDM4 across samples
+prep_examples = function(splicing, genexpr, snv, ontology, gene_info){
+## get splicing of HsaEX0038414_MDM4 across samples
     splicing_oi = splicing %>%
         filter(EVENT == "HsaEX0038414") %>%
         pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi")
@@ -1121,6 +1116,16 @@ plot_examples = function(splicing, genexpr, snv, ontology, gene_info){
         left_join(ctl) %>%
         mutate(tpm_fc = tpm - tpm_ctl)
     
+    return(X)
+}
+
+
+plot_examples = function(examples){
+    plts = list()
+    
+    # Does the activation of the P53 pathway change with the splicing of HsaEX0038414_MDM4?
+    X = examples
+    
     ## distribution of event inclusion in each sample
     plts[["examples-mdm4-psi-distr"]] = X %>%
         distinct(DepMap_ID, psi) %>%
@@ -1159,10 +1164,14 @@ plot_examples = function(splicing, genexpr, snv, ontology, gene_info){
 }
 
 
-make_plots = function(models, drug_screen,
-                      drug_targets, shortest_paths, shortest_paths_simple,
-                      spldep_models, estimated_drug_response, eval_reactome,
-                      splicing, genexpr, snv, ontology, gene_info){
+make_plots = function(
+    models, drug_screen,
+    drug_targets, shortest_paths, 
+    spldep_models, shortest_paths_simple,
+    estimated_response, 
+    eval_reactome, 
+    examples
+){
     plts = list(
         plot_eda_associations(models, drug_screen),
         plot_targets(models, drug_targets),
@@ -1170,29 +1179,32 @@ make_plots = function(models, drug_screen,
         plot_mediators(spldep_models, models, shortest_paths_simple, drug_targets),
         plot_drug_rec(estimated_response, drug_screen, models),
         plot_reactome(eval_reactome),
-        plot_examples(splicing, genexpr, snv, ontology, gene_info)
+        plot_examples(examples)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
 
-make_figdata = function(models,
-                        shortest_paths, rankings, drug_targets,
-                        clusters, metadata, estimated_response,
-                        embedding, enrichment, eval_reactome){
+make_figdata = function(
+    models, drug_screen,
+    drug_targets, shortest_paths, 
+    spldep_models, shortest_paths_simple,
+    estimated_response, 
+    eval_reactome, 
+    examples
+){
     
     figdata = list(
         "drug_event_assoc" = list(
-            "model_summaries" = models,
-            "shortest_paths" = shortest_paths,
-            "association_rankings" = rankings,
+            "drug_sensitivities" = drug_screen %>% mutate(in_training_set=in_demeter2),
             "drug_targets" = drug_targets,
-            "pred_ic50_by_event_drug_clustering" = clusters,
+            "model_summaries" = models,
+            "evaluation_reactome" = eval_reactome,
+            "shortest_paths" = shortest_paths,
+            "shortest_paths_simple" = shortest_paths_simple,
             "pred_ic50_by_drug" = estimated_response,
-            "assoc_coeff_clustering" = embedding,
-            "assoc_coeff_gsea" = df_enrichs,
-            "evaluation_reactome" = eval_reactome
+            "example_mdm4" = examples %>% filter(Gene=="TP53")
         )
     )
     return(figdata)
@@ -1287,15 +1299,55 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--metadata_file", type="character"),
+        make_option("--models_file", type="character"),
+        make_option("--drug_targets_file", type="character"),
+        make_option("--rnai_file", type="character"),
+        make_option("--estimated_response_file", type="character"),
+        make_option("--drug_screens_dir", type="character"),
+        make_option("--spldep_ccle_file", type="character"),
+        make_option("--paths_real_file", type="character"),
+        make_option("--spldep_models_file", type="character"),
+        make_option("--msigdb_dir", type="character"),
+        make_option("--protein_impact_file", type="character"),
+        make_option("--splicing_file", type="character"),
+        make_option("--genexpr_file", type="character"),
+        make_option("--snv_file", type="character"),
+        make_option("--ppi_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--gene_info_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
 
 main = function(){
-    args = getParsedArgs()
-    models_file = args$models_file
-    drug_targets_file = args$drug_targets_file
-    embedding_file = args$embedding_file
-    estimated_response_file = args$estimated_response_file
-    drug_screen_file = args$drug_screen_file
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    metadata_file = args[["metadata_file"]]
+    models_file = args[["models_file"]]
+    drug_targets_file = args[["drug_targets_file"]]
+    rnai_file = args[["rnai_file"]]
+    estimated_response_file = args[["estimated_response_file"]]
+    drug_screens_dir = args[["drug_screens_dir"]]
+    spldep_ccle_file = args[["spldep_ccle_file"]]
+    paths_real_file = args[["paths_real_file"]]
+    spldep_models_file = args[["spldep_models_file"]]
+    msigdb_dir = args[["msigdb_dir"]]
+    protein_impact_file = args[["protein_impact_file"]]
+    splicing_file = args[["splicing_file"]]
+    genexpr_file = args[["genexpr_file"]]
+    snv_file = args[["snv_file"]]
+    ppi_file = args[["ppi_file"]]
+    event_info_file = args[["event_info_file"]]
+    gene_info_file = args[["gene_info_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -1340,15 +1392,28 @@ main = function(){
     models = models %>%
         left_join(ontologies[["protein_impact"]], by="EVENT")
     
+    ## mechanistic examples
+    examples = prep_examples(splicing, genexpr, snv, ontologies[["hallmarks"]], gene_info)
+    
     # make plots
-    plts = make_plots(models, drug_screen,
-                      drug_targets, shortest_paths, shortest_paths_simple,
-                      spldep_models, estimated_drug_response, eval_reactome)
+    plts = make_plots(
+            models, drug_screen,
+            drug_targets, shortest_paths, 
+            spldep_models, shortest_paths_simple,
+            estimated_response, 
+            eval_reactome, 
+            examples
+    )
     
     # make figdata
-    figdata = make_figdata(models, drug_screen,
-                      drug_targets, shortest_paths, shortest_paths_simple,
-                      spldep_models, estimated_drug_response, eval_reactome)
+    figdata = make_figdata(
+            models, drug_screen,
+            drug_targets, shortest_paths, 
+            spldep_models, shortest_paths_simple,
+            estimated_response, 
+            eval_reactome, 
+            examples
+    )
     
     # save
     save_plots(plts, figs_dir)

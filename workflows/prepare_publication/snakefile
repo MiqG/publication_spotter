@@ -21,6 +21,7 @@ MODEL_VAL_GONATO_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","fig
 MODEL_VAL_ENCORE = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_encore","figdata")
 TARGET_VAL_TCGA = os.path.join(RESULTS_DIR,"streamlined_therapy_dev","figures","targetable_events","figdata")
 TARGET_VAL_EXP = os.path.join(RESULTS_DIR,"experimental_validation","figures","validation","figdata")
+MODEL_DRUG_SENS_DIR = os.path.join(RESULTS_DIR,"exon_drug_interactions","figures","model_drug_screens","figdata")
 
 ##### RULES #####
 rule all:
@@ -90,17 +91,22 @@ rule supplementary_tables:
         ## SSO - cancer cells RNA-seq: PSI, TPM, Spl. Dep., Harm Score (TODO)
         suptab28_targetable_exons_spotter_results = os.path.join(TARGET_VAL_EXP,"experiments","validation_harm_scores.tsv.gz"),
         ## SSO - cell proliferation experiments
-        suptab29_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz")
-        
+        suptab29_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz"),
         
         # drug-exon mechanistic interactions
         ## GDSC - drug sensitivities (training + test)
+        suptab30_drug_sensitivites = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_sensitivities.tsv.gz'),
         ## GDSC - drug target info
+        suptab31_drug_targets = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_targets.tsv.gz'),
         ## drug-exon - model summaries
-        ## drug-exon - pathway tests
+        suptab32_drug_exon_associations = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','model_summaries.tsv.gz'),
+        ## drug-exon - ReactomeDB pathway tests
+        suptab33_evaluation_reactome_pathways = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','evaluation_reactome.tsv.gz'),
         ## drug-exon - shortest path lengths
-        ## nutlin - stability analysis (structures? + results)
+        suptab33_evaluation_stringdb_ppi = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','shortest_paths.tsv.gz'),
+        ## nutlin - stability analysis (structures? + results) (not as sup tab)
         ## nutlin - PSI MDM4 vs TPM TP53 in CCLE
+        suptab33_example_mdm4_tp53 = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','example_mdm4.tsv.gz'),
         
         # treatment recommendation
         ## GDSC - correlations training and test sets

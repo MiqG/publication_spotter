@@ -21,7 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
 SRC_DIR = os.path.join(ROOT,"src")
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
-RESULTS_DIR = os.path.join(ROOT,'results','splicing_dependency_drugs')
+RESULTS_DIR = os.path.join(ROOT,'results','exon_drug_interactions')
 MODELS_DIR = os.path.join(ROOT,'results','model_splicing_dependency')
 SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
@@ -88,7 +88,7 @@ rule all:
         
 
         # plot models
-        # os.path.join(RESULTS_DIR,'figures','model_drug_screens')
+        os.path.join(RESULTS_DIR,'figures','model_drug_screens')
 
         
 rule model_drug_response:
@@ -188,21 +188,45 @@ rule embed_drug_associations:
         
 rule figures_model_drug_screens:
     input:
-        models = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-EX.tsv.gz'),
-        drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
-        embedding = os.path.join(RESULTS_DIR,'files','embedded_drug_associations-EX.tsv.gz'),
-        # estimated_response = os.path.join(),
-        # drug_screen = os.path.join()
+        metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        models = os.path.join(RESULTS_DIR,"files","model_summaries_drug_response-EX.tsv.gz"),
+        drug_targets = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz'),
+        rnai = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        estimated_response = os.path.join(RESULTS_DIR,"files","estimated_drug_response_by_drug-EX.tsv.gz"),
+        drug_screens_dir = os.path.join(PREP_DIR,'drug_screens'),
+        spldep_ccle = os.path.join(MODELS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        paths_real = os.path.join(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-EX.tsv.gz"),
+        spldep_models = os.path.join(MODELS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz"),
+        msigdb_dir = os.path.join(RAW_DIR,"MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs"),
+        protein_impact = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
+        splicing = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        snv = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
+        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
+        gene_info = os.path.join(RAW_DIR,"ENSEMBL","gene_annotation-hg38.tsv.gz")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_drug_screens'))
     shell:
         """
         Rscript scripts/figures_model_drug_screens.R \
+                    --metadata_file={input.metadata} \
                     --models_file={input.models} \
                     --drug_targets_file={input.drug_targets} \
-                    --embedding_file={input.embedding} \
+                    --rnai_file={input.rnai} \
                     --estimated_response_file={input.estimated_response} \
-                    --drug_screen_file={input.drug_screen} \
+                    --drug_screens_dir={input.drug_screens_dir} \
+                    --spldep_ccle_file={input.spldep_ccle} \
+                    --paths_real_file={input.paths_real} \
+                    --spldep_models_file={input.spldep_models} \
+                    --msigdb_dir={input.msigdb_dir} \
+                    --protein_impact_file={input.protein_impact} \
+                    --splicing_file={input.splicing} \
+                    --genexpr_file={input.genexpr} \
+                    --snv_file={input.snv} \
+                    --ppi_file={input.ppi} \
+                    --event_info_file={input.event_info} \
+                    --gene_info_file={input.gene_info} \
                     --figs_dir={output}
         """
         
