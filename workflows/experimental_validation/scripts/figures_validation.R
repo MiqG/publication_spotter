@@ -14,6 +14,8 @@ PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
 PAL_FDR_DARK = "#005AB5"
 PAL_FDR_LIGHT = "#DC3220"
 
+PAL_REPLICATES = setNames(get_palette("Accent",3), 1:3)
+
 LINE_SIZE = 0.25
 
 FONT_SIZE = 2 # for additional labels
@@ -55,10 +57,7 @@ kras_help = data.frame(
 ##### FUNCTIONS #####
 plot_validation = function(validation_clonogenic, validation_harm_scores){
     
-    PAL_REPLICATES = setNames(get_palette("jco",2), 1:2)
-    
     plts = list()
-    
     
     plts[["validation-od"]] = validation_clonogenic %>%
         mutate(event_gene = fct_reorder(event_gene, -od, mean)) %>%
