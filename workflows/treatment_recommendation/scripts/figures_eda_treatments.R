@@ -77,21 +77,21 @@ FONT_FAMILY = "Arial"
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_treatments')
-# MODELS_DIR = file.path(ROOT,"results","splicing_dependency_drugs")
+# MODELS_DIR = file.path(ROOT,"results","exon_drug_interactions")
+
+# metadata_file = file.path(PREP_DIR,"metadata","Zhang2022.tsv.gz")
+# splicing_file = file.path(PREP_DIR,"event_psi","Zhang2022-EX.tsv.gz")
+# genexpr_file = file.path(PREP_DIR,"genexpr_tpm","Zhang2022.tsv.gz")
+# spldep_file = file.path(RESULTS_DIR,'files','Zhang2022','splicing_dependency-EX','mean.tsv.gz')
+# selected_events_file = file.path(ROOT,"results","model_splicing_dependency","files","selected_models-EX.txt")
+# estimated_response_file = file.path(RESULTS_DIR,"files","Zhang2022","estimated_drug_response_by_drug-EX.tsv.gz")
+# drug_models_file = file.path(MODELS_DIR,"files","model_summaries_drug_response-EX.tsv.gz")
+# drug_screens_dir = file.path(PREP_DIR,'drug_screens')
 # drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # gene_info_file = file.path(RAW_DIR,"ENSEMBL","gene_annotation-hg38.tsv.gz")
-# metadata_file = file.path(PREP_DIR,"metadata","Zhang2022.tsv.gz")
-# spldep_file = file.path(RESULTS_DIR,'files','Zhang2022','splicing_dependency-EX','mean.tsv.gz')
-# selected_events_file = file.path(ROOT,"results","model_splicing_dependency","files","selected_models-EX.txt")
-# splicing_file = file.path(PREP_DIR,"event_psi","Zhang2022-EX.tsv.gz")
-# estimated_response_file = file.path(RESULTS_DIR,"files","Zhang2022","estimated_drug_response_by_drug-EX.tsv.gz")
-# drug_screens_dir = file.path(PREP_DIR,'drug_screens')
-
-# drug_models_file = file.path(MODELS_DIR,"files","model_summaries_drug_response-EX.tsv.gz")
-# drug_models_selected_file = file.path(MODELS_DIR,"files","selected_models-EX.txt")
-
+# annotation_file = file.path(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,"figures","eda_treatments")
 
 ##### FUNCTIONS #####
@@ -153,7 +153,52 @@ plot_eda_metadata = function(metadata){
 }
 
 
-plot_drug_rec = function(metadata, estimated_response){
+make_roc_analysis = function(metadata, estimated_response){
+    
+    X = metadata %>% 
+        # add estimated_responses
+        left_join(
+            estimated_response,
+            by=c("sampleID","DRUG_NAME")
+        ) %>%
+        drop_na(predicted_ic50) %>%
+        # summarize patients with multiple treatments
+        group_by(
+            patientID, sample_type,
+            chemotherapy_regimen_lab, chemo_sensitivity, 
+            drug_screen, PFI
+        ) %>%
+        summarize(predicted_ic50 = median(predicted_ic50)) %>%
+        ungroup()
+    
+    
+    threshs_pfi = 30*seq(1,10)
+    drug_screens = unique(X[["drug_screen"]])
+    roc_analysis = lapply(threshs_pfi, function(thresh_pfi_oi){
+        result = lapply(drug_screens, function(drug_screen_oi){
+            result = X %>%
+                filter(sample_type=="Pre-chemo" & drug_screen==drug_screen_oi) %>% 
+                mutate(chemo_sensitivity = ifelse(PFI <= thresh_pfi_oi, "Resistant", "Sensitive")) %>%
+                roc(chemo_sensitivity, predicted_ic50) 
+
+            result = result %>% 
+                coords(transpose=FALSE) %>% 
+                mutate(
+                    fpr = 1 - specificity,
+                    auc = result[["auc"]],
+                    thresh_pfi = thresh_pfi_oi,
+                    drug_screen = drug_screen_oi
+                )
+            return(result)
+        })
+        result = do.call(rbind, result)
+    })
+    roc_analysis = do.call(rbind,roc_analysis)
+    
+    return(roc_analysis)    
+}
+
+plot_drug_rec = function(metadata, estimated_response, roc_analysis){
     
     X = metadata %>% 
         # add estimated_responses
@@ -191,30 +236,7 @@ plot_drug_rec = function(metadata, estimated_response){
         )
     
     # how reliable is our prediction?
-    threshs_pfi = 30*seq(1,10)
-    drug_screens = unique(X[["drug_screen"]])
-    x = lapply(threshs_pfi, function(thresh_pfi_oi){
-        result = lapply(drug_screens, function(drug_screen_oi){
-            result = X %>%
-                filter(sample_type=="Pre-chemo" & drug_screen==drug_screen_oi) %>% 
-                mutate(chemo_sensitivity = ifelse(PFI <= thresh_pfi_oi, "Resistant", "Sensitive")) %>%
-                roc(chemo_sensitivity, predicted_ic50) 
-
-            result = result %>% 
-                coords(transpose=FALSE) %>% 
-                mutate(
-                    fpr = 1 - specificity,
-                    auc = result[["auc"]],
-                    thresh_pfi = thresh_pfi_oi,
-                    drug_screen = drug_screen_oi
-                )
-            return(result)
-        })
-        result = do.call(rbind, result)
-    })
-    x = do.call(rbind, x)
-    
-    plts[["drug_rec-pred_ic50-roc_curves"]] = x %>%
+    plts[["drug_rec-pred_ic50-roc_curves"]] = roc_analysis %>%
         mutate(auc_lab = sprintf("AUC(%s)=%s",thresh_pfi,round(auc,2))) %>%
         ggplot(aes(x=fpr, y=sensitivity)) +
         geom_line(aes(color=as.factor(thresh_pfi)), alpha=0.5) +
@@ -234,33 +256,6 @@ plot_drug_rec = function(metadata, estimated_response){
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         labs(x="False Positive Rate (1 - Specificity)", y="True Positive Rate (Sensitivity)",
              color="Thresh. PFI (days)")
-    
-    
-    # which drugs would we reccomend?
-#     x = metadata %>% 
-#         filter(sample_type=="Pre-chemo") %>%
-#         # add estimated_responses
-#         left_join(
-#             estimated_response %>% 
-#                 group_by(drug_screen,DRUG_NAME,sampleID) %>% 
-#                 slice_min(predicted_ic50,n=1) %>% 
-#                 ungroup(),
-#             by="sampleID",
-#             suffix=c("_regimen","_pred")
-#         ) %>%
-#         drop_na(predicted_ic50, DRUG_NAME_pred) %>%
-#         mutate(administered = DRUG_NAME_pred == DRUG_NAME_regimen)
-    
-#     plts[["drug_rec-pred_ic50-rankings"]] = x %>%
-#         distinct(patientID, predicted_ic50, administered, drug_screen, 
-#                  DRUG_NAME_pred, chemo_sensitivity, DRUG_ID) %>%
-#         group_by(drug_screen, patientID, DRUG_NAME_pred) %>%
-#         slice_max(administered, n=1) %>%
-#         ungroup() %>%
-#         group_by(drug_screen, patientID) %>%
-#         slice_min(predicted_ic50, n=10) %>%
-#         ungroup()
-        
     
     return(plts)
 }
@@ -440,11 +435,13 @@ plot_harm_scores = function(spldep, splicing, metadata){
 }
 
 
-make_plots = function(metadata, estimated_response, diff_splicing, 
-                      event_info, protein_impact, drug_models){
+make_plots = function(
+        metadata, estimated_response, diff_splicing, 
+        event_info, protein_impact, drug_models, roc_analysis
+){
     plts = list(
         plot_eda_metadata(metadata),
-        plot_drug_rec(metadata, estimated_response),
+        plot_drug_rec(metadata, estimated_response, roc_analysis),
         plot_diff_sens(diff_splicing, event_info, protein_impact, drug_models, metadata)
     )
     plts = do.call(c,plts)
@@ -452,11 +449,13 @@ make_plots = function(metadata, estimated_response, diff_splicing,
 }
 
 
-make_figdata = function(){
+make_figdata = function(X, estimated_response, roc_analysis){
     
     figdata = list(
-        "drug_event_assoc" = list(
-            "model_summaries" = models,
+        "pred_sensitivity" = list(
+            "splicing_dependency_analysis" = X,
+            "estimated_ic50" = estimated_response,
+            "roc_analysis" = roc_analysis
         )
     )
     return(figdata)
@@ -504,8 +503,48 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--metadata_file", type="character"),
+        make_option("--splicing_file", type="character"),
+        make_option("--genexpr_file", type="character"),
+        make_option("--spldep_file", type="character"),
+        make_option("--selected_events_file", type="character"),
+        make_option("--estimated_response_file", type="character"),
+        make_option("--drug_models_file", type="character"),
+        make_option("--drug_screens_dir", type="character"),
+        make_option("--drug_targets_file", type="character"),
+        make_option("--protein_impact_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--gene_info_file", type="character"),
+        make_option("--annotation_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
 
 main = function(){
+    
+    args = parseargs()
+    
+    args = args[["metadata_file"]]
+    args = args[["splicing_file"]]
+    args = args[["genexpr_file"]]
+    args = args[["spldep_file"]]
+    args = args[["selected_events_file"]]
+    args = args[["estimated_response_file"]]
+    args = args[["drug_models_file"]]
+    args = args[["drug_screens_dir"]]
+    args = args[["drug_targets_file"]]
+    args = args[["protein_impact_file"]]
+    args = args[["event_info_file"]]
+    args = args[["gene_info_file"]]
+    args = args[["annotation_file"]]
+    args = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -513,6 +552,7 @@ main = function(){
     metadata = read_tsv(metadata_file)
 
     splicing = read_tsv(splicing_file)
+    genexpr = read_tsv(genexpr_file)
     spldep = read_tsv(spldep_file)
     selected_events = readLines(selected_events_file)
     estimated_response = read_tsv(estimated_response_file)
@@ -523,6 +563,7 @@ main = function(){
     protein_impact = read_tsv(protein_impact_file)
     event_info = read_tsv(event_info_file)
     gene_info = read_tsv(gene_info_file)
+    annot = read_tsv(annotation_file)
     
     # prep inputs
     event_info = event_info %>%
@@ -579,24 +620,57 @@ main = function(){
     drug_models = drug_models %>%
         left_join(drug_screen %>% distinct(DRUG_NAME, DRUG_ID, ID), by=c("ID","DRUG_ID"))
     
+#     # subset data
+#     ## correct colnames
+#     colnames(splicing) = sapply(colnames(splicing), function(x){ paste(strsplit(x, "_")[[1]][2:5], collapse="_") })
+#     colnames(genexpr) = sapply(colnames(genexpr), function(x){ paste(strsplit(x, "_")[[1]][2:5], collapse="_") })
+#     colnames(spldep) = sapply(colnames(spldep), function(x){ paste(strsplit(x, "_")[[1]][2:5], collapse="_") })
+    ## subset
     spldep = spldep %>% 
         dplyr::rename(EVENT = index) %>%
         filter(EVENT %in% selected_events)
+    splicing = splicing %>% 
+        filter(EVENT %in% events_oi)
+    genexpr = annot %>% 
+        filter(EVENT %in% selected_events) %>%
+        distinct(GENE, ENSEMBL) %>%
+        left_join(genexpr, by=c("ENSEMBL"="ID"))
     
     # differential splicing cancer-driver events: resistant vs sensitive patients
     events_oi = drug_models %>% pull(EVENT) %>% unique()
-    X = splicing %>% 
-        filter(EVENT %in% events_oi) %>%
-        pivot_longer(-EVENT, names_to="sample", values_to="psi") %>%
-        rowwise() %>%
-        mutate(sampleID = paste(strsplit(sample, "_")[[1]][2:5], collapse="_")) %>%
-        ungroup() %>%
+    samples_oi = metadata %>% 
+        distinct(sampleID, patientID, chemo_sensitivity, sample_type) %>% 
+        filter(sample_type=="Pre-chemo") %>%
+        left_join(
+            splicing[1,] %>%
+            pivot_longer(-EVENT, names_to="sample", values_to="psi") %>%
+            rowwise() %>%
+            mutate(sampleID = paste(strsplit(sample, "_")[[1]][2:5], collapse="_")) %>%
+            ungroup(),
+            by="sampleID"
+        ) %>%
+        drop_na(chemo_sensitivity, psi) %>%
+        distinct(sampleID, sample)
+    
+    X = samples_oi %>%
+        left_join(
+            splicing %>% pivot_longer(-EVENT, names_to="sample", values_to="psi"),
+            by="sample"
+        ) %>% 
+        left_join(annot, by="EVENT") %>% 
+        left_join(
+            genexpr %>% pivot_longer(-c(ENSEMBL, GENE), names_to="sample", values_to="tpm"),
+            by=c("ENSEMBL","GENE","sample")
+        ) %>%
+        left_join(
+            spldep %>% pivot_longer(-EVENT, names_to="sample", values_to="spldep"),
+            by=c("EVENT","sample")
+        ) %>%
         left_join(
             metadata %>% distinct(sampleID, patientID, chemo_sensitivity, sample_type),
             by = "sampleID"
         ) %>%
-        drop_na(chemo_sensitivity, psi) %>% 
-        filter(sample_type=="Pre-chemo")
+        drop_na(chemo_sensitivity, psi)
     
     diff_splicing = compare_means(
             psi ~ chemo_sensitivity,
@@ -615,12 +689,15 @@ main = function(){
             by = "EVENT"
         )
     
+    # ROC analysis
+    roc_analysis = make_roc_analysis(metadata, estimated_response)
+    
     # make plots
     plts = make_plots(metadata, estimated_response, diff_splicing, 
-                      event_info, protein_impact, drug_models)
+                      event_info, protein_impact, drug_models, roc_analysis)
     
     # make figdata
-    figdata = make_figdata()
+    figdata = make_figdata(X, estimated_response, roc_analysis)
     
     # save
     save_plots(plts, figs_dir)

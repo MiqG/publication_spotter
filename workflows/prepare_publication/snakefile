@@ -22,6 +22,7 @@ MODEL_VAL_ENCORE = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures
 TARGET_VAL_TCGA = os.path.join(RESULTS_DIR,"streamlined_therapy_dev","figures","targetable_events","figdata")
 TARGET_VAL_EXP = os.path.join(RESULTS_DIR,"experimental_validation","figures","validation","figdata")
 MODEL_DRUG_SENS_DIR = os.path.join(RESULTS_DIR,"exon_drug_interactions","figures","model_drug_screens","figdata")
+VAL_TREAT_RECOM_DIR = os.path.join(RESULTS_DIR,"splicing_dependency_treatments","figures","eda_treatments","figdata")
 
 ##### RULES #####
 rule all:
@@ -110,12 +111,13 @@ rule supplementary_tables:
         
         # treatment recommendation
         ## GDSC - correlations training and test sets
-        ## Pietilla - PSI
-        ## Pietilla - TPM
-        ## Pietilla - Spl. Dep.
-        ## Pietilla - Pred. IC50
-        ## Pietilla - Metadata
+        suptab34_gdsc_pred_drug_ic50 = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','pred_ic50_by_drug.tsv.gz'),
+        ## Pietilla - PSI, TPM, Spl. Dep., Pred. IC50, Metadata
+        suptab35_pietilla_splicing_dependency_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","splicing_dependency_analysis.tsv.gz"),
+        ## Pietilla - estimated drug responses
+        suptab36_pietilla_estimated_ic50 = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","estimated_ic50.tsv.gz"),
         ## Pietilla - ROC analysis
+        suptab37_pietilla_roc_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","roc_analysis.tsv.gz")
         
     output:
         directory(os.path.join(RESULTS_DIR,'prepare_publication','files','supplementary_tables'))

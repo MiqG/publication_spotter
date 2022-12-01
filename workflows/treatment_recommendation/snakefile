@@ -35,7 +35,7 @@ EVENT_TYPES = ["EX"]
 ##### RULES #####
 rule all:
     input:
-        # compute splicing dependencies TCGA
+        # compute splicing dependencies
         expand(os.path.join(RESULTS_DIR,'files','Zhang2022','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
         # estimate drug responses
@@ -110,3 +110,42 @@ rule combine_drug_rankings:
             
         dfs = pd.concat(dfs)    
         dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+        print("Done!")
+        
+
+rule figures_eda_treatments:
+    input:
+        metadata = os.path.join(PREP_DIR,"metadata","Zhang2022.tsv.gz"),
+        splicing = os.path.join(PREP_DIR,"event_psi","Zhang2022-EX.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","Zhang2022.tsv.gz"),
+        spldep = os.path.join(RESULTS_DIR,'files','Zhang2022','splicing_dependency-EX','mean.tsv.gz'),
+        selected_events = os.path.join(ROOT,"results","model_splicing_dependency","files","selected_models-EX.txt"),
+        estimated_response = os.path.join(RESULTS_DIR,"files","Zhang2022","estimated_drug_response_by_drug-EX.tsv.gz"),
+        drug_models = os.path.join(MODELS_DIR,"files","model_summaries_drug_response-EX.tsv.gz"),
+        drug_screens_dir = file.path(PREP_DIR,'drug_screens'),
+        drug_targets = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz'),
+        protein_impact = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
+        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
+        gene_info = os.path.join(RAW_DIR,"ENSEMBL","gene_annotation-hg38.tsv.gz"),
+        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,"figures","eda_treatments"))
+    shell:
+        """
+        Rscript scripts/figures_eda_treatments.R \
+                    --metadata_file={input.} \
+                    --splicing_file={input.} \
+                    --genexpr_file={input.} \
+                    --spldep_file={input.} \
+                    --selected_events_file={input.} \
+                    --estimated_response_file={input.} \
+                    --drug_models_file={input.} \
+                    --drug_screens_dir={input.} \
+                    --drug_targets_file={input.} \
+                    --protein_impact_file={input.} \
+                    --event_info_file={input.} \
+                    --gene_info_file={input.} \
+                    --annotation_file={input.} \
+                    --figs_dir={output}
+        """

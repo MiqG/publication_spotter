@@ -1,4 +1,7 @@
 # Structural Analysis Reproducibility
+- MDM2 structures
+    - with TP53: 4hfz
+    - with Nutlin: 4hg7
 - colors MDM2 structure
     - MDM2 exon: 6AC2BF
     - TP53: 444444
