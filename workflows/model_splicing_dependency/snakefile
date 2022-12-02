@@ -50,22 +50,22 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'), event_type=EVENT_TYPES),
         ### randomize model selection
-        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
+        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
+        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
+        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
+        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
         ## Associations between splicing dependency and transcriptomic indices
-        expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ## make figures
-        os.path.join(RESULTS_DIR,'figures','model_selection'),
+        #os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # MODEL VALIDATION
         ## EXON-LEVEL CRISPR SCREENS
         ### compute splicing dependencies
         expand(os.path.join(RESULTS_DIR,'files','{dataset}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, dataset=["Thomas2020","Hart2015"]),
         ### make figures
-        os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020'),
-        os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020'),        
+        #os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020'),
+        #os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020'),        
         
         ## ENCORE RBP KD SCREENS
         ### compute splicing dependencies
@@ -286,27 +286,26 @@ rule correlate_transcriptome_indices_ccle:
         
 rule figures_model_selection:
     input:
-        models_file = os.path.join(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz"),
-        ccle_stats_file = os.path.join(PREP_DIR,"stats","CCLE.tsv.gz"),
-        indices_file = os.path.join(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz"),
-        event_mut_file = os.path.join(PREP_DIR,'event_snv','CCLE-EX.tsv.gz'),
-        gene_mut_freq_file = os.path.join(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz"),
-        event_mut_freq_file = os.path.join(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz"),
+        models = os.path.join(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz"),
+        ccle_stats = os.path.join(PREP_DIR,"stats","CCLE.tsv.gz"),
+        indices = os.path.join(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz"),
+        event_mut = os.path.join(PREP_DIR,'event_snv','CCLE-EX.tsv.gz'),
+        gene_mut_freq = os.path.join(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz"),
+        event_mut_freq = os.path.join(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz"),
         msigdb_dir = os.path.join(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs"),
-        protein_impact_file = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
-        cosmic_genes_file = os.path.join(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv"),
-        spldep_file = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
-        rnai_file = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
-        genexpr_file = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
-        splicing_file = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
-        cancer_events_file = os.path.join(ROOT,"support","cancer_events.tsv"),
-        ascanceratlas_file = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz"),
-        event_info_file = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
-        metadata_file = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
-        ppi_closeness_file = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz'),
-        randsel_events_file = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','events-merged.tsv.gz'),
-        randsel_genes_file = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','genes-merged.tsv.gz')
-        figs_dir = os.path.join(RESULTS_DIR,"figures","model_selection")
+        protein_impact = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
+        cosmic_genes = os.path.join(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv"),
+        spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        rnai = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        splicing = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        cancer_events = os.path.join(ROOT,"support","cancer_events.tsv"),
+        ascanceratlas = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz"),
+        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
+        metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        ppi_closeness = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz'),
+        randsel_events = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','events-merged.tsv.gz'),
+        randsel_genes = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','genes-merged.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_selection'))
     shell:
@@ -318,7 +317,7 @@ rule figures_model_selection:
                     --event_mut_file={input.event_mut} \
                     --gene_mut_freq_file={input.gene_mut_freq} \
                     --event_mut_freq_file={input.event_mut_freq} \
-                    --msigdb_dir={input.msigdb} \
+                    --msigdb_dir={input.msigdb_dir} \
                     --protein_impact_file={input.protein_impact} \
                     --cosmic_genes_file={input.cosmic_genes} \
                     --spldep_file={input.spldep} \
@@ -370,6 +369,7 @@ rule figures_validation_crispr_Thomas2020:
         tpm = os.path.join(RAW_DIR,'articles','Thomas2020','vast_out','TPM-hg38-2.tab.gz'),
         selected_events = os.path.join(RESULTS_DIR,"files","selected_models-EX.txt"),
         spldep = os.path.join(RESULTS_DIR,'files','Thomas2020','splicing_dependency-EX','mean.tsv.gz'),
+        ccle_splicing = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
         ccle_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020'))

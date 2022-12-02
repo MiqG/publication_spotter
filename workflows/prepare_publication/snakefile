@@ -130,7 +130,7 @@ rule supplementary_tables:
         
         for key, f in input.items():
             filename = os.path.basename(f)
-            outfile = os.path.join(outdir,key+"-"+filename)
+            outfile = os.path.join(outdir,key+".tsv.gz")
             cmd = ["cp", f, outfile]
             print(cmd)
             subprocess.call(cmd)
