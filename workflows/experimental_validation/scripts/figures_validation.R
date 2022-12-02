@@ -59,13 +59,27 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
     
     plts = list()
     
-    plts[["validation-od"]] = validation_clonogenic %>%
+    plts[["validation-od_raw"]] = validation_clonogenic %>%
         mutate(event_gene = fct_reorder(event_gene, -od, mean)) %>%
         ggplot(aes(x=event_gene, y=od)) +
         geom_boxplot(width=0.5, outlier.shape=NA) +
         geom_jitter(aes(color=as.factor(replicate_biological)), size=0.5, width=0.1) +
         color_palette(PAL_REPLICATES) +
-        labs(x="Condition", y="OD570", color="Replicate") +
+        labs(x="Condition", y="Cell Proliferation (OD570)", color="Replicate") +
+        theme_pubr(x.text.angle = 70) +
+        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
+                           size=FONT_SIZE, family=FONT_FAMILY) + 
+        facet_wrap(~CCLE_Name, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["validation-od_norm"]] = validation_clonogenic %>%
+        left_join(od_ctl_neg, by=c("CCLE_Name","replicate_biological")) %>%
+        mutate(event_gene = fct_reorder(event_gene, -od_norm, mean)) %>%
+        ggplot(aes(x=event_gene, y=od_norm)) +
+        geom_boxplot(width=0.5, outlier.shape=NA) +
+        geom_jitter(aes(color=as.factor(replicate_biological)), size=0.5, width=0.1) +
+        color_palette(PAL_REPLICATES) +
+        labs(x="Condition", y="Cell Proliferation (OD570)", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
         stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
                            size=FONT_SIZE, family=FONT_FAMILY) + 
@@ -140,7 +154,8 @@ save_plt = function(plts, plt_name, extension='.pdf',
 
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "validation-od", '.pdf', figs_dir, width=5, height=10)
+    save_plt(plts, "validation-od_raw", '.pdf', figs_dir, width=5, height=10)
+    save_plt(plts, "validation-od_norm", '.pdf', figs_dir, width=5, height=10)
     save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=15)
 }
 
@@ -269,6 +284,17 @@ main = function(){
     # drop KRAS because we do not know if the SSO worked
     validation_clonogenic = validation_clonogenic %>% filter(event_gene != "HsaEX0034998_KRAS")
     validation_harm_scores = validation_harm_scores %>% filter(event_gene != "HsaEX0034998_KRAS")
+    
+    # normalize OD by biological replicate
+    od_ctl_neg = validation_clonogenic %>%
+        filter(event_gene=="CONTROL_NEG") %>%
+        group_by(CCLE_Name, replicate_biological) %>%
+        summarize(od_ctl_neg = mean(od)) %>%
+        ungroup()
+    
+    validation_clonogenic = validation_clonogenic %>%
+        left_join(od_ctl_neg, by=c("CCLE_Name","replicate_biological")) %>%
+        mutate(od_norm = od / od_ctl_neg)
     
     # plot
     plts = make_plots(validation_clonogenic, validation_harm_scores)
