@@ -132,9 +132,9 @@ rule compute_splicing_dependency:
         coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
     output:
         directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'))
-    threads: 20
+    threads: 24
     resources:
-        runtime = 86400, # seconds = 24h = 1 day
+        runtime = 3600*24, # seconds = 24h = 1 day
         memory = 30
     params:
         script_dir = TS_DIR
