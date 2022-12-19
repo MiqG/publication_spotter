@@ -20,6 +20,7 @@ MODEL_VAL_THOMAS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","fig
 MODEL_VAL_GONATO_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Gonatopoulos-Pournatzis2020","figdata")
 MODEL_VAL_ENCORE = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_encore","figdata")
 TARGET_VAL_TCGA = os.path.join(RESULTS_DIR,"streamlined_therapy_dev","figures","targetable_events","figdata")
+TARGET_VAL_SEL = os.path.join(RESULTS_DIR,"experimental_validation","figures","selection_exons_to_validate","figdata")
 TARGET_VAL_EXP = os.path.join(RESULTS_DIR,"experimental_validation","figures","validation","figdata")
 MODEL_DRUG_SENS_DIR = os.path.join(RESULTS_DIR,"exon_drug_interactions","figures","model_drug_screens","figdata")
 VAL_TREAT_RECOM_DIR = os.path.join(RESULTS_DIR,"splicing_dependency_treatments","figures","eda_treatments","figdata")
@@ -89,8 +90,8 @@ rule supplementary_tables:
         #suptab26_targetable_exons_sso_sequences = ""
         ## SSO - sequences primers
         #suptab27_targetable_exons_primer_sequences = ""
-        ## SSO - cancer cells RNA-seq: PSI, TPM, Spl. Dep., Harm Score (TODO)
-        suptab28_targetable_exons_spotter_results = os.path.join(TARGET_VAL_EXP,"experiments","validation_harm_scores.tsv.gz"),
+        ## SSO - cancer cells RNA-seq: PSI, TPM, Spl. Dep., Harm Score
+        suptab28_selected_exons_spotter_results = os.path.join(TARGET_VAL_SEL,"selection_events","selected_events.tsv.gz"),
         ## SSO - cell proliferation experiments
         suptab29_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz"),
         

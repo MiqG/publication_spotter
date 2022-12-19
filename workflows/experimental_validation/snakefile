@@ -18,6 +18,7 @@ import pandas as pd
 
 # variables
 ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+SUPPORT_DIR = os.path.join(ROOT,"support")
 SRC_DIR = os.path.join(ROOT,"src")
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
@@ -25,6 +26,7 @@ RESULTS_DIR = os.path.join(ROOT,'results','experimental_validation')
 PANGOLIN_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','Pangolin')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 CCLE_DIR = os.path.join(ROOT,"results","model_splicing_dependency")
+TCGA_DIR = os.path.join(ROOT,'results','streamlined_therapy_dev')
 
 EVENTS_OI = [
     "HsaEX0006970",
@@ -102,6 +104,7 @@ rule all:
         #expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI),
         
         # figures
+        os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
         os.path.join(RESULTS_DIR,"figures","validation")
 
         
@@ -220,6 +223,43 @@ rule compute_splicing_dependency:
                     --log_transform
         """
         
+rule figures_selection_exons_to_validate:
+    input:
+        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
+        event_info = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
+        protein_impact = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
+        ccle_spldep = os.path.join(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz'),
+        ccle_genexpr = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        ccle_splicing = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        ccle_stats = os.path.join(PREP_DIR,"stats","CCLE.tsv.gz"),
+        ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        selected_events = os.path.join(CCLE_DIR,'files','selected_models-EX.txt'),
+        diff_result_sample = os.path.join(TCGA_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
+        spldep_stats = os.path.join(TCGA_DIR,'files','PANCAN','summary_splicing_dependency-EX.tsv.gz'),
+        diff_result_subtypes = os.path.join(TCGA_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
+        spldep_stats_subtypes = os.path.join(TCGA_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz'),
+        available_cells = os.path.join(SUPPORT_DIR,"available_cancer_cells.tsv")
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'))
+    shell:
+        """
+        Rscript sripts/figures_selection_exons_to_validate.R \
+                    --annotation_file={input.annotation} \
+                    --event_info_file={input.event_info} \
+                    --protein_impact_file={input.protein_impact} \
+                    --ccle_spldep_file={input.ccle_spldep} \
+                    --ccle_genexpr_file={input.ccle_genexpr} \
+                    --ccle_splicing_file={input.ccle_splicing} \
+                    --ccle_stats_file={input.ccle_stats} \
+                    --ccle_metadata_file={input.ccle_metadata} \
+                    --selected_events_file={input.selected_events} \
+                    --diff_result_sample_file={input.diff_result_sample} \
+                    --spldep_stats_file={input.spldep_stats} \
+                    --diff_result_subtypes_file={input.diff_result_subtype} \
+                    --spldep_stats_subtypes_file={input.spldep_stats_subtypes} \
+                    --available_cells_file={input.available_cells} \
+                    --figs_dir={output}
+        """
         
 rule figures_validation:
     input:

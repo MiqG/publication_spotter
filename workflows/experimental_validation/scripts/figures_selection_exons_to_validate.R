@@ -13,6 +13,7 @@
 # 4. Add information on drugs
 # 5. Check splicing correlation between exons
 
+require(optparse)
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
@@ -21,9 +22,6 @@ require(ggrepel)
 require(extrafont)
 require(ComplexHeatmap)
 require(ggplotify)
-
-ROOT = here::here()
-source(file.path(ROOT,"src","R","utils.R"))
 
 # variables
 #MIN_N_OBS = 20
@@ -43,7 +41,7 @@ THRESH_DRUGS_FDR = 0.1
 THRESH_DRUGS_NOBS = 20
 
 SELECTED_CELL_LINES = c(
-    "A549_LUNG", # on-going
+    "A549_LUNG",
     "HT29_LARGE_INTESTINE",
     "MDAMB231_BREAST"
 )
@@ -56,15 +54,15 @@ SELECTED_EXONS = c(
     #"HsaEX0043609_NPNT",
     #"HsaEX0006970_ATP6V0A2",
     #"HsaEX0056284_SATB2"
+    #"HsaEX0034998_KRAS",
+    #"HsaEX0020455_DNM2",
     "HsaEX0070392_VLDLR",
-    "HsaEX0052877_RCC1",
-    "HsaEX0049558_PPP1R12A",
-    "HsaEX0044398_NUP85",
-    "HsaEX0034998_KRAS",
-    "HsaEX0071941_YAP1",
     "HsaEX0050345_PRPF18",
+    "HsaEX0049558_PPP1R12A",
     "HsaEX0026116_FNBP1",
-    "HsaEX0020455_DNM2"
+    "HsaEX0071941_YAP1",
+    "HsaEX0052877_RCC1",
+    "HsaEX0044398_NUP85"
 )
 
 # formatting
@@ -83,49 +81,29 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
+# ROOT = here::here()
 # RAW_DIR = file.path(ROOT,'data','raw')
 # PREP_DIR = file.path(ROOT,'data','prep')
 # SUPPORT_DIR = file.path(ROOT,'support')
+# CCLE_DIR = file.path(ROOT,"results","model_splicing_dependency")
+# TCGA_DIR = file.path(ROOT,'results','streamlined_therapy_dev')
+# RESULTS_DIR = file.path(ROOT,'results','experimental_validation')
 
 # annotation_file = file.path(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 # event_info_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
-
-# genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
-# splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
+# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
+# ccle_spldep_file = file.path(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
+# ccle_genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
+# ccle_splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # ccle_stats_file = file.path(PREP_DIR,"stats","CCLE.tsv.gz")
 # ccle_metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
-
-# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
-# cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
-# encore_ontology_file = file.path(ROOT,"results","model_splicing_dependency",'files','ENCORE','kd_gene_sets-EX.tsv.gz')
-# cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
-
-# CCLE_DIR = file.path(ROOT,"results","model_splicing_dependency")
-# spldep_file = file.path(CCLE_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
-# spldep_ccle_file = file.path(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
 # selected_events_file = file.path(CCLE_DIR,'files','selected_models-EX.txt')
-
-# DRUGS_DIR = file.path(ROOT,"results","splicing_dependency_drugs")
-# drug_models_file = file.path(DRUGS_DIR,"files","model_summaries_drug_response-EX.tsv.gz")
-# drug_targets_file = file.path(PREP_DIR,'drug_screens','drug_targets.tsv.gz') 
-
-# TCGA_DIR = file.path(ROOT,'results','splicing_dependency_tcga')
-
 # diff_result_sample_file = file.path(TCGA_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_file = file.path(TCGA_DIR,'files','PANCAN','summary_splicing_dependency-EX.tsv.gz')
-
 # diff_result_subtypes_file = file.path(TCGA_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_subtypes_file = file.path(TCGA_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
-
 # available_cells_file = file.path(SUPPORT_DIR,"available_cancer_cells.tsv")
-
-# RESULTS_DIR = file.path(ROOT,'results','splicing_dependency_validation')
 # figs_dir = file.path(RESULTS_DIR,'figures','selection_exons_to_validate')
-
-# models_file = file.path(ROOT,"results","model_splicing_dependency","files","models_gene_dependency-EX","model_summaries.tsv.gz")
-
-# clonogenic_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20221019-clonogenic_assay-od.tsv")
-
 
 ##### FUNCTIONS #####
 from_matrix_to_edgelist = function(X){
@@ -158,9 +136,9 @@ prep_diff_result = function(diff_result, spldep_stats){
 
 
 compute_harm_score = function(spldep, splicing){
-    # compute harm score
+    # compute maximum harm score
     ## H.S. = (-1) * SplDep * DeltaPSI
-    ## where DeltaPSI is in the direction of inclusion if SplDep>0, or exclusion if SplDep<0
+    ## where DeltaPSI is in the direction of exclusion
     common_samples = intersect(colnames(spldep), colnames(splicing))
     common_samples = setdiff(common_samples, "event_gene")
     common_events = intersect(spldep[["event_gene"]], splicing[["event_gene"]])
@@ -171,8 +149,7 @@ compute_harm_score = function(spldep, splicing){
     splicing_mat = splicing_mat[common_events, common_samples]
     
     psi_final = spldep_mat
-    psi_final[psi_final<0] = 0 # remove oncoexons
-    psi_final[psi_final>0] = 100 # include tumor-suppressor exons
+    psi_final[,] = 0 # remove oncoexons
     harm = (-1) * spldep_mat * (psi_final - splicing_mat)
     
     harm = harm %>% rownames_to_column("event_gene")
@@ -479,7 +456,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
     
     
     # overview
-    palette = setNames(get_palette("Paired", length(available_cells)), 
+    palette = setNames(get_palette("Accent", length(available_cells)), 
                        ccle_metadata %>% filter(DepMap_ID %in% available_cells) %>% 
                        pull(CCLE_Name) %>% unique() %>% sort())
     
@@ -512,6 +489,19 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         theme_pubr(x.text.angle=70) +
         labs(x="Gene", y="log2(TPM+1)", color="Cell Line")
     
+    plts[["selection_exons-spldep-selected"]] = ccle_spldep %>%
+        filter(event_gene %in% top_events) %>%
+        mutate(event_gene = factor(event_gene, levels=top_events)) %>%
+        pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="spldep") %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
+        filter(event_gene %in% SELECTED_EXONS) %>%
+        mutate(event_gene = factor(event_gene, levels=SELECTED_EXONS)) %>%
+        ggbarplot(x="event_gene", y="spldep", fill="CCLE_Name", color=NA,
+                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
+        theme_pubr(x.text.angle=70) +
+        labs(x="Event & Gene", y="Spl. Dep.", fill="Cell Line")
+    
     plts[["selection_exons-harm-selected"]] = ccle_harm %>%
         filter(event_gene %in% top_events) %>%
         mutate(event_gene = factor(event_gene, levels=top_events)) %>%
@@ -519,10 +509,11 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
         filter(event_gene %in% SELECTED_EXONS) %>%
-        ggstripchart(x="event_gene", y="harm_score", color="CCLE_Name", 
-                     palette=palette[SELECTED_CELL_LINES]) +
+        mutate(event_gene = factor(event_gene, levels=SELECTED_EXONS)) %>%
+        ggbarplot(x="event_gene", y="harm_score", fill="CCLE_Name", color=NA, 
+                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
         theme_pubr(x.text.angle=70) +
-        labs(x="Event & Gene", y="Harm Score", color="Cell Line")
+        labs(x="Event & Gene", y="Max. Harm Score", fill="Cell Line")
     
     plts[["selection_exons-splicing-selected"]] = ccle_splicing %>%
         filter(event_gene %in% top_events) %>%
@@ -531,21 +522,25 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
         filter(event_gene %in% SELECTED_EXONS) %>%
-        ggstripchart(x="event_gene", y="psi", color="CCLE_Name", 
-                     palette=palette[SELECTED_CELL_LINES]) +
+        mutate(event_gene = factor(event_gene, levels=SELECTED_EXONS)) %>%
+        ggbarplot(x="event_gene", y="psi", fill="CCLE_Name", color=NA, 
+                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
         theme_pubr(x.text.angle=70) +
-        labs(x="Event & Gene", y="PSI", color="Cell Line")
+        labs(x="Event & Gene", y="PSI", fill="Cell Line")
     
+    selected_genes = gsub(".*_","",SELECTED_EXONS)
     plts[["selection_exons-genexpr-selected"]] = ccle_genexpr %>%
         filter(GENE %in% top_genes) %>%
         mutate(GENE = factor(GENE, levels=top_genes)) %>%
         pivot_longer(cols= -GENE, names_to="DepMap_ID", values_to="genexpr") %>%
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
-        ggstripchart(x="GENE", y="genexpr", color="CCLE_Name",
-                     palette=palette[SELECTED_CELL_LINES]) +
+        filter(GENE %in% selected_genes) %>%
+        mutate(GENE = factor(GENE, levels=selected_genes)) %>%
+        ggbarplot(x="GENE", y="genexpr", fill="CCLE_Name", color=NA, 
+                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
         theme_pubr(x.text.angle=70) +
-        labs(x="Gene", y="log2(TPM+1)", color="Cell Line")
+        labs(x="Gene", y="log2(TPM+1)", fill="Cell Line")
     
     return(plts)
 }
@@ -564,51 +559,42 @@ make_plots = function(ccle_stats, genes_oi, events_oi,
 }
 
 
-make_figdata = function(events_oi, annot, event_info, protein_impact, ccle_harm_stats,
-                        cancer_events, cosmic_genes, encore_ontology){
+make_figdata = function(ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata){
     
-    # a table of exons to be considered for validation
-    # as they have therapeutic potential
-    exons_info = annot %>% 
-        filter(event_gene %in% events_oi) %>% 
-        left_join(event_info %>% dplyr::select(-GENE), by="EVENT") %>% 
-        left_join(protein_impact, by="EVENT") %>%
+    selected_events = ccle_harm %>%
+        filter(event_gene %in% SELECTED_EXONS) %>%
+        distinct(event_gene) %>%
+        separate(event_gene, into=c("EVENT","GENE"), remove=FALSE) %>%
         left_join(
-            ccle_harm_stats %>% 
-            rename_at(vars(-event_gene),function(x) paste0("harm_",x)),
-            by = "event_gene") %>%
-        mutate(in_true_positive_set = EVENT %in% cancer_events[["EVENT"]],
-               in_cosmic_genes = GENE %in% cosmic_genes[["gene"]])
+            ccle_harm %>%
+            filter(event_gene %in% SELECTED_EXONS) %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="harm_score_exclusion"),
+            by="event_gene"
+        ) %>%
+        left_join(
+            ccle_spldep %>%
+            filter(event_gene %in% SELECTED_EXONS) %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="spldep"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%
+        left_join(
+            ccle_splicing %>%
+            filter(event_gene %in% SELECTED_EXONS) %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="psi"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%  
+        left_join(
+            ccle_genexpr %>%
+            filter(GENE %in% gsub(".*_","",SELECTED_EXONS)) %>%
+            pivot_longer(cols= -GENE, names_to="DepMap_ID", values_to="tpm"),
+            by=c("GENE","DepMap_ID")
+        ) %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES)
     
-    ## add ontology        
-    exons_info = exons_info %>%
-        left_join(
-            encore_ontology %>% 
-            filter(EVENT %in% exons_info[["EVENT"]]) %>%
-            group_by(EVENT) %>%
-            arrange(term) %>%
-            summarize(putative_upstream_rbps = str_c(term, collapse = "; ")),
-            by = "EVENT"
-        )
-            
-    ## add drug associations
-    exons_info = exons_info %>%
-        left_join(
-            drug_models %>% 
-            left_join(
-                drug_targets %>% 
-                distinct(DRUG_ID, DRUG_NAME), 
-                by="DRUG_ID"
-            ) %>% 
-            distinct(EVENT, DRUG_NAME) %>%
-            group_by(EVENT) %>%
-            summarize(drug_associations = str_c(DRUG_NAME, collapse = "; ")),
-            by="EVENT"
-        )
-            
     figdata = list(
-        "selection_exons" = list(
-            "exons_info" = exons_info
+        "selection_events" = list(
+            "selected_events" = selected_events
         )
     )
     return(figdata)
@@ -640,10 +626,6 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'selection_exons-corrs-scatter', '.pdf', figs_dir, width=8, height=9)
     
     for (i in 1:TOP_N){
-#         cm = 1/2.54
-#         pdf(file.path(figs_dir,sprintf('selection_exons-harm-heatmap-%s.pdf',i)), width=16*cm, height=13*cm)
-#         plts[[sprintf('selection_exons-harm-heatmap-%s',i)]] %>% draw(legend_labels_gp = gpar(fontsize=6)) # this does nothing
-#         dev.off()
         save_plt(plts, paste0('selection_exons-harm-heatmap-',i), '.pdf', figs_dir, width=18, height=15, format=FALSE)
         save_plt(plts, paste0('selection_exons-genexpr-violin-',i), '.pdf', figs_dir, width=7, height=7)
         save_plt(plts, paste0('selection_exons-splicing-violin-',i), '.pdf', figs_dir, width=10, height=10)
@@ -655,12 +637,10 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "selection_exons-splicing-overview", '.pdf', figs_dir, width=15, height=13)
     save_plt(plts, "selection_exons-genexpr-overview", '.pdf', figs_dir, width=15, height=13)
     
-    save_plt(plts, "selection_exons-harm-selected", '.pdf', figs_dir, width=15, height=13)
-    save_plt(plts, "selection_exons-splicing-selected", '.pdf', figs_dir, width=15, height=13)
-    save_plt(plts, "selection_exons-genexpr-selected", '.pdf', figs_dir, width=15, height=13)
-    
-    save_plt(plts, "validation-od", '.pdf', figs_dir, width=13, height=8)
-    save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=8, height=8)
+    save_plt(plts, "selection_exons-spldep-selected", '.pdf', figs_dir, width=3.75, height=6.9)
+    save_plt(plts, "selection_exons-harm-selected", '.pdf', figs_dir, width=3.75, height=6.9)
+    save_plt(plts, "selection_exons-splicing-selected", '.pdf', figs_dir, width=3.75, height=6.9)
+    save_plt(plts, "selection_exons-genexpr-selected", '.pdf', figs_dir, width=3.75, height=6.9)
 }
 
 
@@ -678,16 +658,49 @@ save_figdata = function(figdata, dir){
     })
 }
 
+parseargs = function(){
+    
+    option_list = list( 
+        make_option("--annotation_file", type="character"),
+        make_option("--event_info_file", type="character"),
+        make_option("--protein_impact_file", type="character"),
+        make_option("--ccle_spldep_file", type="character"),
+        make_option("--ccle_genexpr_file", type="character"),
+        make_option("--ccle_splicing_file", type="character"),
+        make_option("--ccle_stats_file", type="character"),
+        make_option("--ccle_metadata_file", type="character"),
+        make_option("--selected_events_file", type="character"),
+        make_option("--diff_result_sample_file", type="character"),
+        make_option("--spldep_stats_file", type="character"),
+        make_option("--diff_result_subtypes_file", type="character"),
+        make_option("--spldep_stats_subtypes_file", type="character"),
+        make_option("--available_cells_file", type="character"),
+        make_option("--figs_dir", type="character")
+    )
+
+    args = parse_args(OptionParser(option_list=option_list))
+    
+    return(args)
+}
 
 main = function(){
-    args = getParsedArgs()
-    diff_result_sample_file = args$diff_result_sample_file
-    diff_result_response_file = args$diff_result_response_file
-    selected_events_file = args$selected_events_file
-    spldep_file = args$spldep_file
-    psi_ccle_file = args$psi_ccle_file
-    spldep_ccle_file = args$spldep_ccle_file
-    figs_dir = args$figs_dir
+    args = parseargs()
+    
+    protein_impact_file = args[["annotation_file"]]
+    protein_impact_file = args[["event_info_file"]]
+    protein_impact_file = args[["protein_impact_file"]]
+    event_info_file = args[["event_info_file"]]
+    selected_events_file = args[["selected_events_file"]]
+    ccle_spldep_file = args[["ccle_spldep_file"]]
+    ccle_genexpr_file = args[["ccle_genexpr_file"]]
+    ccle_splicing_file = args[["ccle_splicing_file"]]
+    ccle_stats_file = args[["ccle_stats_file"]]
+    ccle_metadata_file = args[["ccle_metadata_file"]]
+    diff_result_sample_file = args[["diff_result_sample_file"]]
+    spldep_stats_file = args[["spldep_stats_file"]]
+    diff_result_subtypes_file = args[["diff_result_subtypes_file"]]
+    spldep_stats_subtypes_file = args[["spldep_stats_subtypes_file"]]
+    figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
     
@@ -705,14 +718,6 @@ main = function(){
             impact_clean=gsub("In the CDS, with uncertain impact",
                              "In the CDS (uncertain)",impact_clean)
         )
-    
-    encore_ontology = read_tsv(encore_ontology_file)
-    cancer_events = read_tsv(cancer_events_file)
-    cosmic_genes = read_tsv(cosmic_genes_file) %>%
-            dplyr::select("Gene Symbol") %>%
-            rename(gene = `Gene Symbol`) %>%
-            mutate(term = "COSMIC_CENSUS") %>%
-            dplyr::select(term,gene)
     
     event_info = read_tsv(event_info_file)
     annot = read_tsv(annotation_file) %>%
@@ -742,25 +747,17 @@ main = function(){
     
     ccle_metadata = read_tsv(ccle_metadata_file)
     ccle_stats = read_tsv(ccle_stats_file)
-    ccle_splicing = read_tsv(splicing_file) %>%
+    ccle_splicing = read_tsv(ccle_splicing_file) %>%
         left_join(events_genes %>% distinct(EVENT,event_gene), by="EVENT") %>%
         dplyr::select(-EVENT)
-    ccle_genexpr = read_tsv(genexpr_file) %>%
+    ccle_genexpr = read_tsv(ccle_genexpr_file) %>%
         mutate_if(is.numeric, function(x){ log2(x+1) }) %>%
         left_join(events_genes %>% distinct(GENE,ENSEMBL), by=c("ID"="ENSEMBL")) %>%
         dplyr::select(-ID)
-    ccle_spldep = read_tsv(spldep_file) %>% 
+    ccle_spldep = read_tsv(ccle_spldep_file) %>% 
         filter(index %in% selected_events) %>%
         left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
         dplyr::select(-index)
-    
-    drug_models = read_tsv(drug_models_file) %>% 
-        mutate(event_gene = paste0(EVENT,"_",GENE),
-               event_type = gsub("Hsa","",gsub("[^a-zA-Z]", "",EVENT))) %>%
-        filter(lr_padj < THRESH_DRUGS_FDR & n_obs > THRESH_DRUGS_NOBS)
-    drug_targets = read_tsv(drug_targets_file) %>% 
-        mutate(DRUG_NAME=toupper(DRUG_NAME)) %>%
-        distinct(DRUG_ID,DRUG_NAME,TARGET,TARGET_PATHWAY)
     
     available_cells = read_tsv(available_cells_file) %>%
         drop_na(DepMap_ID) %>%
@@ -769,19 +766,6 @@ main = function(){
         filter(culture_type %in% c("Adherent",NA)) %>% # we don't want suspension
         pull(DepMap_ID) %>%
         unique()
-    
-    clonogenic_od = read_tsv(clonogenic_od_file) %>%
-        mutate(cell_line="A549_LUNG") %>%
-        group_by(cell_line, event_gene, replicate_technical) %>%
-        summarize(od = mean(od)) %>% # summarize OD replicates
-        ungroup()
-    
-    # subset cell types
-#     not_oi = c("Unknown","Engineered","Non-Cancerous","Fibroblast")
-#     cultures_oi = c("Adherent","not found",NA)
-#     to_drop = ccle_metadata %>%
-#         filter((primary_disease %in% not_oi) | !(culture_type %in% cultures_oi)) %>%
-#         pull(DepMap_ID)
     
     # prep results differential analyses
     tcga_diff_result = prep_diff_result(tcga_diff_result, tcga_spldep_stats)
@@ -841,8 +825,7 @@ main = function(){
                       events_genes, protein_impact, available_cells)
     
     # make figdata
-    figdata = make_figdata(events_oi, annot, event_info, protein_impact, ccle_harm_stats,
-                           cancer_events, cosmic_genes, encore_ontology)
+    figdata = make_figdata(ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata)
 
     # save
     save_plots(plts, figs_dir)
