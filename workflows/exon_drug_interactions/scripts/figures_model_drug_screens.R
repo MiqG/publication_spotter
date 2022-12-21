@@ -111,8 +111,7 @@ PAL_PROT_IMP = setNames(
 load_drug_screens = function(drug_screens_dir){
     filenames = cbind(
         drug_screens_dir,
-        expand_grid(c("train","test"),c("GDSC1.tsv.gz","GDSC2.tsv.gz")
-                   )
+        expand_grid(c("train","test"),c("GDSC1.tsv.gz","GDSC2.tsv.gz"))
     )
     dfs = apply(filenames, 1, function(x){
         x = as.vector(x)
@@ -442,8 +441,13 @@ plot_ppi = function(models, shortest_paths){
                path_lab = ifelse(shortest_path_length>=5,">=5",path_lab),
                path_lab = ifelse(shortest_path_length==1e6,"N.R.",path_lab),
                path_lab = factor(path_lab, levels=c("0","1","2","3","4",">=5","N.R."))) %>%
-        filter(path_lab != "N.R.") %>% # drop those for which we cannot measure a shortest path
-        drop_na(is_sel)
+        # drop those for which we cannot measure a shortest path
+        filter(path_lab != "N.R.") %>% 
+        drop_na(is_sel) %>%
+        group_by(source) %>%
+        mutate(is_sel = any(is_sel)) %>%
+        ungroup() %>%
+        distinct(source, target, DRUG_ID, is_sel, path_lab)
     
     plts = list()
     
@@ -465,32 +469,30 @@ plot_ppi = function(models, shortest_paths){
                   label = TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY) + 
         labs(x="Shortest Path Length to Drug Target(s)", y="Proportion", fill="Selected")
     
-    plts[["ppi-bar-rel_prop"]] = X %>% 
-        count(is_sel, path_lab) %>% 
+    x = X %>% 
+        group_by(is_sel, path_lab, .drop=FALSE) %>%
+        summarize(n=n()) %>%
+        ungroup() %>%
         group_by(is_sel) %>%
         mutate(prop = n / sum(n)) %>%
         ungroup() %>%
         group_by(path_lab) %>%
         mutate(rel_prop = prop / sum(prop)) %>%
         ungroup() %>%
-        ggbarplot(x="path_lab", y="rel_prop", fill="is_sel", color=NA,
-                  palette=PAL_DUAL) + 
+        drop_na()
+    
+    test = x %>% 
+        pivot_wider(id_cols="is_sel",names_from="path_lab",values_from="n") %>% 
+        column_to_rownames("is_sel") %>%
+        chisq.test()
+    test_df = data.frame(
+        label = sprintf("Chi-Squared, p=%s", signif(test[["p.value"]], digits=2))
+    )
+    plts[["ppi-bar-rel_prop"]] = x %>%
+        ggbarplot(x="path_lab", y="rel_prop", fill="is_sel", color=NA, palette=PAL_DUAL) + 
+        geom_text(aes(y=1.05, label=n, color=is_sel), size=FONT_SIZE, family=FONT_FAMILY) +
+        geom_text(aes(x=1.5, y=0.05, label=label), data=test_df, size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Shortest Path Length to Drug Target(s)", y="Rel. Proportion", fill="Selected")
-    
-    # - Are FDRs or effect sizes of significant associations informative of closeness to drug target?
-    plts[["ppi-box-lr_padj"]] = X %>% 
-        ggboxplot(x="path_lab", y="lr_padj", fill="is_sel", 
-                  palette=PAL_DUAL, outlier.size=0.1) + 
-        labs(x="Shortest Path Length to Drug Target(s)", y="LR FDR", fill="Selected") +
-        facet_wrap(~is_sel, ncol=2, scales="free_y") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-    
-    plts[["ppi-box-spldep_coef"]] = X %>%
-        ggboxplot(x="path_lab", y="spldep_coefficient", fill="is_sel", 
-                  palette=PAL_DUAL, outlier.size=0.1) + 
-        labs(x="Shortest Path Length to Drug Target(s)", y="Spl. Dep. Coef.", fill="Selected") +
-        facet_wrap(~is_sel, ncol=2, scales="free_y") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     return(plts)
 }
@@ -1073,8 +1075,54 @@ plot_reactome = function(eval_reactome){
     return(plts)
 }
 
-prep_examples = function(splicing, genexpr, snv, ontology, gene_info){
-## get splicing of HsaEX0038414_MDM4 across samples
+prep_examples = function(drug_screen, splicing, genexpr, snv, ontology, gene_info){
+    examples = list()
+    
+    # HsaEX0038400_MDM2
+    ## get splicing of HsaEX0038400_MDM2 across samples
+    splicing_oi = splicing %>%
+        filter(EVENT == "HsaEX0038400") %>%
+        pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi")
+    
+    ## get samples with TP53 mutations
+    muts_oi = snv %>%
+        filter(Hugo_Symbol=="TP53" & Variant_Classification!="Silent") %>%
+        group_by(DepMap_ID) %>%
+        summarize(mutated_tp53 = TRUE) %>%
+        ungroup()
+    
+    ## log-transform TPMs and get genes in P53 pathway only
+    tpm = genexpr %>% 
+        mutate_at(vars(-ID), function(x){log2(x+1)})
+
+    genexpr_oi = gene_info %>% 
+        filter(Gene %in% "TP53") %>% 
+        distinct(EnsID,Gene) %>%
+        left_join(tpm, by=c("EnsID"="ID")) %>%
+        pivot_longer(-c(Gene,EnsID), names_to="DepMap_ID", values_to="tpm")
+    
+    ## get sensitivity to Nutlin-3A across samples
+    drug_ic50_oi = drug_screen %>%
+        filter(DRUG_NAME == "NUTLIN-3A (-)") %>%
+        mutate(
+            log_ic50 = log(IC50_PUBLISHED),
+            DepMap_ID = ARXSPAN_ID
+        ) %>%
+        distinct(DATASET, DepMap_ID, log_ic50, DRUG_NAME, in_demeter2)
+    
+    examples[["HsaEX0038400_MDM2"]] = splicing_oi %>%
+        mutate(psi_bin = cut(psi, breaks=seq(50,100,5))) %>%
+        drop_na(psi_bin) %>%
+        left_join(drug_ic50_oi, by="DepMap_ID") %>%
+        left_join(muts_oi, by="DepMap_ID")  %>% 
+        mutate(
+            mutated_tp53 = replace_na(mutated_tp53, FALSE),
+            mutated_tp53 = ifelse(mutated_tp53, "TP53mut", "WT")
+        ) %>%
+        left_join(genexpr_oi, by="DepMap_ID")
+        
+    # HsaEX0038414_MDM4
+    ## get splicing of HsaEX0038414_MDM4 across samples
     splicing_oi = splicing %>%
         filter(EVENT == "HsaEX0038414") %>%
         pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi")
@@ -1116,15 +1164,53 @@ prep_examples = function(splicing, genexpr, snv, ontology, gene_info){
         left_join(ctl) %>%
         mutate(tpm_fc = tpm - tpm_ctl)
     
-    return(X)
+    examples[["HsaEX0038414_MDM4"]] = X
+    
+    return(examples)
 }
 
 
 plot_examples = function(examples){
     plts = list()
     
+    # how does the sensitivity to Nutlin change with inclusion of HsaEX0038400_MDM2?
+    X = examples[["HsaEX0038400_MDM2"]]
+    
+    plts[["examples-mdm2-psi_vs_ic50"]] = X %>%
+        drop_na() %>%
+        #filter(!in_demeter2) %>%
+        ggviolin(x="psi_bin", y="log_ic50", fill=PAL_SINGLE_LIGHT, color=NA, trim=TRUE) +
+        geom_boxplot(width=0.1, outlier.size=0.1) +
+        facet_wrap(~DATASET) +#, scales="free_y") +
+        theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        geom_text(
+            aes(label=n, y=-1), 
+            . %>% count(psi_bin) %>% mutate(n=sprintf("n=%s",n)), 
+            size=FONT_SIZE, family=FONT_FAMILY) +
+        labs(x="PSI HsaEX0038400_MDM2", y="log(IC50 Nutlin-3A)")
+    
+    plts[["examples-mdm2-psi-distr"]] = X %>%
+        distinct(psi, psi_bin, tpm, mutated_tp53, DepMap_ID, in_demeter2) %>%
+        gghistogram(x="psi", fill=PAL_IS_TARGET[2], color=NA) +
+        geom_vline(xintercept=seq(0,100,5), linetype="dashed", size=LINE_SIZE) +
+        labs(x="PSI HsaEX0038414_MDM4", y="Count")
+    
+    plts[["examples-mdm2-psi_vs_genexpr_tp53"]] = X %>%
+        distinct(psi, psi_bin, tpm, mutated_tp53, DepMap_ID, in_demeter2) %>%
+        filter(psi > 85) %>%
+        ggviolin(x="psi_bin", y="tpm", fill=PAL_SINGLE_LIGHT, color=NA, trim=TRUE) +
+        geom_boxplot(width=0.1, outlier.size=0.1) + 
+        geom_text(aes(label=n, y=-0.5), . %>% count(psi_bin) %>% mutate(n=sprintf("n=%s",n)), 
+                  size=FONT_SIZE, family=FONT_FAMILY) +
+        facet_wrap(~mutated_tp53) +
+        stat_compare_means(method="wilcox.test", ref.group="(85,90]", label="p.signif",
+                           size=FONT_SIZE, family=FONT_FAMILY) +
+        labs(x="PSI HsaEX0038400_MDM2", y="log2(TPM+1) TP53") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1)
+    
+    
     # Does the activation of the P53 pathway change with the splicing of HsaEX0038414_MDM4?
-    X = examples
+    X = examples[["HsaEX0038414_MDM4"]]
     
     ## distribution of event inclusion in each sample
     plts[["examples-mdm4-psi-distr"]] = X %>%
@@ -1148,7 +1234,7 @@ plot_examples = function(examples){
 #         c("(25,50]","(75,100]"),
 #         c("(50,75]","(75,100]")
 #     )
-    plts[["examples-mdm4-bins_vs_genexpr_fc_tp53"]] = X %>%
+    plts[["examples-mdm4-bins_vs_genexpr_tp53"]] = X %>%
         filter(Gene=="TP53") %>%
         ggviolin(x="psi_bin", y="tpm", fill=PAL_SINGLE_DARK, color=NA, trim=TRUE) +
         geom_boxplot(width=0.1, outlier.size=0.1) + 
@@ -1204,7 +1290,8 @@ make_figdata = function(
             "shortest_paths" = shortest_paths,
             "shortest_paths_simple" = shortest_paths_simple,
             "pred_ic50_by_drug" = estimated_response,
-            "example_mdm4" = examples %>% filter(Gene=="TP53")
+            "example_mdm4" = examples[["HsaEX0038414_MDM4"]] %>% filter(Gene=="TP53"),
+            "example_mdm2" = examples[["HsaEX0038400_MDM2"]]
         )
     )
     return(figdata)
@@ -1248,8 +1335,6 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "ppi-bar-counts", ".pdf", figs_dir, width=5, height=6)
     save_plt(plts, "ppi-bar-prop", ".pdf", figs_dir, width=5, height=6)
     save_plt(plts, "ppi-bar-rel_prop", ".pdf", figs_dir, width=4.5, height=5)
-    save_plt(plts, "ppi-box-lr_padj", ".pdf", figs_dir, width=8, height=4)
-    save_plt(plts, "ppi-box-spldep_coef", ".pdf", figs_dir, width=8, height=6)
     
     # reactome
     save_plt(plts, "reactome-violin-hits_in_pathway", ".pdf", figs_dir, width=3.5, height=3.5)
@@ -1279,9 +1364,12 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "drug_rec-best_worse", ".pdf", figs_dir, width=7, height=8)
     
     # examples
+    save_plt(plts, "examples-mdm2-psi_vs_ic50", ".pdf", figs_dir, width=7.5, height=6)
+    save_plt(plts, "examples-mdm2-psi-distr", ".pdf", figs_dir, width=4.35, height=1.5)
+    save_plt(plts, "examples-mdm2-psi_vs_genexpr_tp53", ".pdf", figs_dir, width=7.5, height=6)
     save_plt(plts, "examples-mdm4-psi-distr", ".pdf", figs_dir, width=4.35, height=1.5)
     save_plt(plts, "examples-mdm4-psi-bins", ".pdf", figs_dir, width=4.5, height=4.5)
-    save_plt(plts, "examples-mdm4-bins_vs_genexpr_fc_tp53", ".pdf", figs_dir, width=7.5, height=6)
+    save_plt(plts, "examples-mdm4-bins_vs_genexpr_tp53", ".pdf", figs_dir, width=7.5, height=6)
 }
 
 
@@ -1393,26 +1481,26 @@ main = function(){
         left_join(ontologies[["protein_impact"]], by="EVENT")
     
     ## mechanistic examples
-    examples = prep_examples(splicing, genexpr, snv, ontologies[["hallmarks"]], gene_info)
+    examples = prep_examples(drug_screen, splicing, genexpr, snv, ontologies[["hallmarks"]], gene_info)
     
     # make plots
     plts = make_plots(
-            models, drug_screen,
-            drug_targets, shortest_paths, 
-            spldep_models, shortest_paths_simple,
-            estimated_response, 
-            eval_reactome, 
-            examples
+        models, drug_screen,
+        drug_targets, shortest_paths, 
+        spldep_models, shortest_paths_simple,
+        estimated_response, 
+        eval_reactome, 
+        examples
     )
     
     # make figdata
     figdata = make_figdata(
-            models, drug_screen,
-            drug_targets, shortest_paths, 
-            spldep_models, shortest_paths_simple,
-            estimated_response, 
-            eval_reactome, 
-            examples
+        models, drug_screen,
+        drug_targets, shortest_paths, 
+        spldep_models, shortest_paths_simple,
+        estimated_response, 
+        eval_reactome, 
+        examples
     )
     
     # save
