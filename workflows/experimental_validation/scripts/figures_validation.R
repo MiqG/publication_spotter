@@ -73,7 +73,6 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     plts[["validation-od_norm"]] = validation_clonogenic %>%
-        left_join(od_ctl_neg, by=c("CCLE_Name","replicate_biological")) %>%
         mutate(event_gene = fct_reorder(event_gene, -od_norm, mean)) %>%
         ggplot(aes(x=event_gene, y=od_norm)) +
         geom_boxplot(width=0.5, outlier.shape=NA) +
@@ -294,7 +293,10 @@ main = function(){
     
     validation_clonogenic = validation_clonogenic %>%
         left_join(od_ctl_neg, by=c("CCLE_Name","replicate_biological")) %>%
-        mutate(od_norm = od / od_ctl_neg)
+        mutate(
+            od_norm = od / od_ctl_neg,
+            replicate_biological = factor(replicate_biological, levels=1:3)
+        )
     
     # plot
     plts = make_plots(validation_clonogenic, validation_harm_scores)
