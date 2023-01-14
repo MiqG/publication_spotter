@@ -42,6 +42,16 @@ CANCER_TYPES = [
     "UCS"
 ]
 
+CANCER_TYPES = [
+    "UCS","UCEC", "LGG","GBM",
+    "LUAD","KICH","KIRP","KIRC",
+    "SKCM","TGCT","THCA","THYM","UVM",
+    "ACC","BLCA","CESC","CHOL","COAD",
+    "DLBC","HNSC","LIHC","MESO",
+    "LUSC","PAAD","PCPG","PRAD",
+    "READ","SARC","BRCA"
+]
+
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
 DEPMAP_RAW = {
@@ -88,6 +98,12 @@ rule all:
         os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt"),
                 
         # preprocess TCGA
+        expand(os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
+        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
+        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
+        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
+        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
+        expand(os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         ## merge metadata TCGA
         os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
         ## clinically relevant subtypes
@@ -358,10 +374,76 @@ rule preprocess_gdsc:
         drug_response.loc[idx_train].to_csv(output.gdsc2_train, **SAVE_KWS)
         drug_response.loc[idx_test].to_csv(output.gdsc2_test, **SAVE_KWS)
         
+        
+rule preprocess_TCGA:
+    input:
+        metadata = os.path.join(RAW_DIR,"TCGA","metadata","{cancer}.tsv.gz"),
+        psi = os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out",'PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = lambda wildcards: os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out","TPM-hg38-{n_samples}.tab.gz").format(cancer=wildcards.cancer, n_samples=TCGA_N_SAMPLES[wildcards.cancer])
+    output:
+        metadata = os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"),
+        psi_EX = os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"),
+        psi_ALTA = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"),
+        psi_ALTD = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"),
+        psi_INT = os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz")
+    run:
+        import gc
+        import pandas as pd
+        import numpy as np
 
+        # load
+        print("Loading data...")
+        metadata = pd.read_table(input.metadata)
+        psi = pd.read_table(input.psi, index_col=0)
+        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
+
+        gc.collect()
+
+        # preprocess metadata
+        # TODO
+
+        # PSI
+        print("Processing PSI matrix...")
+        ## drop empty rows
+        is_na = psi.isnull()
+        non_missing = is_na.shape[1] - is_na.sum(1)
+        to_keep = non_missing >= 1
+        psi = psi.loc[to_keep]
+
+        ## remove vast-tools' suffix
+        psi.columns = [c.replace("_1","") for c in psi.columns]
+
+        ## split by event type
+        event_types = ["EX","ALTA","ALTD","INT"]
+        psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
+
+        # TPM
+        print("Processing TPM matrix...")
+        ## remove vast-tools' suffix
+        genexpr.columns = [c.replace("_1","") for c in genexpr.columns]
+
+        # save
+        print("Saving...")
+
+        ## metadata
+        metadata.to_csv(output.metadata, **SAVE_PARAMS)
+
+        ## PSIs
+        psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
+        psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
+        psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
+        psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
+
+        ## TPMs
+        genexpr.reset_index().drop(columns="NAME").to_csv(output.genexpr, **SAVE_PARAMS)        
+
+        print("Done!")
+        
+        
 rule prep_cancer_subtypes:
     input:
-        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv'),
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv.gz'),
         subtypes = os.path.join(RAW_DIR,'articles','Mina2017','tcga_subtypes.xls')
     output:
         subtypes = os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv')
@@ -374,7 +456,7 @@ rule prep_cancer_subtypes:
         subtypes = subtypes[["sampleID","cancer_subtype"]]
         
         metadata = pd.read_table(input.metadata)
-        metadata = metadata[["sampleID","cancer","sample_type"]]
+        metadata = metadata[["sampleID","cancer_type","sample_type"]]
         
         df = pd.merge(metadata, subtypes, how="left", on="sampleID")
         
@@ -702,5 +784,5 @@ rule preprocess_Zhang2022:
         ## TPMs
         genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)        
         
-        print("Done!")        
+        print("Done!")      
         

@@ -46,6 +46,15 @@ CANCER_TYPES = [
     'UCS'
 ]
 
+CANCER_TYPES = [
+    "UCS","UCEC", "LGG","GBM",
+    "LUAD","KICH","KIRP","KIRC",
+    "SKCM","TGCT","THCA","THYM","UVM",
+    "ACC","BLCA","CESC","CHOL","COAD",
+    "DLBC","HNSC","LIHC","MESO",
+    "LUSC","PAAD","PCPG","PRAD",
+    "READ","SARC","BRCA"
+]
 
 CANCER_SUBTYPES = {
     'brca_NotBasal': 'BRCA',
@@ -84,24 +93,24 @@ rule all:
         
         # differential sample type TCGA
         ## PSI
-        expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
         ## PSI (cancer subtype)
-        expand(os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), subtype=CANCER_SUBTYPES.keys()),
+        #expand(os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), subtype=CANCER_SUBTYPES.keys()),
         
         # combine differential analyses
         ## cancer type
-        expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ## cancer subtype
-        expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        #expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # figures
-        os.path.join(RESULTS_DIR,"figures","targetable_events")
+        #os.path.join(RESULTS_DIR,"figures","targetable_events")
         
         
 rule compute_splicing_dependency_tcga:
     input:
-        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
-        genexpr = os.path.join(PREP_DIR,'genexpr_counts','{cancer}.tsv'),
+        psi = os.path.join(PREP_DIR,'event_psi','{cancer}-{event_type}.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','{cancer}.tsv.gz'),
         coefs_dir = os.path.join(MODELS_DIR,'files','models_gene_dependency-{event_type}')
     output:
         directory(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'))
@@ -124,7 +133,7 @@ rule compute_splicing_dependency_tcga:
 rule summarize_splicing_dependency_by_cancer_type:
     input:
         spldeps = [os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}').format(cancer=cancer, event_type='{event_type}') for cancer in CANCER_TYPES],
-        metadatas = [os.path.join(PREP_DIR,'metadata','{cancer}.tsv').format(cancer=cancer) for cancer in CANCER_TYPES]
+        metadatas = [os.path.join(PREP_DIR,'metadata','{cancer}.tsv.gz').format(cancer=cancer) for cancer in CANCER_TYPES]
     output:
         os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-{event_type}.tsv.gz')
     run:
@@ -207,8 +216,8 @@ rule summarize_splicing_dependency_by_cancer_subtype:
         
 rule differential_psi_sample_type_by_cancer_type:
     input:
-        psi = os.path.join(PREP_DIR,'event_psi','{cancer}.tsv'),
-        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv')
+        psi = os.path.join(PREP_DIR,'event_psi','{cancer}-EX.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv.gz')
     output:
         os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
     params:
@@ -219,7 +228,7 @@ rule differential_psi_sample_type_by_cancer_type:
         python {params.script_dir}/MannWhitneyU.py \
                     --data_file={input.psi} \
                     --metadata_file={input.metadata} \
-                    --sample_col='sampleID' \
+                    --sample_col='file_id' \
                     --comparison_col='sample_type' \
                     --condition_a='Primary Tumor' \
                     --condition_b='Solid Tissue Normal' \
@@ -264,7 +273,7 @@ rule combine_differential_analyses_sample_type_by_cancer_type:
         
 rule differential_psi_sample_type_by_cancer_subtype:
     input:
-        psi = lambda wildcards: os.path.join(PREP_DIR,'event_psi','{cancer}.tsv').format(cancer=CANCER_SUBTYPES[wildcards.subtype]),
+        psi = lambda wildcards: os.path.join(PREP_DIR,'event_psi','{cancer}-EX.tsv.gz').format(cancer=CANCER_SUBTYPES[wildcards.subtype]),
         metadata = lambda wildcards: os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv').format(cancer=CANCER_SUBTYPES[wildcards.subtype])
     output:
         os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz')
@@ -277,7 +286,7 @@ rule differential_psi_sample_type_by_cancer_subtype:
         python {params.script_dir}/MannWhitneyU.py \
                     --data_file={input.psi} \
                     --metadata_file={input.metadata} \
-                    --sample_col='sampleID' \
+                    --sample_col='file_id' \
                     --comparison_col='sample_type' \
                     --condition_a='Primary Tumor' \
                     --condition_b='Solid Tissue Normal' \
