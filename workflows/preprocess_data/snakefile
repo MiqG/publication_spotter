@@ -107,7 +107,7 @@ rule all:
         ## merge metadata TCGA
         os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
         ## clinically relevant subtypes
-        expand(os.path.join(PREP_DIR,"metadata","{cancer}_subtypes.tsv"), cancer=CANCER_TYPES),
+        expand(os.path.join(PREP_DIR,"metadata","{cancer}_subtypes.tsv.gz"), cancer=CANCER_TYPES),
         ## merge metadata TCGA subtypes
         os.path.join(PREP_DIR,"metadata","PANCAN_subtypes.tsv.gz"),
         
@@ -401,7 +401,8 @@ rule preprocess_TCGA:
         gc.collect()
 
         # preprocess metadata
-        # TODO
+        ## drop FFPE samples
+        metadata = metadata.loc[~metadata["is_ffpe"],:].copy()
 
         # PSI
         print("Processing PSI matrix...")
@@ -417,24 +418,56 @@ rule preprocess_TCGA:
         ## split by event type
         event_types = ["EX","ALTA","ALTD","INT"]
         psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
+        
+        ## keep only the replicate with less missing values for each patient
+        duplicated_sampleIDs = metadata.loc[metadata.duplicated('sampleID'),'sampleID'].unique()
+        if len(duplicated_sampleIDs)>0:
+            duplicated_file_ids = metadata.set_index('sampleID').loc[duplicated_sampleIDs,'file_id']
 
+            # decide which sample to keep based on their missing values
+            nan_count = psi[duplicated_file_ids].isnull().sum()
+            file_ids_todrop = {sampleID: list(nan_count[duplicated_file_ids[sampleID]].sort_values().index[1:])
+                               for sampleID in duplicated_file_ids.index.unique()}
+            # drop samples
+            file_ids_todrop = sum(list(file_ids_todrop.values()),[]) # unlist
+            metadata = metadata.loc[~metadata['file_id'].isin(file_ids_todrop)]
+            
         # TPM
         print("Processing TPM matrix...")
         ## remove vast-tools' suffix
         genexpr.columns = [c.replace("_1","") for c in genexpr.columns]
-
+        
+        # subset
+        ## find common samples
+        common_samples = set(metadata["file_id"]).intersection(
+            psis["EX"].columns
+        ).intersection(
+            genexpr.columns
+        )
+        psis = {e: psis[e][common_samples].copy() for e in event_types}
+        genexpr = genexpr[common_samples].copy()
+        metadata = metadata.loc[metadata["file_id"].isin(common_samples)]
+        
+        ## rename columns
+        psis = {
+            e: psis[e].rename(
+                columns=metadata.set_index("file_id")["sampleID"].to_dict()
+                ).copy() 
+            for e in event_types
+        }
+        genexpr = genexpr.rename(
+            columns=metadata.set_index("file_id")["sampleID"].to_dict()
+        ).copy()        
+            
         # save
         print("Saving...")
-
         ## metadata
         metadata.to_csv(output.metadata, **SAVE_PARAMS)
-
         ## PSIs
         psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
         psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
         psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
         psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
-
         ## TPMs
         genexpr.reset_index().drop(columns="NAME").to_csv(output.genexpr, **SAVE_PARAMS)        
 
@@ -446,7 +479,7 @@ rule prep_cancer_subtypes:
         metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv.gz'),
         subtypes = os.path.join(RAW_DIR,'articles','Mina2017','tcga_subtypes.xls')
     output:
-        subtypes = os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv')
+        subtypes = os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv.gz')
     run:
         import pandas as pd
         
@@ -456,21 +489,21 @@ rule prep_cancer_subtypes:
         subtypes = subtypes[["sampleID","cancer_subtype"]]
         
         metadata = pd.read_table(input.metadata)
-        metadata = metadata[["sampleID","cancer_type","sample_type"]]
+        metadata = metadata[["file_id","sampleID","cancer_type","sample_type"]]
         
         df = pd.merge(metadata, subtypes, how="left", on="sampleID")
         
         # consider STN as a subtype
         df.loc[df["sample_type"]=="Solid Tissue Normal","cancer_subtype"] = "STN"
         
-        df.to_csv(output.subtypes, sep="\t", index=False)
+        df.to_csv(output.subtypes, sep="\t", index=False, compression="gzip")
         
         print("Done!")
         
         
 rule merge_tcga_metadata_subtypes:
     input:
-        metadata_files = [os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv').format(cancer=c) 
+        metadata_files = [os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv.gz').format(cancer=c) 
                           for c in CANCER_TYPES]
     output:
         os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
@@ -483,6 +516,8 @@ rule merge_tcga_metadata_subtypes:
             del df
         metadata = pd.concat(metadata)
         metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        print("Done!")
         
         
 rule preprocess_stringdb:
