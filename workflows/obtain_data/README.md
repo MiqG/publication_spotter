@@ -40,4 +40,4 @@ publication_spotter/support/.private/ega_decryption_pass
 ```
 
 ## Recomendations
-Due to their computational burden, we recommend running all `download_and_align*` workflows separately in a cluster before running the main `snakefile` workflow.
+Due to their computational burden, we recommend running all `download_and_align*` workflows separately in a cluster before running the main `snakefile` workflow. See [snakemake documentation](https://snakemake.readthedocs.io/en/stable/executing/cluster.html) for further information on how to run it on your specific computer cluster configuration.
