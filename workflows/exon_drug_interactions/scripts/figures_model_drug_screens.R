@@ -67,6 +67,7 @@ PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
 PAL_IS_TARGET = get_palette(PAL_DUAL, 4)[3:4]
 PAL_IN_DEMETER2 = setNames(c(PAL_SINGLE_LIGHT,"orange"), c(FALSE,TRUE))
 LINE_SIZE = 0.25
+PAL_DRUG_SCREENS = c("GDSC1"="#7776BC", "GDSC2"="#CDC7E5")
 
 FONT_SIZE = 2 # for additional labels
 FONT_FAMILY = "Arial"
@@ -273,7 +274,7 @@ plot_eda_associations = function(models, drug_screen){
         group_by(DRUG_NAME) %>%
         mutate(total=sum(n)) %>%
         arrange(total) %>%
-        ggbarplot(x="DRUG_NAME", y="n", fill="drug_screen", palette=PAL_DUAL, color=NA) + 
+        ggbarplot(x="DRUG_NAME", y="n", fill="drug_screen", palette=PAL_DRUG_SCREENS, color=NA) + 
         labs(x="Drug", y="N. Significant Associations", fill="Drug Screen")
     
     plts[["associations-top_drug_counts"]] = X %>% 
@@ -285,7 +286,7 @@ plot_eda_associations = function(models, drug_screen){
         ungroup() %>%
         mutate(index=as.numeric(factor(DRUG_NAME, levels=unique(DRUG_NAME)))) %>%
         filter(index <= top_n) %>%
-        ggbarplot(x="DRUG_NAME", y="n", fill="drug_screen", palette=PAL_DUAL, color=NA) + 
+        ggbarplot(x="DRUG_NAME", y="n", fill="drug_screen", palette=PAL_DRUG_SCREENS, color=NA) + 
         labs(x="Drug", y="N. Significant Associations", fill="Drug Screen",
              title=sprintf("Top %s", top_n)) +
         coord_flip()
@@ -296,7 +297,7 @@ plot_eda_associations = function(models, drug_screen){
         group_by(event_gene) %>%
         mutate(total=sum(n)) %>%
         arrange(total) %>%
-        ggbarplot(x="event_gene", y="n", fill="drug_screen", palette=PAL_DUAL, color=NA) + 
+        ggbarplot(x="event_gene", y="n", fill="drug_screen", palette=PAL_DRUG_SCREENS, color=NA) + 
         labs(x="Event & Gene", y="N. Significant Associations", fill="Drug Screen")
     
     plts[["associations-top_spldep_counts"]] = X %>% 
@@ -308,7 +309,7 @@ plot_eda_associations = function(models, drug_screen){
         ungroup() %>%
         mutate(index=as.numeric(factor(event_gene, levels=unique(event_gene)))) %>%
         filter(index <= top_n) %>%
-        ggbarplot(x="event_gene", y="n", fill="drug_screen", palette=PAL_DUAL, color=NA) + 
+        ggbarplot(x="event_gene", y="n", fill="drug_screen", palette=PAL_DRUG_SCREENS, color=NA) + 
         labs(x="Event & Gene", y="N. Significant Associations", fill="Drug Screen", 
              title=sprintf("Top %s", top_n)) +
         coord_flip()

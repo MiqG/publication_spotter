@@ -104,6 +104,7 @@ rule all:
         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         expand(os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
+        expand(os.path.join(PREP_DIR,"genexpr_counts","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         ## merge metadata TCGA
         os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
         ## clinically relevant subtypes
@@ -129,7 +130,15 @@ rule all:
         os.path.join(PREP_DIR,"event_psi","Zhang2022-ALTA.tsv.gz"),
         os.path.join(PREP_DIR,"event_psi","Zhang2022-ALTD.tsv.gz"),
         os.path.join(PREP_DIR,"event_psi","Zhang2022-INT.tsv.gz"),
-        os.path.join(PREP_DIR,"genexpr_tpm","Zhang2022.tsv.gz")
+        os.path.join(PREP_DIR,"genexpr_tpm","Zhang2022.tsv.gz"),
+        
+        # preprocess inhouse RNA-seq
+        os.path.join(PREP_DIR,"metadata","inhouse.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-ALTA.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-ALTD.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-INT.tsv.gz"),
+        os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")
         
         
 rule prepare_metadata_ccle:
@@ -821,3 +830,101 @@ rule preprocess_Zhang2022:
         
         print("Done!")      
         
+        
+rule preprocess_tcga_genexpr_counts:
+    input:
+        genexpr = os.path.join(RAW_DIR,"GDC","gene_counts","{cancer}.tsv.gz")
+    output:
+        genexpr = os.path.join(PREP_DIR,"genexpr_counts","{cancer}.tsv.gz")
+    run:
+        import pandas as pd
+        
+        # load
+        genexpr = pd.read_table(input.genexpr, index_col=0)
+        
+        # simplify column names
+        genexpr.columns = [c[:15] for c in genexpr.columns]
+        
+        # simplify row names
+        genexpr = genexpr.loc[~genexpr.index.str.contains("PAR_Y")]
+        genexpr.index = [r.split(".")[0] for r in genexpr.index]
+        
+        # save
+        genexpr.reset_index().to_csv(output.genexpr, **SAVE_PARAMS)
+        
+        print("Done!")
+        
+rule preprocess_inhouse:
+    input:
+        psi = os.path.join(RAW_DIR,'inhouse','20230124-rnaseq_cancer_cell_lines','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'inhouse','20230124-rnaseq_cancer_cell_lines','vast_out','TPM-hg38-3.tab.gz')
+    output:
+        metadata = os.path.join(PREP_DIR,'metadata','inhouse.tsv.gz'),
+        psi_EX = os.path.join(PREP_DIR,'event_psi','inhouse-EX.tsv.gz'),
+        psi_ALTA = os.path.join(PREP_DIR,'event_psi','inhouse-ALTA.tsv.gz'),
+        psi_ALTD = os.path.join(PREP_DIR,'event_psi','inhouse-ALTD.tsv.gz'),
+        psi_INT = os.path.join(PREP_DIR,'event_psi','inhouse-INT.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','inhouse.tsv.gz')
+    run:
+        import gc
+        import pandas as pd
+        import numpy as np
+        
+        # load
+        print("Loading data...")
+        psi = pd.read_table(input.psi, index_col=0)
+        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
+        
+        gc.collect()
+        
+        # preprocess metadata
+        metadata = pd.DataFrame({
+            "CCLE_Name": [
+                "A549_LUNG",
+                "HT29_LARGE_INTESTINE",
+                "MDAMB231_BREAST"
+            ],
+            "sampleID": [
+                "a549_18496AAD_ATTATGTCAT-AATGCGGAAG_R1_001",
+                "ht29_18495AAD_GACTCAAGTC-TGAAGAAGGC_R1_001",
+                "mda_18556AAD_CTGGACTAAC-CTGATCACGG_R1_001"
+            ],
+            "DepMap_ID": ["ACH-000681","ACH-000552","ACH-000768"]
+        })
+        
+        # PSI
+        print("Processing PSI matrix...")
+        ## drop empty rows
+        is_na = psi.isnull()
+        non_missing = is_na.shape[1] - is_na.sum(1)
+        to_keep = non_missing >= 1
+        psi = psi.loc[to_keep]
+        
+        ## rename vast-tools' suffix
+        psi = psi.rename(columns=metadata.set_index("sampleID")["DepMap_ID"].to_dict())
+        
+        ## split by event type
+        event_types = ["EX","ALTA","ALTD","INT"]
+        psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
+        
+        # TPM
+        print("Processing TPM matrix...")
+        ## remove vast-tools' suffix
+        genexpr = genexpr.rename(columns=metadata.set_index("sampleID")["DepMap_ID"].to_dict())
+        
+        # save
+        print("Saving...")
+        
+        ## metadata
+        metadata.to_csv(output.metadata, **SAVE_PARAMS)
+        
+        ## PSIs
+        psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
+        psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
+        psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
+        psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
+        
+        ## TPMs
+        genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)        
+        
+        print("Done!")   

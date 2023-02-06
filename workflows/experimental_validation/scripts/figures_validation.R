@@ -21,17 +21,6 @@ LINE_SIZE = 0.25
 FONT_SIZE = 2 # for additional labels
 FONT_FAMILY = "Arial"
 
-
-kras_help = data.frame(
-    event_gene = "HsaEX0034998_KRAS",
-    DepMap_ID = c("ACH-000552","ACH-000681","ACH-000768"),
-    CCLE_Name = c("HT29_LARGE_INTESTINE","A549_LUNG","MDAMB231_BREAST"),
-    psi_untreated = c(23.34, 19.1, 3.6),
-    psi_treated = 0,
-    spldep = c(-0.477429309,-0.408081246,-0.099795567)
-)# %>% filter(CCLE_Name == "A549_LUNG")
-
-
 # Development
 # -----------
 # ROOT = here::here()
@@ -43,12 +32,11 @@ kras_help = data.frame(
 # annotation_file = file.path(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 # event_info_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
 
+# splicing_file = file.path(PREP_DIR,"event_psi","inhouse-EX.tsv.gz")
+# genexpr_file = file.path(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")
+# spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
+
 # validation_splicing_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso.tsv")
-# splicing_ccle_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
-# genexpr_ccle_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
-# validation_spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
-# CCLE_DIR = file.path(ROOT,"results","model_splicing_dependency")
-# spldep_ccle_file = file.path(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
 # validation_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
 
 # figs_dir = file.path(RESULTS_DIR,'figures','validation')
@@ -65,7 +53,7 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         geom_boxplot(width=0.5, outlier.shape=NA) +
         geom_jitter(aes(color=as.factor(replicate_biological)), size=0.5, width=0.1) +
         color_palette(PAL_REPLICATES) +
-        labs(x="Condition", y="Cell Proliferation (OD570)", color="Replicate") +
+        labs(x="Condition", y="Cell Viability (OD570)", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
         stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
                            size=FONT_SIZE, family=FONT_FAMILY) + 
@@ -78,7 +66,21 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         geom_boxplot(width=0.5, outlier.shape=NA) +
         geom_jitter(aes(color=as.factor(replicate_biological)), size=0.5, width=0.1) +
         color_palette(PAL_REPLICATES) +
-        labs(x="Condition", y="Cell Proliferation (OD570)", color="Replicate") +
+        labs(x="Condition", y="Cell Viability (Norm. OD570)", color="Replicate") +
+        theme_pubr(x.text.angle = 70) +
+        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
+                           size=FONT_SIZE, family=FONT_FAMILY) + 
+        facet_wrap(~CCLE_Name, ncol=1) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    plts[["validation-od_norm_averaged"]] = validation_clonogenic %>%
+        distinct(CCLE_Name, replicate_biological, event_gene, od_norm_avg) %>%
+        mutate(event_gene = fct_reorder(event_gene, -od_norm_avg, mean)) %>%
+        ggplot(aes(x=event_gene, y=od_norm_avg)) +
+        geom_boxplot(width=0.5, outlier.shape=NA) +
+        geom_jitter(aes(color=as.factor(replicate_biological)), size=0.5, width=0.1) +
+        color_palette(PAL_REPLICATES) +
+        labs(x="Condition", y="Cell Viability (Norm. OD570)", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
         stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
                            size=FONT_SIZE, family=FONT_FAMILY) + 
@@ -89,13 +91,12 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
     od_ctl = validation_clonogenic %>%
         filter(event_gene=="WATER") %>%
         group_by(CCLE_Name, replicate_biological) %>%
-        summarize(od_ctl = median(od)) %>%
+        summarize(od_ctl = mean(od)) %>%
         ungroup()
     
-    plts[["validation-od_vs_harm"]] = validation_clonogenic %>%
+    x = validation_clonogenic %>%
         left_join(od_ctl, by=c("CCLE_Name","replicate_biological")) %>%
         mutate(od_fc = log2(od / od_ctl)) %>%
-        #mutate(od_fc = od - od_ctl) %>%
         group_by(CCLE_Name, event_gene, replicate_biological) %>%
         summarize(
             od_fc = median(od_fc),
@@ -104,7 +105,9 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         ungroup() %>%
         distinct() %>%
         left_join(validation_harm_scores, by=c("CCLE_Name","event_gene")) %>%
-        drop_na(harm_score, od_fc) %>%
+        drop_na(harm_score, od_fc)
+    
+    plts[["validation-od_vs_harm"]] = x %>%
         ggplot(aes(x=harm_score, y=od_fc)) +
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE) +
         geom_point(aes(color=event_gene)) +
@@ -115,6 +118,25 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         theme_pubr() +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
         labs(x="Harm Score", y="Obs. Cell Prolif. Effect", color="Replicate")
+    
+    plts[["validation-od_vs_harm_combined"]] = x %>%
+        # average over biological replicates
+        # group_by(CCLE_Name, event_gene) %>%
+        # summarize(
+        #     harm_score = mean(harm_score, na.rm=TRUE),
+        #     od_fc = mean(od_fc, na.rm=TRUE)
+        # ) %>%
+        # ungroup() %>%
+        ggplot(aes(x=harm_score, y=od_fc)) +
+        geom_smooth(aes(color=replicate_biological, fill=replicate_biological), method="lm", linetype="dashed", size=LINE_SIZE) +
+        geom_point(aes(color=replicate_biological)) +
+        stat_cor(aes(color=replicate_biological), method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        facet_wrap(~CCLE_Name, ncol=2, scales="free_y") +
+        color_palette(PAL_REPLICATES) +
+        fill_palette(PAL_REPLICATES) +
+        theme_pubr() +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
+        labs(x="Harm Score", y="Obs. Cell Prolif. Effect", color="Event & Gene")
     
     return(plts)
 }
@@ -155,7 +177,10 @@ save_plt = function(plts, plt_name, extension='.pdf',
 save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_raw", '.pdf', figs_dir, width=5, height=10)
     save_plt(plts, "validation-od_norm", '.pdf', figs_dir, width=5, height=10)
+    save_plt(plts, "validation-od_norm_averaged", '.pdf', figs_dir, width=5, height=10)
     save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=15)
+    save_plt(plts, "validation-od_vs_harm_combined", '.pdf', figs_dir, width=8, height=6)
+
 }
 
 
@@ -214,58 +239,56 @@ main = function(){
     events_genes = annot %>%
         dplyr::select(EVENT,GENE,ENSEMBL,event_gene)
     
+    splicing = read_tsv(splicing_file)
+    genexpr = read_tsv(genexpr_file)
+    spldep = read_tsv(spldep_file) %>% dplyr::rename(EVENT=index)
+    
     validation_psi = read_tsv(validation_splicing_file) %>%
-        left_join(events_genes %>% distinct(EVENT,event_gene), by="EVENT") %>%
-        dplyr::select(-EVENT)
-    validation_spldep = read_tsv(validation_spldep_file) %>%
-        left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
-        dplyr::select(-index)
+        left_join(events_genes %>% distinct(EVENT,event_gene), by="EVENT")
     validation_clonogenic = read_tsv(validation_od_file) %>%
-        group_by(CCLE_Name, event_gene, replicate_technical, replicate_biological) %>%
+        group_by(DepMap_ID, CCLE_Name, event_gene, replicate_technical, replicate_biological) %>%
         summarize(od = mean(od)) %>% # summarize OD replicates
         ungroup() %>%
         separate(event_gene, c("EVENT","GENE"), remove=FALSE)
     
-    splicing_ccle = read_tsv(splicing_ccle_file)
-    genexpr_ccle = read_tsv(genexpr_ccle_file)
-    spldep_ccle = read_tsv(spldep_ccle_file) %>% dplyr::rename(EVENT=index)
-    
     # compute harm scores
-    validation_harm_scores = validation_spldep %>%
-        pivot_longer(-event_gene, names_to="DepMap_ID", values_to="spldep") %>%
-        left_join(validation_psi, by=c("DepMap_ID","event_gene")) %>%
-        # add CCLE info for KRAS:
-        filter(event_gene != "HsaEX0034998_KRAS") %>%
-        bind_rows(kras_help) %>%
+    ## using experimentally measured delta PSIs
+    validation_harm_scores = spldep %>%
+        pivot_longer(-EVENT, names_to="DepMap_ID", values_to="spldep") %>%
+        left_join(validation_psi, by=c("DepMap_ID","EVENT")) %>% 
         # compute harm score
         mutate(
             delta_psi = psi_treated - psi_untreated,
             harm_score = (-1) * delta_psi * spldep
         )
     
-    # add missing PSI and Spldep from CCLE
+    # add missing PSI and Spldep from inhouse cell lines
     missing = validation_clonogenic %>%
-        distinct(CCLE_Name, event_gene, EVENT, GENE) %>%
-        left_join(validation_harm_scores %>% distinct(CCLE_Name, DepMap_ID), by="CCLE_Name") %>%
-        filter(!(CCLE_Name %in% validation_psi[["CCLE_Name"]]))
+        distinct(DepMap_ID, event_gene, EVENT, GENE) %>%
+        left_join(validation_harm_scores %>% distinct(CCLE_Name, DepMap_ID), by="DepMap_ID") %>%
+        filter(!(DepMap_ID %in% validation_psi[["DepMap_ID"]]))
     
     missing = missing %>%
+        # add initial PSI from inhouse RNA seq
         left_join(
-            splicing_ccle %>% 
+            splicing %>% 
                 dplyr::select(c(EVENT,unique(missing[["DepMap_ID"]]))) %>%
                 pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi_untreated"),
             by=c("EVENT","DepMap_ID")
         ) %>%
+        # add initial gene expression from inhouse RNA seq
         left_join(
-            genexpr_ccle %>% 
+            genexpr %>% 
                 dplyr::select(c(ID,unique(missing[["DepMap_ID"]]))) %>%
                 left_join(events_genes%>% distinct(ENSEMBL,GENE), by=c("ID"="ENSEMBL")) %>%
                 pivot_longer(-c("ID","GENE"), names_to="DepMap_ID", values_to="tpm_untreated"),
             by=c("GENE","DepMap_ID")
         ) %>%
+        # assume maximum exclusion
         mutate(psi_treated = 0) %>%
+        # get splicing dependency from inhouse RNA seq
         left_join(
-            spldep_ccle %>%
+            spldep %>%
                 dplyr::select(c(EVENT,unique(missing[["DepMap_ID"]]))) %>%
                 pivot_longer(-EVENT, names_to="DepMap_ID", values_to="spldep"),
             by=c("EVENT","DepMap_ID")
@@ -275,14 +298,16 @@ main = function(){
             delta_psi = psi_treated - psi_untreated,
             harm_score = (-1) * delta_psi * spldep
         ) %>%
-        drop_na(harm_score)
+        drop_na(harm_score) %>%
+        # add CCLE Name
+        dplyr::select(-CCLE_Name) %>%
+        left_join(
+            validation_clonogenic %>% distinct(CCLE_Name, DepMap_ID),
+            by = "DepMap_ID"
+        )
     
     validation_harm_scores = validation_harm_scores %>%
         bind_rows(missing)
-    
-    # drop KRAS because we do not know if the SSO worked
-    validation_clonogenic = validation_clonogenic %>% filter(event_gene != "HsaEX0034998_KRAS")
-    validation_harm_scores = validation_harm_scores %>% filter(event_gene != "HsaEX0034998_KRAS")
     
     # normalize OD by biological replicate
     od_ctl_neg = validation_clonogenic %>%
@@ -296,7 +321,14 @@ main = function(){
         mutate(
             od_norm = od / od_ctl_neg,
             replicate_biological = factor(replicate_biological, levels=1:3)
-        )
+        ) %>%
+        group_by(CCLE_Name, replicate_biological, event_gene) %>%
+        mutate(od_norm_avg = mean(od_norm)) %>%
+        ungroup()
+    
+    # drop KRAS because we do not know if the SSO worked
+    validation_clonogenic = validation_clonogenic %>% filter(event_gene != "HsaEX0034998_KRAS")
+    validation_harm_scores = validation_harm_scores %>% filter(event_gene != "HsaEX0034998_KRAS")
     
     # plot
     plts = make_plots(validation_clonogenic, validation_harm_scores)

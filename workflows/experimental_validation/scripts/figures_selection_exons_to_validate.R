@@ -92,16 +92,19 @@ FONT_FAMILY = "Arial"
 # annotation_file = file.path(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
 # event_info_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
+
 # ccle_spldep_file = file.path(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz')
 # ccle_genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
 # ccle_splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # ccle_stats_file = file.path(PREP_DIR,"stats","CCLE.tsv.gz")
 # ccle_metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
+
 # selected_events_file = file.path(CCLE_DIR,'files','selected_models-EX.txt')
 # diff_result_sample_file = file.path(TCGA_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_file = file.path(TCGA_DIR,'files','PANCAN','summary_splicing_dependency-EX.tsv.gz')
 # diff_result_subtypes_file = file.path(TCGA_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # spldep_stats_subtypes_file = file.path(TCGA_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
+
 # available_cells_file = file.path(SUPPORT_DIR,"available_cancer_cells.tsv")
 # figs_dir = file.path(RESULTS_DIR,'figures','selection_exons_to_validate')
 

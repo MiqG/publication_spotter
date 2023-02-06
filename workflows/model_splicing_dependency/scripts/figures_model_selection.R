@@ -656,7 +656,7 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich,
     plts[["model_prop-tumorigenesis-scatter"]] = X %>% 
         ggplot(aes(x=q25, y=q75)) +
         geom_scattermore(aes(color=med), pointsize=5, pixels=c(1000,1000), alpha=1) +
-        scale_color_gradient2(low='#0073C2FF', mid="white", high='#EFC000FF', midpoint=0) +
+        scale_color_gradient2(low='#0073C2FF', mid="lightgray", high='#EFC000FF', midpoint=0) +
         theme_pubr() +
         theme(aspect.ratio=1) +
         geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
@@ -810,7 +810,16 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         drop_na() %>%
         ungroup()
     
+    ## filter out variant types without less than 10 observations per group
+    variants_oi = X %>%
+        count(Variant_Classification, is_selected) %>%
+        filter(n>10) %>%
+        count(Variant_Classification) %>%
+        filter(n>1) %>%
+        pull(Variant_Classification)
+    
     plts[["model_val-mutation_gene_count"]] = X %>% 
+        filter(Variant_Classification %in% variants_oi) %>%
         count(Variant_Classification, is_selected) %>%
         ggbarplot(x="Variant_Classification", y="n", 
                   label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY, 
@@ -821,6 +830,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         theme_pubr(x.text.angle=70)
     
     plts[["model_val-mutation_gene_frequency"]] = X %>% 
+        filter(Variant_Classification %in% variants_oi) %>%
         ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
                    group=interaction(Variant_Classification,is_selected))) +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
@@ -846,6 +856,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         mutate(mut_freq_norm = mut_freq_per_kb / null_mut_freq)
     
     plts[["model_val-mutation_gene_frequency_silent_norm"]] = x %>% 
+        filter(Variant_Classification %in% variants_oi) %>%
         ggplot(aes(x=Variant_Classification, y=mut_freq_norm, 
                    group=interaction(Variant_Classification,is_selected))) +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
@@ -950,6 +961,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
         bind_rows(null %>% mutate(dataset = "Random"))
     
     plts[["model_val-mutation_event_count"]] = X %>% 
+        filter(Variant_Classification %in% variants_oi) %>%
         count(dataset, Variant_Classification, is_selected) %>%
         ggbarplot(x="Variant_Classification", y="n", 
                   label=TRUE, palette=PAL_DUAL, 
@@ -963,6 +975,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
     
     
     plts[["model_val-mutation_event_frequency"]] = X %>% 
+        filter(Variant_Classification %in% variants_oi) %>%
         filter(is_selected) %>%
         ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
                    group=interaction(Variant_Classification,dataset))) +
@@ -978,6 +991,7 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq, randsel_
     
     
     plts[["model_val-mutation_event_frequency-by_protein_impact"]] = X %>% 
+        filter(Variant_Classification %in% variants_oi) %>%
         drop_na(fc_mut_freq) %>%
         filter(is_selected) %>%
         ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 

@@ -17,16 +17,13 @@ require(scattermore)
 require(ggrepel)
 require(extrafont)
 
-ROOT = here::here()
-source(file.path(ROOT,'src','R','utils.R'))
-
 # variables
 THRESH_FDR = 0.05
 THRESH_MEDIAN_DIFF = 5
 MIN_SAMPLES = 10
 
 CANCERS_OI = c(
-    'BRCA','COAD','HNSC','KICH','KIRC','KIRP',
+    'BLCA','BRCA','COAD','HNSC','KICH','KIRC','KIRP',
     'LIHC','LUAD','LUSC','PRAD','THCA','UCEC',
     'BRCA_brca_Basal','BRCA_brca_Her2','BRCA_brca_NotBasal',
     'UCEC_ucec_CN_high','UCEC_ucec_CN_low','UCEC_ucec_MSI','UCEC_ucec_POLE'
@@ -54,6 +51,7 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
+# ROOT = here::here()
 # RAW_DIR = file.path(ROOT,'data','raw')
 # PREP_DIR = file.path(ROOT,'data','prep')
 # RESULTS_DIR = file.path(ROOT,'results','streamlined_therapy_dev')
@@ -65,6 +63,7 @@ FONT_FAMILY = "Arial"
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 # ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
+# protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
 
@@ -79,7 +78,8 @@ prep_diff_result = function(diff_result, spldep_stats){
         mutate(psi__padj = p.adjust(psi__pvalue, 'fdr'),
                psi__log10_padj = -log10(psi__padj)) %>%
         mutate(psi__is_significant = psi__padj<THRESH_FDR & 
-                                     abs(psi__median_diff)>THRESH_MEDIAN_DIFF)
+                                     abs(psi__median_diff)>THRESH_MEDIAN_DIFF) %>%
+        ungroup()
     return(diff_result)
 }
 
@@ -96,6 +96,7 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         pivot_longer(c(PT,STN), names_to='sample_type',values_to='n')
     
     plts[['top_samples-sample_counts_cancer']] = X %>% 
+        arrange(cancer_type) %>%
         ggbarplot(x='cancer_type', y='n', fill='sample_type', color=NA,
                   position=position_dodge(0.7), label=TRUE, lab.size=FONT_SIZE, 
                   lab.family=FONT_FAMILY, palette='lancet') + 
@@ -108,7 +109,7 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         mutate(sign_dpsi = sign(psi__median_diff),
                sign_spldep = sign(mean),
                event_gene = ifelse(event_gene %in% VALIDATED_EXONS, 
-                                   paste0("*",event_gene), event_gene))
+                                   paste0("*",event_gene), event_gene)) 
     
     plts[['top_samples-dpsi_vs_spldep-scatter']] = X %>%
         ggplot(aes(x=psi__median_diff, 
@@ -129,7 +130,7 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
     plts[['top_samples-dpsi_vs_spldep-selection']] = X %>%
         filter(psi__is_significant) %>%
         mutate(sign_combined = sprintf('sign_dpsi=%s & sign_spldep=%s',sign_dpsi,sign_spldep)) %>%
-        count(sign_combined) %>% 
+        count(cancer_type, sign_combined) %>% 
         drop_na() %>%
         ggbarplot(x='cancer_type', y='n', fill='sign_combined', palette='jco', 
                   color=FALSE, label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
@@ -140,7 +141,7 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
     plts[['top_samples-dpsi_vs_spldep-candidates_spldep']] = X %>% 
         filter(cancer_type %in% CANCERS_OI) %>%
         filter(psi__is_significant & 
-               ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>%
+               ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>% 
         arrange(-mean) %>%
         ggbarplot(x='event_gene', y='mean', 
                   fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
@@ -176,10 +177,10 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         filter(cancer_type %in% CANCERS_OI) %>%
         filter(psi__is_significant & 
                ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0)))
-    a = x %>% dplyr::select(c("EVENT","event_gene","psi__condition_a-median",
+    a = x %>% dplyr::select(c("EVENT","cancer_type","event_gene","psi__condition_a-median",
                               "psi__condition_a-mad","psi__condition_a"))
     colnames(a) = gsub("_a","",colnames(a))
-    b = x %>% dplyr::select(c("EVENT","event_gene","psi__condition_b-median",
+    b = x %>% dplyr::select(c("EVENT","cancer_type","event_gene","psi__condition_b-median",
                               "psi__condition_b-mad","psi__condition_b"))
     colnames(b) = gsub("_b","",colnames(b))
     x = bind_rows(a,b)
@@ -318,6 +319,7 @@ main = function(){
         filter(EVENT %in% selected_events)
     cancer_events = read_tsv(cancer_events_file)
     ascanceratlas = read_tsv(ascanceratlas_file)
+    protein_impact = read_tsv(protein_impact_file)
     
     # prep cancer events
     ascanceratlas = ascanceratlas %>%
@@ -365,6 +367,14 @@ main = function(){
                 (-1) * mean * (0-`psi__condition_a-median`), # remove
                 (-1) * mean * (100-`psi__condition_a-median`)) # include
        )
+    
+    ## add protein impact, and subset
+    diff_result_sample = diff_result_sample %>%
+        left_join(protein_impact, by=c("EVENT"="EventID")) %>%
+        filter(str_detect(ONTO,"protein"))
+    diff_result_subtypes = diff_result_subtypes %>%
+        left_join(protein_impact, by=c("EVENT"="EventID")) %>%
+        filter(str_detect(ONTO,"protein"))
     
     # plot
     plts = make_plots(diff_result_sample, diff_result_subtypes)

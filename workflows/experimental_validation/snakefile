@@ -104,8 +104,8 @@ rule all:
         #expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI),
         
         # figures
-        os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
-        os.path.join(RESULTS_DIR,"figures","validation")
+        #os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
+        #os.path.join(RESULTS_DIR,"figures","validation")
 
         
 rule get_splicing_enhancers:
@@ -199,12 +199,12 @@ rule structure_inference_get_proteoforms:
 
 rule compute_splicing_dependency:
     input:
-        psi = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso-matrix.tsv"),
-        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-        coefs_dir = os.path.join(ROOT,'results','model_splicing_dependency','files','models_gene_dependency-{event_type}')
+        psi = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
+        coefs_dir = os.path.join(TS_DIR,"data","fitted","splicing_dependency")
     output:
         directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'))
-    threads: 24
+    threads: 8
     resources:
         runtime = 86400, # seconds = 24h = 1 day
         memory = 30
@@ -255,7 +255,7 @@ rule figures_selection_exons_to_validate:
                     --selected_events_file={input.selected_events} \
                     --diff_result_sample_file={input.diff_result_sample} \
                     --spldep_stats_file={input.spldep_stats} \
-                    --diff_result_subtypes_file={input.diff_result_subtype} \
+                    --diff_result_subtypes_file={input.diff_result_subtypes} \
                     --spldep_stats_subtypes_file={input.spldep_stats_subtypes} \
                     --available_cells_file={input.available_cells} \
                     --figs_dir={output}
@@ -268,8 +268,8 @@ rule figures_validation:
         validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso.tsv"),
         splicing_ccle = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
         genexpr_ccle = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
-        spldep_ccle = os.path.join(CCLE_DIR,'files','splicing_dependency-EX','mean.tsv.gz'),
-        validation_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        spldep_ccle = os.path.join(CCLE_DIR,'files','splicing_dependency-EX'),
+        validation_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX"),
         validation_od = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation'))
@@ -281,8 +281,8 @@ rule figures_validation:
                     --validation_splicing_file={input.validation_splicing} \
                     --splicing_ccle_file={input.splicing_ccle} \
                     --genexpr_ccle_file={input.genexpr_ccle} \
-                    --spldep_ccle_file={input.spldep_ccle} \
-                    --validation_spldep_file={input.validation_spldep} \
+                    --spldep_ccle_file={input.spldep_ccle}/mean.tsv.gz \
+                    --validation_spldep_file={input.validation_spldep}/mean.tsv.gz \
                     --validation_od_file={input.validation_od} \
                     --figs_dir={output}
         """
