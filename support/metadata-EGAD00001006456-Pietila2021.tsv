@@ -1,0 +1,194 @@
+EOC ID	Histology	Survival	FIGO stage	Treatment strategy	Residual tumor after PDS / IDS	Primary chemo regimen	Primary therapy outcome	Stage of sampling	Sample	Progression free survival / PFS (months)	Platinum free interval / PFI (days)	Overall survival (months)	Relapse type	IHC	ex vivo	RNASeq	RNASeq_ID
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Relapse	Ascites	4.17	0	12	CP-resistant		x	x	EOC26_rAsc1_RNA2_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Omentum	4.17	0	12				x	EOC26_pOme1_RNA1_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Peritoneum	4.17	0	12				x	EOC26_pPer1_RNA2_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Peritoneum	4.17	0	12				x	EOC26_pPer2_RNA1_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Primary	4.17	0	12				x	EOC26_pOvaL1_RNA2_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Primary	4.17	0	12				x	EOC26_pOvaL2_RNA1_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Post-chemo	Ascites	4.17	0	12			x	x	EOC26_iAsc1_RNA1_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Post-chemo	Omentum	4.17	0	12		x		x	EOC26_iOme1_RNA1_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Post-chemo	Primary	4.17	0	12				x	EOC26_iOva2_RNA1_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Post-chemo	Primary	4.17	0	12				x	EOC26_iTubR1_RNA1_seq3
+EOC26	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Ascites	4.17	0	12			x		
+EOC891	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PR	Relapse	Ascites	12.17	183	21				x	EOC891_r1Asc_RNA2_seq6
+EOC891	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PR	Relapse	Ascites	12.17	183	21				x	EOC891_r2Asc_RNA2_seq6
+EOC891	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PR	Pre-chemo	Omentum	12.17	183	21				x	EOC891_pOme1_RNA_seq6
+EOC891	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PR	Pre-chemo	Peritoneum	12.17	183	21				x	EOC891_pPer1_RNA_seq6
+EOC891	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PR	Pre-chemo	Primary	12.17	183	21				x	EOC891_pOvaR1_RNA_seq6
+EOC677	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Relapse	Ascites	7.87	81	31				x	EOC677_r3Asc_RNA1_seq6
+EOC677	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Relapse	Ascites	7.87	81	31	CP-resistant		x	x	EOC677_rAsc_RNA1_seq6
+EOC677	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Pre-chemo	Ascites	7.87	81	31				x	EOC677_pAsc_RNA1_seq6
+EOC677	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Pre-chemo	Peritoneum	7.87	81	31				x	EOC677_pPer1_RNA_seq6
+EOC677	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Post-chemo	Peritoneum	7.87	81	31				x	EOC677_iPer_RNA_seq6
+EOC677	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Post-chemo	Primary	7.87	81	31				x	EOC677_iOvaR_RNA1_seq6a; EOC677_iOvaR_RNA1_seq6b
+EOC677	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Post-chemo	Omentum	7.87	81	31		x			
+EOC197	HGSC	Alive	IVA	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	24.17	578			x			
+EOC530	HGSC	Alive	IIIC	NACT	0	CP-TX	CR	Post-chemo	Omentum	18.40	378	47a				x	EOC530_iOme3_RNA1_seq3
+EOC530	HGSC	Alive	IIIC	NACT	0	CP-TX	CR	Post-chemo	Omentum	18.40	378	47a				x	EOC530_iOme4_RNA1_seq3
+EOC530	HGSC	Alive	IIIC	NACT	0	CP-TX	CR	Post-chemo	Peritoneum	18.40	378	47a				x	EOC530_iPer2_RNA1_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Omentum	37.60	974	54				x	EOC218_pOme1_RNA1_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Omentum	37.60	974	54				x	EOC218_pOme3_RNA1_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Mesentery	37.60	974	54				x	EOC218_iMes1_RNA1_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Mesentery	37.60	974	54				x	EOC218_iMes2_RNA1_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Mesentery	37.60	974	54				x	EOC218_iMes3_RNA2_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	37.60	974	54				x	EOC218_iOme2_RNA1_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	37.60	974	54				x	EOC218_iOme4_RNA1_seq3
+EOC218	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	37.60	974	54				x	EOC218_iOme6_RNA1_seq3
+EOC1032	HGSC	Deceased	IIIC	NACT	no DS	CP	PD after NACT	Pre-chemo	Ascites	1.07	14	2			x	x	EOC1032_pAsc1_RNA1_seq3
+EOC1032	HGSC	Deceased	IIIC	NACT	no DS	CP	PD after NACT	Pre-chemo	Peritoneum	1.07	14	2				x	EOC1032_pPer_RNA1_seq3
+EOC495	HGSC	Deceased	IVB	PDS	0	CP-TX	CR	Pre-chemo	Peritoneum	17.07	400	32				x	EOC495_pPerL_RNA1_seq4
+EOC495	HGSC	Deceased	IVB	PDS	0	CP-TX	CR	Pre-chemo	Primary	17.07	400	32				x	EOC495_pOvaL6_RNA1_seq4
+EOC495	HGSC	Deceased	IVB	PDS	0	CP-TX	CR	Pre-chemo	Primary	17.07	400	32				x	EOC495_pOvaR1_RNA2_seq4
+EOC495	HGSC	Deceased	IVB	PDS	0	CP-TX	CR	Relapse	Ascites	17.07	400	32	CP-resistant		x		
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Ascites		24	4				x	EOC177_pAsc1_RNA1_seq3
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Omentum		24	4				x	EOC177_pOme1_RNA1_seq3
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Omentum		24	4				x	EOC177_pOme2_RNA1_seq3
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Omentum		24	4				x	EOC177_pOme3_RNA1_seq3
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Peritoneum		24	4				x	EOC177_pPer1_RNA1_seq3
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Primary		24	4				x	EOC177_pOvaL1_RNA1_seq3
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Primary		24	4				x	EOC177_pOvaR2_RNA1_seq3
+EOC177	HGSC	Deceaseda	IIIC	PDS	> 10 mm	CP-TX	unknowna	Pre-chemo	Primary		24	4				x	EOC177_pOvaR3_RNA1_seq3
+EOC148	HGSC	Deceased	IIIC	PDS	> 10 mm	CP-TX-BV	CR	Pre-chemo	Primary	12.30	231	31				x	EOC148_pAdnL1_RNA1_seq3
+EOC148	HGSC	Deceased	IIIC	PDS	> 10 mm	CP-TX-BV	CR	Pre-chemo	Primary	12.30	231	31				x	EOC148_pAdnL3_RNA1_seq3
+EOC148	HGSC	Deceased	IIIC	PDS	> 10 mm	CP-TX-BV	CR	Pre-chemo	Primary	12.30	231	31				x	EOC148_pOvaL4_RNA1_seq3
+EOC148	HGSC	Deceased	IIIC	PDS	> 10 mm	CP-TX-BV	CR	Pre-chemo	Primary	12.30	231	31				x	EOC148_pOvaL5_RNA1_seq3
+EOC566	HGSC	Alive	IIIA1	PDS	0	CP-TX	CR	Pre-chemo	Ascites		1467b					x	EOC566_pAsc_RNA1_seq4
+EOC566	HGSC	Alive	IIIA1	PDS	0	CP-TX	CR	Pre-chemo	Primary		1467b					x	EOC566_pOvaR_RNA1_seq4
+EOC691	HGSC	Alive	IVB	NACT	1-10 mm	CP-TX-BV	PR	Post-chemo	Omentum	22.13	489			x			
+EOC691	HGSC	Alive	IVB	NACT	1-10 mm	CP-TX-BV	PR	Pre-chemo	Ascites	22.13	489				x		
+EOC44	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Omentum	36.40	954	52b				x	EOC44_pOme_RNA1_seq4
+EOC44	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Primary	36.40	954	52b				x	EOC44_pAdnL_RNA1_seq4
+EOC44	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Primary	36.40	954	52b				x	EOC44_pOvaR2_RNA1_seq3
+EOC44	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Primary	36.40	954	52b				x	EOC44_pOvaR4_RNA1_seq3
+EOC44	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Primary	36.40	954	52b				x	EOC44_pOvaR5_RNA1_seq3
+EOC998	HGSC	Alive	IIB	PDS	0	CP-TX		Pre-chemo	Primary		1388b	51b				x	EOC998_pOvaL_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Pre-chemo	Mesentery	12.83	203	14				x	EOC183_pMes_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Pre-chemo	Omentum	12.83	203	14				x	EOC183_pOme1_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Pre-chemo	Peritoneum	12.83	203	14				x	EOC183_pPer_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Mesentery	12.83	203	14				x	EOC183_iMes1_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Mesentery	12.83	203	14				x	EOC183_iMes2_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Omentum	12.83	203	14				x	EOC183_iOme1_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Primary	12.83	203	14				x	EOC183_iOvaR_RNA1_seq4
+EOC183	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Primary	12.83	203	14				x	EOC183_iTub_RNA1_seq4
+EOC49	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Omentum	34.3	835	48b		x			
+EOC49	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	34.3	835	48b		x			
+EOC587	HGSC	Deceased	IVB	NACT	0	CP-TX-BV	PD	Pre-chemo	Primary	6.93	27	13				x	EOC587_pAdnL1_RNA_seq6
+EOC568	HGSC	Deceased	IVA	NACT	> 10 mm	CP-TX	PR	Pre-chemo	Mesentery	14.20	210	39.8				x	EOC568_pMes1_RNA1_seq6a; EOC568_pMes1_RNA1_seq6b
+EOC568	HGSC	Deceased	IVA	NACT	> 10 mm	CP-TX	PR	Pre-chemo	Primary	14.20	210					x	EOC568_pTubL1_RNA1_seq5
+EOC568	HGSC	Deceased	IVA	NACT	> 10 mm	CP-TX	PR	Post-chemo	Omentum	14.20	210					x	EOC568_iOme1_RNA2_seq5
+EOC1030	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Ascites		1197b	49b				x	EOC1030_pAsc1_RNA1_seq4
+EOC1030	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Primary		1197b	49b				x	EOC1030_pOvaR1_RNA1_seq4
+EOC1030	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Primary		1197b	49b				x	EOC1030_pOvaR2_RNA1_seq4
+EOC991	HGSC	Alive	IVB	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Omentum	32.17	797	44b		x			
+EOC991	HGSC	Alive	IVB	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	32.17	797	44b		x			
+EOC649	HGSC	Deceased	IVB	NACT	1-10 mm	CP-TX	PR	Pre-chemo	Peritoneum	22.33	511	35				x	EOC649_pPer1_RNA_seq6
+EOC649	HGSC	Deceased	IVB	NACT	1-10 mm	CP-TX	PR	Post-chemo	Omentum	22.33	511	35		x		x	EOC649_iOme1_RNA2_seq5
+EOC649	HGSC	Deceased	IVB	NACT	1-10 mm	CP-TX	PR	Post-chemo	Primary	22.33	511	35				x	EOC649_iOvaL1_RNA1_seq6
+EOC740	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PR	Post-chemo	Omentum	9.10	63	43				x	EOC740_iOme1_RNA1_seq6
+EOC740	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PR	Post-chemo	Primary	9.10	63					x	EOC740_iOvaR1_RNA1_seq5
+EOC376	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Pre-chemo	Omentum	15.10	280			x		x	EOC376_pOme1_RNA1_seq5
+EOC376	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Post-chemo	Omentum	15.10	280			x		x	EOC376_iOme1_RNA3_seq5
+EOC933	HGSC	Alive	IIIC	NACT	0	CP-TX	CR	Pre-chemo	Peritoneum	28.47	632	43b				x	EOC933_pPer1_RNA1_seq6
+EOC933	HGSC	Alive	IIIC	NACT	0	CP-TX	CR	Pre-chemo	Primary	28.47	632	43b				x	EOC933_pOvaL1_RNA1_seq6
+EOC933	HGSC	Alive	IIIC	NACT	0	CP-TX	CR	Post-chemo	Mesentery	28.47	632	43b				x	EOC933_iMes1_RNA1_seq5
+EOC1120	HGSC	Deceased	IVB	PDS	1-10 mm	CP-TX-BV	PR	Pre-chemo	Peritoneum	9.60	71	15				x	EOC1120_pPer1_RNA2_seq5; EOC1120_pPer1_RNA1_seq6a; EOC1120_pPer1_RNA1_seq6b
+EOC1120	HGSC	Deceased	IVB	PDS	1-10 mm	CP-TX-BV	PR	Pre-chemo	Ascites	9.60	71	15			x		
+EOC1120	HGSC	Deceased	IVB	PDS	1-10 mm	CP-TX-BV	PR	Relapse	Ascites	9.60	71	15	CP-resistant		x		
+EOC1129	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Ascites	11.83	210	42b			x	x	EOC1129_pAsc1_RNA1_seq6a; EOC1129_pAsc1_RNA1_seq6b
+EOC1129	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Omentum	11.83	210	42b		x		x	EOC1129_pOme1_RNA1_seq5
+EOC1129	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Peritoneum	11.83	210	42b				x	EOC1129_pPer2_RNA1_seq5
+EOC1129	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Primary	11.83	210	42b				x	EOC1129_pOvaR1_RNA1_seq6a; EOC1129_pOvaR1_RNA1_seq6b
+EOC1129	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Ascites	11.83	210	42b				x	EOC1129_iAsc1_RNA1_seq6
+EOC1129	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Mesentery	11.83	210	42b				x	EOC1129_iMes1_RNA1_seq6
+EOC1129	HGSC	Alive	IIIC	NACT	1-10 mm	CP-TX	CR	Post-chemo	Primary	11.83	210	42b				x	EOC1129_iOvaR1_RNA1_seq6
+EOC50	HGSC	Alive	IIIC	PDS	1-10 mm	CP-TX	CR	Pre-chemo	Primary	38.73	1030b	42b				x	EOC50_pOvaR1_RNA1_seq5
+EOC50	HGSC	Alive	IIIC	PDS	1-10 mm	CP-TX	CR	Pre-chemo	Ascites	38.73	1030b	42b			x		
+EOC198	HGSC	Deceased	IIIC	NACT		CP-TX-BV	PD after NACT	Pre-chemo	Ascites	2.27	25	15			x		
+EOC198	HGSC	Deceased	IIIC	NACT		CP-TX-BV	PD after NACT	Pre-chemo	Ascites	2.27	25	15					
+EOC165	HGSC	Deceased	IIIC	PDS	1-10 mm	CP-TX-BV	CR	Pre-chemo	Omentum	15.30	313	35				x	EOC165_pOme1_RNA1_seq5
+EOC293	HGSC	Alive	IVA	PDS	1-10 mm	CP-TX-BV	PR	Pre-chemo	Ascites	34.20	1274b	43b				x	EOC293_pAsc1_RNA1_seq5; EOC293_pAsc_RNA1_seq6a;EOC293_pAsc_RNA1_seq6b
+EOC293	HGSC	Alive	IVA	PDS	1-10 mm	CP-TX-BV	PR	Pre-chemo	Peritoneum	34.20	1274b	43b				x	EOC293_pPer1_RNA1_seq6a; EOC293_pPer1_RNA1_seq6b
+EOC839	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Mesentery		1106b	41b				x	EOC839_pMes1_RNA1_seq5
+EOC204	HGSC	Deceased	IIIC	NACT	>10 mm	CP-GEM-BV	PDb	Pre-chemo	Mesentery	7.43	2	13				x	EOC204_pMes1_RNA1_seq5
+EOC606	HGSC	Alive	IIIC	PDS	0	CP-TX	CR	Pre-chemo	Primary		1029b	39b				x	EOC606_pOvaR1_RNA1_seq5
+EOC372	HGSC	Alive	IIIC	NACT	>10 mm	CP-TX-BV	PR	Pre-chemo	Peritoneum	23.37	1137b	38b				x	EOC372_pPer1_RNA1_seq5
+EOC372	HGSC	Alive	IIIC	NACT	>10 mm	CP-TX-BV	PR	Post-chemo	Peritoneum	23.37	1137b	38b				x	EOC372_iPer1_RNA1_seq5
+EOC737	HGSC	Deceased	IIIC	PDS	>10 mm	CP-TX	CR	Pre-chemo	Primary	26.30	649	34				x	EOC737_pOvaR1_RNA1_seq5
+EOC423	HGSC	Deceaseda	IIIC	NACT	0	CP	CR	Pre-chemo	Omentum		721	29				x	EOC423_pOme2_RNA1_seq5
+EOC423	HGSC	Deceaseda	IIIC	NACT	0	CP	CR	Post-chemo	Primary		721	29				x	EOC423_iOvaR1_RNA1_seq6
+EOC443	HGSC	Deceased	IVA	NACT	0	CP-TX	PR	Pre-chemo	Omentum	11.03	177	30				x	EOC443_pOme1_RNA1_seq5
+EOC443	HGSC	Deceased	IVA	NACT	0	CP-TX	PR	Pre-chemo	Peritoneum	11.03	177	30				x	EOC443_pPer2_RNA1_seq6
+EOC443	HGSC	Deceased	IVA	NACT	0	CP-TX	PR	Post-chemo	Omentum	11.03	177	30				x	EOC443_iOme2_RNA1_seq6
+EOC443	HGSC	Deceased	IVA	NACT	0	CP-TX	PR	Post-chemo	Primary	11.03	177	30				x	EOC443_iOvaR1_RNA1_seq6
+EOC540	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Pre-chemo	Omentum	10.00	126	33				x	EOC540_p2Ome1_RNA_seq6
+EOC883	HGSC	Deceased	IIIC	NACT	no DS	CP-TX-BV	SD	Pre-chemo	Ascites	12.73	91	23				x	EOC883_pAsc1_RNA1_seq6
+EOC883	HGSC	Deceased	IIIC	NACT	no DS	CP-TX-BV	SD	Post-chemo	Ascites	12.73	91	23				x	EOC883_iAsc_RNA1_seq6
+EOC3	HGSC	Deceased	IVA	NACT	1-10 mm	CP-TX-BV	PD	Pre-chemo	Peritoneum	7.87	14	18				x	EOC3_pPer1_RNA1_seq6
+EOC3	HGSC	Deceased	IVA	NACT	1-10 mm	CP-TX-BV	PD	Post-chemo	Omentum	7.87	14	18				x	EOC3_iOme2_RNA1_seq6a; EOC3_iOme2_RNA1_seq6b
+EOC87	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PD after NACT	Pre-chemo	Omentum	2.60	30	9				x	EOC87_pOme1A_RNA1_seq6
+EOC87	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PD after NACT	Pre-chemo	Peritoneum	2.60	30	9				x	EOC87_pPer1B_RNA1_seq6
+EOC87	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PD after NACT	Post-chemo	Omentum	2.60	30	9				x	EOC87_iOme1_RNA1_seq6a
+EOC87	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PD after NACT	Post-chemo	Omentum	2.60	30	9				x	EOC87_iOme1A_RNA1_seq6
+EOC87	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PD after NACT	Post-chemo	Omentum	2.60	30	9				x	EOC87_iOme1_RNA1_seq6b
+EOC87	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PD after NACT	Post-chemo	Peritoneum	2.60	30	9				x	EOC87_iPer1B_RNA_seq6
+EOC136	HGSC	Alive	IVA	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Mesentery	23.83	1006b	34b				x	EOC136_pMes1_RNA1_seq6a
+EOC136	HGSC	Alive	IVA	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Mesentery	23.83	1006b	34b				x	EOC136_pMes1_RNA1_seq6a
+EOC136	HGSC	Alive	IVA	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	23.83	1006b	34b				x	EOC136_iOme1_RNA1_seq6
+EOC310	HGSC	Deceased	IIIC	PDS	1-10 mm	CP-TX-BV	PR	Pre-chemo	Peritoneum	10.50	154	22				x	EOC310_pPer1_RNA1_seq6
+EOC389	HGSC	Deceased	IIIC	NACT	>10 mm	CP-TX	PR	Post-chemo	Primary	15.63	289	19				x	EOC389_iOvaR1_RNA1_seq6
+EOC733	HGSC	Deceased	IVA	NACT	1-10 mm	CP-TX-BV	PR	Pre-chemo	Peritoneum	9.60	83	19				x	EOC733_pPer1_RNA1_seq6
+EOC1005	HGSC	Alive	IVA	NACT	1-10 mm	CP-TX-BV	PR	Pre-chemo	Peritoneum	9.13	896b	30b				x	EOC1005_pPer1_RNA_seq6
+EOC783	HGSC	Deceased	IVB	PDS	>10 mm	CP-TX-BV	PR	Pre-chemo	Omentum	12.27	175	26				x	EOC783_pOme1A_RNA1_seq6
+EOC783	HGSC	Deceased	IVB	PDS	>10 mm	CP-TX-BV	PR	Pre-chemo	Peritoneum	12.27	175	26				x	EOC783_pPer1B_RNA1_seq6
+EOC783	HGSC	Deceased	IVB	PDS	>10 mm	CP-TX-BV	PR	Pre-chemo	Primary	12.27	175	26				x	EOC783_pOvaL1A_RNA1_seq6
+EOC783	HGSC	Deceased	IVB	PDS	>10 mm	CP-TX-BV	PR	Pre-chemo	Primary	12.27	175	26				x	EOC783_pOvaR1A_RNA1_seq6
+EOC895	HGSC	Deceased	IVB	NACT	>10 mm	CP-DX	PD	Pre-chemo	Primary	5.83	30	18		x			
+EOC895	HGSC	Deceased	IVB	NACT	>10 mm	CP-DX	PD	Post-chemo	Primary	5.83	30	18		x			
+EOC481	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Pre-chemo	Omentum	10.73	100	20		x			
+EOC481	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Mesentery	10.73	100	20		x			
+EOC551	HGSC	Deceased	IVA	NACT	1-10 mm	CP-TX	PD	Pre-chemo	Primary	6.03	19	27				x	EOC551_pOva_RNA_seq2
+EOC551	HGSC	Deceased	IVA	NACT	1-10 mm	CP-TX	PD	Post-chemo	Omentum	6.03	19	27				x	EOC551_iOme_RNA_seq2
+EOC664	HGSC	Deceased	IVB	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	9.37	121	36				x	EOC664_iOme_RNA_seq2
+EOC1023	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Omentum	6.77	17	18				x	EOC1023_pOme_RNA_seq2
+EOC1023	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Pre-chemo	Primary	6.77	17	18		x	x		
+EOC1023	HGSC	Deceased	IIIC	NACT	0	CP-TX	PD	Post-chemo	Omentum	6.77	17	18		x			
+EOC60	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PD	Pre-chemo	Peritoneum	6.97	0	14				x	EOC60_pPer_RNA_seq2
+EOC60	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PD	Post-chemo	Mesentery	6.97	0	14		x		x	EOC60_iMes_RNA_seq2
+EOC60	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PD	Pre-chemo	Omentum	6.97	0	14		x			
+EOC1133	HGSC	Deceased	IVB	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Peritoneum	27.23	661	54				x	EOC1133_pPer_RNA_seq2
+EOC1133	HGSC	Deceased	IVB	NACT	1-10 mm	CP-TX	CR	Post-chemo	Omentum	27.23	661	54				x	EOC1133_iOme_RNA_seq2
+EOC889	HGSC	Deceased	IVA	NACT	1-10 mm	CP-TX	PD	Post-chemo	Omentum	9.27	31	11				x	EOC889_iOme_RNA_seq2
+EOC554	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PD after NACT	Relapse	Ascites	3.70	27	47				x	EOC554_rAsc_RNA1_seq6
+EOC868	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Relapse	Mesentery	15.57	285	29				x	EOC868_rMes_RNA1_seq3
+EOC868	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Relapse	Peritoneum	15.57	285	29				x	EOC868_rPer_RNA1_seq3
+EOC868	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Pre-chemo	Peritoneum	15.57	285	29		x		x	EOC868_pPer_RNA_seq2
+EOC868	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Post-chemo	Omentum	15.57	285	29		x		x	EOC868_iOme_RNA_seq2
+EOC868	HGSC	Deceased	IIIC	NACT	0	CP-TX	CR	Post-chemo	Primary	15.57	285	29				x	EOC868_iOva_RNA_seq2
+EOC286	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Relapse	Ascites	25.93	543	44				x	EOC286_r2Asc_RNA1_seq6
+EOC286	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Omentum	25.93	543	44				x	EOC286_iOme_RNA1_seq6
+EOC286	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Post-chemo	Primary	25.93	543	44				x	EOC286_iOva_RNA1_seq6
+EOC742	HGSC	Deceased	IIIC	PDS	>10 mm	CP-TX	PR	Relapse	Ascites	19.07	452	36			x	x	EOC742_r3Asc3_RNA_seq6
+EOC742	HGSC	Deceased	IIIC	PDS	>10 mm	CP-TX	PR	Relapse	Ascites	19.07	452	36				x	EOC742_r4Asc_RNA1_seq6
+EOC742	HGSC	Deceased	IIIC	PDS	>10 mm	CP-TX	PR	Pre-chemo	Ascites	19.07	452	36				x	EOC742_pAsc_RNA_seq6
+EOC742	HGSC	Deceased	IIIC	PDS	>10 mm	CP-TX	PR	Pre-chemo	Omentum	19.07	452	36				x	EOC742_pOme_RNA_seq6
+EOC742	HGSC	Deceased	IIIC	PDS	>10 mm	CP-TX	PR	Pre-chemo	Primary	19.07	452	36				x	EOC742_pOva_RNA1_seq6
+EOC160	HGSC	Deceased	IVB	PDS	1-10 mm	CP-TX	CR	Relapse	Mesentery	26.03	648	61				x	EOC160_r1Mes1_RNA1_seq5
+EOC160	HGSC	Deceased	IVB	PDS	1-10 mm	CP-TX	CR	Pre-chemo	Omentum	26.03	648	61				x	EOC160_pOme1_RNA1_seq5
+EOC160	HGSC	Deceased	IVB	PDS	1-10 mm	CP-TX	CR	Pre-chemo	Primary	26.03	648	61				x	EOC160_pOva_RNA1_seq6
+EOC295	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Relapse	Ascites	13.43	221	23				x	EOC295_rAsc_RNA_seq6a; EOC295_rAsc_RNA_seq6b
+EOC295	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	PR	Pre-chemo	Peritoneum	13.43	221	23				x	EOC295_pPer_RNA1_seq6
+EOC752	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Relapse	Ascites	11.37	174	28				x	EOC752_r2Asc_RNA1_seq6
+EOC752	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Relapse	Ascites	11.37	174	28				x	EOC752_rAsc_RNA1_seq6
+EOC752	HGSC	Deceased	IIIC	NACT	1-10 mm	CP-TX	CR	Pre-chemo	Peritoneum	11.37	174	28				x	EOC752_pPer_RNA1_seq6
+EOC167	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PD after NACT	Relapse	Ascites	2.27	19	28	CP-resistant		x	x	EOC167_r1Asc_RNA1_seq3
+EOC167	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PD after NACT	Relapse	Ascites	2.27	19	12				x	EOC167_r2Asc_RNA1_seq4
+EOC167	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PD after NACT	Relapse	Ascites	2.27	19	12				x	EOC167_r1Asc_RNA1_seq3
+EOC167	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PD after NACT	Pre-chemo	Omentum	2.27	19	12				x	EOC167_pOme1_RNA1_seq3
+EOC167	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PD after NACT	Pre-chemo	Peritoneum	2.27	19	12				x	EOC167_pPer1_RNA1_seq3
+EOC167	HGSC	Deceased	IIIC	NACT	no DS	CP-TX	PD after NACT	Pre-chemo	Primary	2.27	19	12				x	EOC167_pOva1_RNA1_seq3
+OCKI_p30	HGSC	Alive	IIIC	PDS	>10 mm	N/A	N/A	Pre-chemo	Ascites	N/A	N/A	N/A			xc		
+OCKI_p33	HGSC	Alive	IIIC	PDS	>10 mm	CP-TX	PR	Pre-chemo	Ascites	N/A	N/A	N/A			xc		
+OCKI_p33	HGSC	Alive	IIIC	PDS	>10 mm	CP-TX	PR	Pre-chemo	Omentum	N/A	N/A	N/A			xc		
+Control omentum_1	N/A													x			
+Control omentum_2	Pancreatic adenocarcinoma													x			
+Control omentum_3	Fallopian tube cyst													x			

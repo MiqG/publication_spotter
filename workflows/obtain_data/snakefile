@@ -1,0 +1,366 @@
+"""
+Workflow purpose
+----------------
+Download and generate data.
+
+Outline
+-------
+- Spl. Dep. inference
+    1. DepMap:
+        - Demeter2
+        - CCLE mutations
+    2. Download and align CCLE
+    3. VastDB: 
+        - download event info
+        - download protein impact
+    4. (MANUALLY) Download ASCancer Atlas
+    5. Download MSigDB
+    6. Download gene lengths
+
+- Spl. Dep. validation
+    1. Download Thomas 2020
+    2. Download Gonatopoulos-Pournatzis 2020
+    3. Download Hart 2015
+    4. Download ENCORE
+    5. Download TCGA
+    6. (TODO) Download inhouse
+        - RNA-seq cancer cell lines
+        - psi
+        - clonogenic density
+    
+- Drug-Exon Inference
+    1. Download GDSC
+    2. Download RegulonDB
+    3. Download STRINGDB
+
+- Drug-Exon Validation
+    1. Pietilla 2021
+"""
+
+import os
+import pandas as pd
+
+# paths
+ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
+DATA_DIR = os.path.join(ROOT,'data','raw')
+SUPPORT_DIR = os.path.join(ROOT,'support')
+DEPMAP_DIR = os.path.join(DATA_DIR,'DepMap')
+CCLE_DIR = os.path.join(DATA_DIR,'CCLE')
+VASTDB_DIR = os.path.join(DATA_DIR,'VastDB')
+MSIGDB_DIR = os.path.join(DATA_DIR,'MSigDB')
+ENSEMBL_DIR = os.path.join(DATA_DIR,'ENSEMBL')
+ARTICLES_DIR = os.path.join(DATA_DIR,'articles')
+ENCORE_DIR = os.path.join(DATA_DIR,'ENCORE')
+GDSC_DIR = os.path.join(DATA_DIR,'GDSC')
+REGULONDB_DIR = os.path.join(DATA_DIR,'RegulonDB')
+STRINGDB_DIR = os.path.join(DATA_DIR,'STRINGDB')
+
+# variables
+CANCER_TYPES = [
+    "BLCA",
+    "BRCA",
+    "COAD",
+    "HNSC",
+    "KICH",
+    "KIRC",
+    "KIRP",
+    "LIHC",
+    "LUAD",
+    "LUSC",
+    "PRAD",
+    "THCA",
+    "UCEC"
+]
+
+
+##### RULES #####
+rule all:
+    input:
+        # spldep inference
+        ## DepMap
+        os.path.join(DEPMAP_DIR,'demeter2'),
+        os.path.join(DEPMAP_DIR,'achilles_ccle'),
+        ## CCLE
+        os.path.join(CCLE_DIR,'vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        os.path.join(CCLE_DIR,'vast_out','TPM-hg38-1019.tab.gz'),
+        ## VastDB
+        os.path.join(VASTDB_DIR,'EVENT_INFO-hg38.tab.gz'),
+        os.path.join(VASTDB_DIR,'EVENT_INFO-hg38_noseqs.tsv'),
+        os.path.join(VASTDB_DIR,'PROT_IMPACT-hg38-v3.tab.gz'),
+        ## (MANUALLY) ASCancerAtlas
+        ## MSigDB
+        os.path.join(MSIGDB_DIR,'msigdb_v7.4'),
+        ## Gene lengths
+        ENSEMBL_DIR,
+        
+        # spldep validation
+        ## Thomas 2020
+        os.path.join(ARTICLES_DIR,'Thomas2020','crispr_screen.xlsx'),
+        os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','TPM-hg38-2.tab.gz'),
+        os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        ## Gonatopoulos-Pournatzis 2020
+        os.path.join(ARTICLES_DIR,'GonatopoulosPournatzis2020','torin1_drug_sensitivity_scoring.xlsx'),
+        os.path.join(ARTICLES_DIR,'GonatopoulosPournatzis2020','exon_targeting_library_metadata.xlsx'),
+        os.path.join(ARTICLES_DIR,'GonatopoulosPournatzis2020','exon_targeting_library_scores.xlsx'),
+        ## Hart 2015
+        os.path.join(ARTICLES_DIR,'Hart2015','vast_out','TPM-hg38-12.tab.gz'),
+        os.path.join(ARTICLES_DIR,'Hart2015','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        ## ENCORE
+        os.path.join(ENCORE_DIR,'vast_out','TPM-hg38-1097.tab.gz'),
+        os.path.join(ENCORE_DIR,'vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        ## TCGA
+        expand(os.path.join(".done","{cancer_type}.done"), cancer_type=set(CANCER_TYPES)),
+
+        ## (TODO) inhouse
+        ### RNA-seq cancer cell lines
+        ### psi
+        ### clonogenic density   
+        
+        # drug-exon inference
+        ## GDSC
+        os.path.join(GDSC_DIR,'sanger-dose-response.csv'),
+        ## RegulonDB
+        os.path.join(REGULONDB_DIR,'regulonDB10.9_Data_Dist.tar.gz'),
+        ## STRINGDB
+        os.path.join(STRINGDB_DIR,'9606.protein.links.full.v11.5.txt.gz'),
+        os.path.join(STRINGDB_DIR,'9606.protein.aliases.v11.5.txt.gz'),
+        
+        # drug-exon validation
+        ## Pietilla 2021
+        ".done/Pietilla2021.done"
+
+        
+###### SPLDEP INFERENCE #####
+rule download_depmap:
+    params:
+        main = 'https://ndownloader.figshare.com/articles/13681534/versions/1', 
+        demeter2 = 'https://ndownloader.figshare.com/articles/6025238/versions/6'
+    output:
+        main = directory(os.path.join(DEPMAP_DIR,'achilles_ccle')), 
+        demeter2 = directory(os.path.join(DEPMAP_DIR,'demeter2')),
+        readme = os.path.join(DEPMAP_DIR,'README.md')
+    shell:
+        """
+        # download
+        wget --user-agent="Chrome" --no-clobber --no-check-certificate {params.main} -O {output.main}
+        wget --user-agent="Chrome" --no-clobber --no-check-certificate {params.demeter2} -O {output.demeter2}
+        
+        # unzip
+        unzip {output.main}.zip -d {output.main}
+        unzip {output.demeter2}.zip -d {output.demeter2}
+        
+        # README
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """
+        
+        
+rule download_and_align_ccle:
+    output:
+        tpm = os.path.join(CCLE_DIR,'vast_out','TPM-hg38-1019.tab.gz'),
+        tidy = os.path.join(CCLE_DIR,'vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+    threads: 24
+    shell:
+        """
+        snakemake -f download_and_align_ccle.smk --cores {threads} 
+        """
+
+        
+rule download_vastdb_hg38:
+    params:
+        event_info = 'https://vastdb.crg.eu/downloads/hg38/EVENT_INFO-hg38.tab.gz',
+        event_impact = 'https://vastdb.crg.eu/downloads/hg38/PROT_IMPACT-hg38-v3.tab.gz',
+        cols_todrop = 'Seq_C1,Seq_A,Seq_C2'
+    output:
+        event_info = os.path.join(VASTDB_DIR,'EVENT_INFO-hg38.tab.gz'),
+        event_info_clean = os.path.join(VASTDB_DIR,'EVENT_INFO-hg38_noseqs.tsv'),
+        event_impact = os.path.join(VASTDB_DIR,'PROT_IMPACT-hg38-v3.tab.gz'),
+        readme = os.path.join(VASTDB_DIR,'README.md')
+    shell:
+        """
+        # download
+        wget --user-agent="Chrome" --no-check-certificate {params.event_info} -O {output.event_info}
+        wget --user-agent="Chrome" --no-check-certificate {params.event_impact} -O {output.event_impact}
+        
+        # remove sequence columns
+        csvcut --tabs --maxfieldsize=10000000 --not-columns {params.cols_todrop} {output.event_info} | csvformat --out-tabs > {output.event_info_clean}
+        
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """    
+
+
+rule download_msigdb:
+    params:
+        db = 'https://data.broadinstitute.org/gsea-msigdb/msigdb/release/7.4/msigdb_v7.4_files_to_download_locally.zip'
+    output:
+        db = directory(os.path.join(MSIGDB_DIR,'msigdb_v7.4')),
+        readme = os.path.join(MSIGDB_DIR,'README.md')
+    shell:
+        """
+        # download
+        wget --user-agent="Chrome" --no-check-certificate {params.db} -O {output.db}.zip
+        
+        # unzip
+        unzip {output.db}.zip -d {output.db}
+        
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """
+        
+        
+rule download_gene_lengths:
+    output:
+        annot_dir = directory(ENSEMBL_DIR)
+    shell:
+        """
+        Rscript scripts/download_genome_annotations.R \
+                    --output_dir={output.annot_dir}
+        """
+        
+        
+###### SPLDEP VALIDATION #####
+rule download_Thomas2020: 
+    output:
+        crispr_screen = os.path.join(ARTICLES_DIR,'Thomas2020','crispr_screen.xlsx'),
+        readme = os.path.join(ARTICLES_DIR,'Thomas2020','README.md')
+    params:
+        crispr_screen = 'https://static-content.springer.com/esm/art%3A10.1038%2Fs41588-019-0555-z/MediaObjects/41588_2019_555_MOESM3_ESM.xlsx'
+    shell:
+        """
+        wget --user-agent="Chrome" --no-clobber --no-check-certificate {params.crispr_screen} -O {output.crispr_screen}
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """
+        
+        
+rule download_and_align_Thomas2020:
+    output:
+        tpm = os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','TPM-hg38-2.tab.gz'),
+        psi = os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+    threads: 24
+    shell:
+        """
+        snakemake -f download_and_align_thomas2020.smk --cores {threads} 
+        """
+    
+    
+rule download_Gonatopoulos2020:
+    params:
+        drug_sensitivity = 'https://static-content.springer.com/esm/art%3A10.1038%2Fs41587-020-0437-z/MediaObjects/41587_2020_437_MOESM13_ESM.xlsx', 
+        exons_metadata = 'https://static-content.springer.com/esm/art%3A10.1038%2Fs41587-020-0437-z/MediaObjects/41587_2020_437_MOESM14_ESM.xlsx',
+        exons_scores = 'https://static-content.springer.com/esm/art%3A10.1038%2Fs41587-020-0437-z/MediaObjects/41587_2020_437_MOESM15_ESM.xlsx'
+    output:
+        drug_sensitivity = os.path.join(ARTICLES_DIR,'GonatopoulosPournatzis2020','torin1_drug_sensitivity_scoring.xlsx'),
+        exons_metadata = os.path.join(ARTICLES_DIR,'GonatopoulosPournatzis2020','exon_targeting_library_metadata.xlsx'),
+        exons_scores = os.path.join(ARTICLES_DIR,'GonatopoulosPournatzis2020','exon_targeting_library_scores.xlsx'),
+        readme = os.path.join(ARTICLES_DIR,'GonatopoulosPournatzis2020','README.md')
+    shell:
+        """
+        wget --user-agent="Chrome" --no-clobber --no-check-certificate {params.drug_sensitivity} -O {output.drug_sensitivity}
+        wget --user-agent="Chrome" --no-clobber --no-check-certificate {params.exons_metadata} -O {output.exons_metadata}
+        wget --user-agent="Chrome" --no-clobber --no-check-certificate {params.exons_scores} -O {output.exons_scores}
+
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """    
+        
+        
+rule download_and_align_Hart2015:
+    output:
+        tpm = os.path.join(ARTICLES_DIR,'Hart2015','vast_out','TPM-hg38-12.tab.gz'),
+        psi = os.path.join(ARTICLES_DIR,'Hart2015','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+    threads: 24
+    shell:
+        """
+        snakemake -f download_and_align_hart2015.smk --cores {threads} 
+        """   
+        
+        
+rule download_and_align_encore:
+    output:
+        tpm = os.path.join(ENCORE_DIR,'vast_out','TPM-hg38-1097.tab.gz'),
+        psi = os.path.join(ENCORE_DIR,'vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+    threads: 24
+    shell:
+        """
+        snakemake -f download_and_align_encore.smk --cores {threads} 
+        """
+        
+        
+rule download_and_align_tcga:
+    output:
+        os.path.join(".done","{cancer_type}.done")
+    threads: 24
+    shell:
+        """
+        snakemake -f download_and_align_tcga.smk --cores {threads} 
+        """        
+        
+    
+###### DRUG-EXON INFERENCE #####
+rule download_gdsc:
+    params:
+        gdsc = 'https://storage.googleapis.com/depmap-external-downloads/processed_portal_downloads/gdsc-drug-set-export-658c.5/sanger-dose-response.csv?GoogleAccessId=depmap-external-downloads%40broad-achilles.iam.gserviceaccount.com&Expires=1634660420&Signature=nZI9%252BquqgOxZUNlS1zBNnZtGYGJ%252Bb%252BpUrP5h4yR96WHde1BWvFFWDeaNsVcnj0leCcb2UtzNZs%252BOg%252BOvzxirqtU11JC8mta3CyFYLheAAha833K5cpE0qNYchFn%252BDllqrrBS6JtRrXpC5FprlYc6LSXQI4cDft4J%252FcxDFoZJAmnlNqaVHiehujU%252Bc6XnorZLU2X63oT4mmSm7WOXXYgYeqe0FoLtbD1l8y62Hy%252FkrDnajgVqDknvZkKmUFoSDdtqorqHXlRBDYMUFUXhEIE5cjOq%252BpcO%252B4t2rCGckLi6fSrLdwaZJGsO6pTCQp3S7xUiSu2ih2nzPC6oJhd7d8vbwQ%3D%3D'
+    output:
+        gdsc = os.path.join(GDSC_DIR,'sanger-dose-response.csv'),
+        readme = os.path.join(GDSC_DIR,'README.md')
+    shell:
+        """
+        # download
+        wget --header="Host: storage.googleapis.com" \
+             --header="User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36" \
+             --header="Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9" --header="Accept-Language: es,ca;q=0.9,en;q=0.8,it;q=0.7,en-US;q=0.6,de-CH;q=0.5,de;q=0.4" \
+             --header="Referer: https://depmap.org/" "{params.gdsc}" -c -O {output.gdsc}
+        
+        # README
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """
+        
+        
+rule download_regulondb:
+    params:
+        db = 'http://regulondb.ccg.unam.mx/menu/download/full_version/files/10.9/regulonDB10.9_Data_Dist.tar.gz'
+    output:
+        db = os.path.join(REGULONDB_DIR,'regulonDB10.9_Data_Dist.tar.gz'),
+        readme = os.path.join(REGULONDB_DIR,'README.md')
+    shell:
+        """
+        # download
+        wget --user-agent="Chrome" --no-check-certificate {params.db} -O {output.db}
+        tar -xvf {output.db}
+        
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """
+        
+
+rule download_stringdb:
+    params:
+        links = 'https://stringdb-static.org/download/protein.links.full.v11.5/9606.protein.links.full.v11.5.txt.gz',
+        aliases = 'https://stringdb-static.org/download/protein.aliases.v11.5/9606.protein.aliases.v11.5.txt.gz'
+    output:
+        links = os.path.join(STRINGDB_DIR,'9606.protein.links.full.v11.5.txt.gz'),
+        aliases = os.path.join(STRINGDB_DIR,'9606.protein.aliases.v11.5.txt.gz'),
+        readme = os.path.join(STRINGDB_DIR,'README.md')
+    shell:
+        """
+        # download
+        wget --no-check-certificate {params.links} -O {output.links}
+        wget --no-check-certificate {params.aliases} -O {output.aliases}
+        
+        # add readme
+        echo "Downloaded on $(date)." > {output.readme}
+        echo Done!
+        """        
+        
+###### DRUG-EXON VALIDATION #####
+rule download_and_align_Pietilla2021:
+    output:
+        ".done/Pietilla2021.done"
+    threads: 24
+    shell:
+        """
+        snakemake -f download_and_align_pietilla2021.smk --cores {threads} 
+        """ 
