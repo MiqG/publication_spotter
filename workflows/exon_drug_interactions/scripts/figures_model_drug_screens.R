@@ -418,6 +418,12 @@ plot_targets = function(models, drug_targets){
         labs(x="Is Target", y="Spl. Dep. Coefficient")
     
     # - from drugs with annotated target with a cancer-driver exon, how many sign. assocs? not signif?
+    test = X %>%
+        mutate(is_sel = lr_padj < THRESH_FDR & n_obs > THRESH_NOBS,
+               is_sel = replace_na(is_sel, FALSE)) %>% 
+        with(table(is_target, is_sel)) %>% 
+        fisher.test()
+    test_lab = sprintf("Fisher, p = %s", signif(test[["p.value"]], digits=2))
     plts[["targets-bar-n_signifs"]] = X %>%
         mutate(is_sel = lr_padj < THRESH_FDR & n_obs > THRESH_NOBS,
                is_sel = replace_na(is_sel, FALSE)) %>%
@@ -428,6 +434,8 @@ plot_targets = function(models, drug_targets){
                   label=TRUE, lab.size=FONT_SIZE, lab.family=FONT_FAMILY) +
         guides(fill="none") +
         yscale("log10", .format=TRUE) +
+        geom_text(x=-Inf, y=Inf, hjust=-0.1, vjust=1, label=test_lab, 
+                  size=FONT_SIZE, family=FONT_FAMILY) +
         labs(x="Is Target & Selected", y="Count")
     
     return(plts)
@@ -1075,6 +1083,7 @@ plot_reactome = function(eval_reactome){
     
     return(plts)
 }
+
 
 prep_examples = function(drug_screen, splicing, genexpr, snv, ontology, gene_info){
     examples = list()
