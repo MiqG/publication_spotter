@@ -199,21 +199,6 @@ rule preprocess_genexpr_ccle:
         """
 
 
-rule preprocess_mutations_ccle:
-    input:
-        mutations = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv')
-    output:
-        os.path.join(PREP_DIR,'mutations','CCLE.tsv.gz')
-    shell:
-        """
-        set -eo pipefail
-        
-        nice python scripts/preprocess_ccle_mutations.py \
-                    --input_file={input.mutations} \
-                    --output_file={output}
-        """
-    
-    
 rule preprocess_depmap:
     input:
         lambda wildcards: DEPMAP_RAW[wildcards.dataset]
