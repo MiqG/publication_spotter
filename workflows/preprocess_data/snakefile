@@ -74,8 +74,6 @@ rule all:
         # preprocess DepMap data
         ## prep
         expand(os.path.join(PREP_DIR,"{dataset}","CCLE.tsv.gz"), dataset=DEPMAP_RAW.keys()),
-        # make Achilles comparable to Demeter2
-        os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz"),
 
         # preprocess Thomas 2020
         os.path.join(PREP_DIR,"Thomas2020","crispr_screen.tsv.gz"),
@@ -668,33 +666,6 @@ rule preprocess_encore:
         
         ## TPMs
         genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)
-        
-        
-rule make_achilles_comparable_to_demeter2:
-    input:
-        demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
-        achilles = os.path.join(PREP_DIR,"achilles","CCLE.tsv.gz")
-    output:
-        achilles = os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz")
-    run:
-        import numpy as np
-        import pandas as pd
-        
-        demeter2 = pd.read_table(input.demeter2, index_col=0)
-        achilles = pd.read_table(input.achilles, index_col=0)
-        
-        # subset samples and genes
-        common_samples = set(demeter2.columns).intersection(achilles.columns)
-        common_genes = set(demeter2.index).intersection(achilles.index)
-        demeter2 = demeter2.loc[common_genes,common_samples].copy()
-        achilles = achilles.loc[common_genes,common_samples].copy()
-        
-        # replicate missing values
-        is_missing = demeter2.isnull().values
-        achilles.values[is_missing] = np.nan
-        
-        # save 
-        achilles.reset_index().to_csv(output.achilles, sep="\t", index=False, compression="gzip")
         
         
 rule make_cosmic_gene_set:
