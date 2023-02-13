@@ -42,7 +42,7 @@ THRESH_DRUGS_NOBS = 20
 
 SELECTED_CELL_LINES = c(
     "A549_LUNG",
-    "HT29_LARGE_INTESTINE",
+    #"HT29_LARGE_INTESTINE",
     "MDAMB231_BREAST"
 )
 
@@ -54,8 +54,8 @@ SELECTED_EXONS = c(
     #"HsaEX0043609_NPNT",
     #"HsaEX0006970_ATP6V0A2",
     #"HsaEX0056284_SATB2"
-    #"HsaEX0034998_KRAS",
     #"HsaEX0020455_DNM2",
+    "HsaEX0034998_KRAS",
     "HsaEX0070392_VLDLR",
     "HsaEX0050345_PRPF18",
     "HsaEX0049558_PPP1R12A",
@@ -98,6 +98,10 @@ FONT_FAMILY = "Arial"
 # ccle_splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # ccle_stats_file = file.path(PREP_DIR,"stats","CCLE.tsv.gz")
 # ccle_metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
+
+# inhouse_splicing_file = file.path(PREP_DIR,"event_psi","inhouse-EX.tsv.gz")
+# inhouse_genexpr_file = file.path(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")
+# inhouse_spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 
 # selected_events_file = file.path(CCLE_DIR,'files','selected_models-EX.txt')
 # diff_result_sample_file = file.path(TCGA_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
@@ -152,7 +156,7 @@ compute_harm_score = function(spldep, splicing){
     splicing_mat = splicing_mat[common_events, common_samples]
     
     psi_final = spldep_mat
-    psi_final[,] = 0 # remove oncoexons
+    psi_final[,] = 0 # remove all exons
     harm = (-1) * spldep_mat * (psi_final - splicing_mat)
     
     harm = harm %>% rownames_to_column("event_gene")
@@ -238,7 +242,7 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
         mutate(EVENT = gsub("_.*","", event_gene),
                GENE = gsub(".*_","", event_gene)) %>%
         left_join(protein_impact, by="EVENT") %>%
-        filter(str_detect(impact_clean, "Alternative protein")) %>%
+        filter(str_detect(impact, "Alternative protein")) %>%
         filter(event_gene != "HsaEX1036699_SFPQ") # too long of an exon
     
     plts[["selection_exons-median_vs_std"]] = X %>% 
@@ -549,23 +553,84 @@ plot_selection_exons = function(ccle_harm_stats, ccle_harm,
 }
 
 
+plot_inhouse = function(
+    events_oi, genes_oi, inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm, ccle_metadata
+){
+
+    plts = list()
+    
+    X = inhouse_splicing %>%
+        filter(event_gene %in% events_oi) %>%
+        pivot_longer(-event_gene, names_to="DepMap_ID", values_to="psi") %>%
+        left_join(
+            inhouse_spldep %>%
+            filter(event_gene %in% events_oi) %>%
+            pivot_longer(-event_gene, names_to="DepMap_ID", values_to="spldep"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%
+        left_join(
+            inhouse_harm %>%
+            filter(event_gene %in% events_oi) %>%
+            pivot_longer(-event_gene, names_to="DepMap_ID", values_to="max_harm"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%       
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        arrange(-max_harm) %>%
+        mutate(event_gene=ifelse(event_gene %in% SELECTED_EXONS, sprintf("*%s",event_gene), event_gene)) %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
+        drop_na(max_harm)
+    
+    plts[["inhouse-psi-bar"]] = X %>%
+        ggbarplot(x='event_gene', y='psi', 
+                  fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
+                  palette="Accent") + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        labs(x='Event & Gene', y='PSI', fill='Cell Line') +
+        coord_flip()
+    
+    plts[["inhouse-spldep-bar"]] = X %>%
+        ggbarplot(x='event_gene', y='spldep', 
+                  fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
+                  palette="Accent") + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        labs(x='Event & Gene', y='Spl. Dep.', fill='Cell Line') +
+        coord_flip()
+    
+    plts[["inhouse-max_harm-bar"]] = X %>%
+        ggbarplot(x='event_gene', y='max_harm', 
+                  fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
+                  palette="Accent") + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        labs(x='Event & Gene', y='Max. Harm Score', fill='Cell Line') +
+        coord_flip()
+
+    return(plts)
+}
+
 make_plots = function(ccle_stats, genes_oi, events_oi,
                       ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
-                      events_genes, protein_impact, available_cells){
+                      events_genes, protein_impact, available_cells,
+                      inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm){
     plts = list(
         plot_eda_transcriptome(ccle_stats, genes_oi, events_oi),
         plot_selection_exons(ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
-                             events_genes, events_oi, protein_impact, available_cells)
+                             events_genes, events_oi, protein_impact, available_cells),
+        plot_inhouse(events_oi, genes_oi, inhouse_splicing, inhouse_genexpr, 
+                     inhouse_spldep, inhouse_harm, ccle_metadata)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
 
-make_figdata = function(ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata){
+make_figdata = function(
+    events_oi,
+    ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata,
+    inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm
+){
     
-    selected_events = ccle_harm %>%
-        filter(event_gene %in% SELECTED_EXONS) %>%
+    selected_events_ccle = ccle_harm %>%
+        filter(event_gene %in% events_oi) %>%
         distinct(event_gene) %>%
         separate(event_gene, into=c("EVENT","GENE"), remove=FALSE) %>%
         left_join(
@@ -595,9 +660,43 @@ make_figdata = function(ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccl
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES)
     
+    
+    selected_events_inhouse = inhouse_harm %>%
+        filter(event_gene %in% events_oi) %>%
+        distinct(event_gene) %>%
+        separate(event_gene, into=c("EVENT","GENE"), remove=FALSE) %>%
+        left_join(
+            inhouse_harm %>%
+            filter(event_gene %in% events_oi) %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="harm_score_exclusion"),
+            by="event_gene"
+        ) %>%
+        left_join(
+            inhouse_spldep %>%
+            filter(event_gene %in% events_oi) %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="spldep"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%
+        left_join(
+            inhouse_splicing %>%
+            filter(event_gene %in% events_oi) %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="psi"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%  
+        left_join(
+            inhouse_genexpr %>%
+            filter(GENE %in% gsub(".*_","",events_oi)) %>%
+            pivot_longer(cols= -GENE, names_to="DepMap_ID", values_to="tpm"),
+            by=c("GENE","DepMap_ID")
+        ) %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        filter(CCLE_Name %in% SELECTED_CELL_LINES)
+    
+    
     figdata = list(
         "selection_events" = list(
-            "selected_events" = selected_events
+            "selected_events_ccle" = selected_events_ccle,
+            "selected_events_inhouse" = selected_events_inhouse
         )
     )
     return(figdata)
@@ -644,6 +743,10 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "selection_exons-harm-selected", '.pdf', figs_dir, width=3.75, height=6.9)
     save_plt(plts, "selection_exons-splicing-selected", '.pdf', figs_dir, width=3.75, height=6.9)
     save_plt(plts, "selection_exons-genexpr-selected", '.pdf', figs_dir, width=3.75, height=6.9)
+    
+    save_plt(plts, 'inhouse-psi-bar', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-spldep-bar', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-max_harm-bar', '.pdf', figs_dir, width=5.5, height=10)
 }
 
 
@@ -770,11 +873,24 @@ main = function(){
         pull(DepMap_ID) %>%
         unique()
     
+    inhouse_splicing = read_tsv(inhouse_splicing_file) %>%
+        left_join(events_genes %>% distinct(EVENT,event_gene), by="EVENT") %>%
+        dplyr::select(-EVENT)
+    inhouse_genexpr = read_tsv(inhouse_genexpr_file) %>%
+        mutate_if(is.numeric, function(x){ log2(x+1) }) %>%
+        left_join(events_genes %>% distinct(GENE,ENSEMBL), by=c("ID"="ENSEMBL")) %>%
+        dplyr::select(-ID)
+    inhouse_spldep = read_tsv(inhouse_spldep_file) %>% 
+        filter(index %in% selected_events) %>%
+        left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
+        dplyr::select(-index)
+    
     # prep results differential analyses
     tcga_diff_result = prep_diff_result(tcga_diff_result, tcga_spldep_stats)
     tcga_diff_result_subtypes = prep_diff_result(tcga_diff_result_subtypes, tcga_spldep_stats_subtypes)
     
     # compute harm scores and their summary stats for available cell lines
+    ## CCLE
     ccle_harm = compute_harm_score(ccle_spldep %>% 
                                        filter(event_gene %in% selected_event_genes) %>%
                                        dplyr::select(any_of(c(available_cells,"event_gene"))), 
@@ -783,9 +899,21 @@ main = function(){
                                        dplyr::select(any_of(c(available_cells,"event_gene"))))
     ccle_harm_stats = get_stats(ccle_harm, "event_gene")
     
+    ## inhouse
+    inhouse_harm = compute_harm_score(inhouse_spldep %>% 
+                                        filter(event_gene %in% selected_event_genes), 
+                                      inhouse_splicing %>% 
+                                        filter(event_gene %in% selected_event_genes)) 
+    
     # events and genes differentially spliced and targetable
+    protein_impact_events = protein_impact %>%
+        filter(str_detect(EVENT, "HsaEX") & str_detect(impact, "Alternative protein")) %>%
+        pull(EVENT)
+    
     ## by cancer types
     events_oi_types = tcga_diff_result %>%
+        # affect protein
+        filter(EVENT %in% protein_impact_events) %>%
         # differentially spliced
         filter(psi__is_significant) %>%
         # targetable (only exclusion of exon)
@@ -794,6 +922,8 @@ main = function(){
         unique()
     
     genes_oi_types = tcga_diff_result %>%
+        # affect protein
+        filter(EVENT %in% protein_impact_events) %>%
         # differentially spliced
         filter(psi__is_significant) %>%
         # targetable (only exclusion of exon)
@@ -803,6 +933,8 @@ main = function(){
     
     ## by cancer subtypes
     events_oi_subtypes = tcga_diff_result_subtypes %>%
+        # affect protein
+        filter(EVENT %in% protein_impact_events) %>%
         # differentially spliced
         filter(psi__is_significant) %>%
         # targetable (only exclusion of exon)
@@ -811,6 +943,8 @@ main = function(){
         unique()
     
     genes_oi_subtypes = tcga_diff_result_subtypes %>%
+        # affect protein
+        filter(EVENT %in% protein_impact_events) %>%
         # differentially spliced
         filter(psi__is_significant) %>%
         # targetable (only exclusion of exon)
@@ -823,12 +957,19 @@ main = function(){
     genes_oi = union(genes_oi_types, genes_oi_subtypes)
     
     # plot
-    plts = make_plots(ccle_stats, genes_oi, events_oi,
-                      ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
-                      events_genes, protein_impact, available_cells)
+    plts = make_plots(
+        ccle_stats, genes_oi, events_oi,
+        ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
+        events_genes, protein_impact, available_cells,
+        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm
+    )
     
     # make figdata
-    figdata = make_figdata(ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata)
+    figdata = make_figdata(
+        events_oi,
+        ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata,
+        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm
+    )
 
     # save
     save_plots(plts, figs_dir)

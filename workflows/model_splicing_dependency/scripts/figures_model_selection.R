@@ -560,6 +560,26 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich,
         theme_pubr(x.text.angle = 45, legend="right") +
         labs(x="Splicing Impact", y="Norm. Proportion", fill="Selected Model")
     
+    x = models %>%
+        # the more included, the more it proliferates upon exclusion (betaPSI > 0) ~ +Prolif.
+        # the more included, the less it proliferates upon exclusion (betaPSI < 0) ~ -Prolif.
+        filter(is.finite(event_coefficient_mean) & is_selected) %>%
+        mutate(event_coef_sign = ifelse(sign(event_coefficient_mean)>0, "+Prolif.", "-Prolif.")) %>%
+        count(event_coef_sign, term_clean) %>%
+        group_by(event_coef_sign) %>%
+        mutate(freq = n / sum(n)) %>%
+        ungroup() %>%
+        group_by(term_clean) %>%
+        mutate(rel_freq = freq / sum(freq)) %>%
+        ungroup() %>%
+        arrange(n)
+    plts[["model_prop-protein_impact_clean_vs_sign_coef-freqs"]] = x %>%
+        ggbarplot(x="term_clean", y="freq", label = x %>% pull(n), 
+                  lab.size=FONT_SIZE, lab.family=FONT_FAMILY, 
+                  fill="event_coef_sign", color=NA, palette="uchicago",
+                  position=position_dodge(0.9)) + 
+        theme_pubr(x.text.angle = 45, legend="right") +
+        labs(x="Splicing Impact", y="Proportion", fill="Upon Exclusion")
     
     # GSEA of selected exons/genes
     plts_enrichment = lapply(names(enrichment), function(e_name){
@@ -1339,6 +1359,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-protein_impact_clean-counts", ".pdf", figs_dir, width=7, height=6)
     save_plt(plts, "model_prop-protein_impact_clean-freqs", ".pdf", figs_dir, width=7, height=6)
     save_plt(plts, "model_prop-protein_impact_clean-rel_freqs", ".pdf", figs_dir, width=7, height=6)
+    save_plt(plts, "model_prop-protein_impact_clean_vs_sign_coef-freqs", ".pdf", figs_dir, width=7, height=6)
     ## GSEA
     save_plt(plts, "model_prop-enrichment-hallmarks-dotplot", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_prop-enrichment-hallmarks-cnetplot", ".pdf", figs_dir, width=8, height=8)
@@ -1582,6 +1603,18 @@ main = function(){
     harm = (-1) * spldep_mat * (psi_final - splicing_mat)
     
     harm_stats = get_spldep_stats(harm %>% rownames_to_column("index"), models)
+    
+    # number of selected genes in COSMIC
+    available_genes = models %>% pull(GENE) %>% unique() 
+    selected_genes = models %>% filter(is_selected) %>% pull(GENE) %>% unique()
+    cosmic_test = data.frame(gene = available_genes) %>%
+        mutate(
+            has_cancer_driver_exon = gene %in% selected_genes,
+            is_cancer_driver = gene %in% ontologies[["cosmic"]][["gene"]]
+        ) %>%
+        with(table(has_cancer_driver_exon, is_cancer_driver)) %>%
+        fisher.test()
+    # 74 cancer driver genes have cancer-driver exons
     
     # plot
     plts = make_plots(

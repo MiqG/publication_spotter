@@ -30,6 +30,7 @@ CANCERS_OI = c(
 )
 
 VALIDATED_EXONS = c(
+    "HsaEX0034998_KRAS",
     "HsaEX0070392_VLDLR",
     "HsaEX0052877_RCC1",
     "HsaEX0049558_PPP1R12A",
@@ -142,7 +143,7 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         filter(cancer_type %in% CANCERS_OI) %>%
         filter(psi__is_significant & 
                ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>% 
-        arrange(-mean) %>%
+        arrange(-harm_score) %>%
         ggbarplot(x='event_gene', y='mean', 
                   fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
                   palette=get_palette('Paired',length(unique(X[['cancer_type']])))) + 
@@ -154,7 +155,7 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
         filter(cancer_type %in% CANCERS_OI) %>%
         filter(psi__is_significant & 
                ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>%
-        arrange(-mean) %>%
+        arrange(-harm_score) %>%
         ggbarplot(x='event_gene', y='psi__median_diff', 
                   fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
                   palette=get_palette('Paired',length(unique(X[['cancer_type']])))) + 
@@ -165,7 +166,7 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
     plts[['top_samples-dpsi_vs_spldep-candidates_harm']] = X %>% 
         filter(psi__is_significant & 
                ((sign_dpsi>0 & sign_spldep<0) | (sign_dpsi<0 & sign_spldep>0))) %>%
-        arrange(-mean) %>%
+        arrange(-harm_score) %>%
         ggbarplot(x='event_gene', y='harm_score', 
                   fill='cancer_type', position=position_dodge(0.9), color=FALSE, 
                   palette=get_palette('Paired',length(unique(X[['cancer_type']])))) + 
@@ -319,7 +320,11 @@ main = function(){
         filter(EVENT %in% selected_events)
     cancer_events = read_tsv(cancer_events_file)
     ascanceratlas = read_tsv(ascanceratlas_file)
-    protein_impact = read_tsv(protein_impact_file)
+    protein_impact = read_tsv(protein_impact_file) %>%
+        mutate(
+            ONTO = gsub("ORF disruption upon sequence inclusion \\(Alt\\. Stop\\)",
+                          "Alternative protein isoforms \\(Ref, Alt\\. Stop\\)", ONTO)
+        )
     
     # prep cancer events
     ascanceratlas = ascanceratlas %>%
@@ -371,10 +376,10 @@ main = function(){
     ## add protein impact, and subset
     diff_result_sample = diff_result_sample %>%
         left_join(protein_impact, by=c("EVENT"="EventID")) %>%
-        filter(str_detect(ONTO,"protein"))
+        filter(str_detect(ONTO,"Alternative protein"))
     diff_result_subtypes = diff_result_subtypes %>%
         left_join(protein_impact, by=c("EVENT"="EventID")) %>%
-        filter(str_detect(ONTO,"protein"))
+        filter(str_detect(ONTO,"Alternative protein"))
     
     # plot
     plts = make_plots(diff_result_sample, diff_result_subtypes)
