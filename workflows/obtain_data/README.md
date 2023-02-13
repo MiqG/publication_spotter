@@ -11,6 +11,12 @@ Make sure to place it at the following path:
 publication_spotter/data/raw/VastDB/assemblies/Hs2
 ```
 
+- COSMIC
+download manually from https://cancer.sanger.ac.uk/census. Expected output directory at:
+```
+publication_spotter/data/raw/COSMIC/cancer_gene_census.tsv
+```
+
 - AS Cancer Atlas
 Download manually from https://ngdc.cncb.ac.cn/ascancer/download. Expected output directory at:
 ```
