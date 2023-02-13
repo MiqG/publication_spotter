@@ -50,7 +50,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'), event_type=EVENT_TYPES),
         ## make figures
-        os.path.join(RESULTS_DIR,'figures','model_selection')
+        os.path.join(RESULTS_DIR,'figures','model_selection'),
         
         # MODEL VALIDATION
         ## EXON-LEVEL CRISPR SCREENS
@@ -165,10 +165,7 @@ rule figures_model_selection:
     input:
         models = os.path.join(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz"),
         ccle_stats = os.path.join(PREP_DIR,"stats","CCLE.tsv.gz"),
-        indices = os.path.join(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz"),
-        event_mut = os.path.join(PREP_DIR,'event_snv','CCLE-EX.tsv.gz'),
         gene_mut_freq = os.path.join(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz"),
-        event_mut_freq = os.path.join(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz"),
         msigdb_dir = os.path.join(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs"),
         protein_impact = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
         cosmic_genes = os.path.join(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv"),
@@ -179,8 +176,7 @@ rule figures_model_selection:
         cancer_events = os.path.join(ROOT,"support","cancer_events.tsv"),
         ascanceratlas = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz"),
         event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
-        metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
-        ppi_closeness = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz')
+        metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_selection'))
     shell:
@@ -188,10 +184,7 @@ rule figures_model_selection:
         Rscript scripts/figures_model_selection.R \
                     --models_file={input.models} \
                     --ccle_stats_file={input.ccle_stats} \
-                    --indices_file={input.indices} \
-                    --event_mut_file={input.event_mut} \
                     --gene_mut_freq_file={input.gene_mut_freq} \
-                    --event_mut_freq_file={input.event_mut_freq} \
                     --msigdb_dir={input.msigdb_dir} \
                     --protein_impact_file={input.protein_impact} \
                     --cosmic_genes_file={input.cosmic_genes} \
@@ -203,7 +196,6 @@ rule figures_model_selection:
                     --ascanceratlas_file={input.ascanceratlas} \
                     --event_info_file={input.event_info} \
                     --metadata_file={input.metadata} \
-                    --ppi_closeness_file={input.ppi_closeness} \
                     --figs_dir={output}
         """
     
@@ -277,7 +269,7 @@ rule figures_validation_crispr_GonatopoulosPournatzis2020:
         total = 100
     shell:
         """
-        Rscript scripts/figures_validation_crispr_screen_Thomas2020.R \
+        Rscript scripts/figures_validation_crispr_screen_Gonatopoulos.R \
                     --crispr_file={input.crispr} \
                     --event_info_file={input.event_info} \
                     --psi_file={input.psi} \
@@ -528,7 +520,6 @@ rule figures_validation_encore:
                     --event_info_file={input.event_info} \
                     --metadata_file={input.metadata} \
                     --crispr_file={input.crispr} \
-                    --psi_file={input.psi} \
                     --figs_dir={output}
         """
         

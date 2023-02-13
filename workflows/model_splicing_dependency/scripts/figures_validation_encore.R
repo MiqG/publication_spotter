@@ -248,7 +248,7 @@ compute_correls_dyn_ranges = function(df){
 
 plot_encore_validation = function(
     df, correls_top_max, correls_dyn_ranges, 
-    event_info, genedep, metadata
+    event_info, metadata, events_crispr
 ){
     plts = list()
     
@@ -438,12 +438,12 @@ plot_encore_validation = function(
 
 make_plots = function(
     df, correls_top_max, correls_dyn_ranges, 
-    event_info, metadata
+    event_info, metadata, events_crispr
 ){
     plts = list(
         plot_encore_validation(
             df, correls_top_max, correls_dyn_ranges, 
-            event_info, metadata
+            event_info, metadata, events_crispr
         )
     )
     plts = do.call(c,plts)
@@ -585,8 +585,10 @@ main = function(){
     correls_dyn_ranges = compute_correls_dyn_ranges(df)
     
     # make plots
-    plts = make_plots(df, correls_top_max, correls_dyn_ranges, 
-                      event_info, metadata)
+    plts = make_plots(
+            df, correls_top_max, correls_dyn_ranges, 
+            event_info, metadata, events_crispr
+    )
 
     # make figdata
     figdata = make_figdata(

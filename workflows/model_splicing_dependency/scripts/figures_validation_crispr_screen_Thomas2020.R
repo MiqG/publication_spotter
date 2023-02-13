@@ -222,8 +222,8 @@ main = function(){
     tpm_file = args[["tpm_file"]]
     selected_events_file = args[["selected_events_file"]]
     spldep_file = args[["spldep_file"]]
-    event_info_file = args[["ccle_splicing_file"]]
-    event_info_file = args[["ccle_spldep_file"]]
+    ccle_splicing_file = args[["ccle_splicing_file"]]
+    ccle_spldep_file = args[["ccle_spldep_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
