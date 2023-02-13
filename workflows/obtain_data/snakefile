@@ -13,9 +13,10 @@ Outline
     3. VastDB: 
         - download event info
         - download protein impact
-    4. (MANUALLY) Download ASCancer Atlas
-    5. Download MSigDB
-    6. Download gene lengths
+    4. (MANUALLY) Download COSMIC
+    5. (MANUALLY) Download ASCancer Atlas
+    6. Download MSigDB
+    7. Download gene lengths
 
 - Spl. Dep. validation
     1. Download Thomas 2020
@@ -54,6 +55,7 @@ ENCORE_DIR = os.path.join(DATA_DIR,'ENCORE')
 GDSC_DIR = os.path.join(DATA_DIR,'GDSC')
 REGULONDB_DIR = os.path.join(DATA_DIR,'RegulonDB')
 STRINGDB_DIR = os.path.join(DATA_DIR,'STRINGDB')
+
 
 # variables
 CANCER_TYPES = [
