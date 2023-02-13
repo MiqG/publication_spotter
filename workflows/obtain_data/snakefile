@@ -35,7 +35,7 @@ Outline
     3. Download STRINGDB
 
 - Drug-Exon Validation
-    1. Pietilla 2021
+    1. Pietila 2021
 """
 
 import os
@@ -128,8 +128,8 @@ rule all:
         os.path.join(STRINGDB_DIR,'9606.protein.aliases.v11.5.txt.gz'),
         
         # drug-exon validation
-        ## Pietilla 2021
-        ".done/Pietilla2021.done"
+        ## Pietila 2021
+        ".done/Pietila2021.done"
 
         
 ###### SPLDEP INFERENCE #####
@@ -358,11 +358,11 @@ rule download_stringdb:
         """        
         
 ###### DRUG-EXON VALIDATION #####
-rule download_and_align_Pietilla2021:
+rule download_and_align_Pietila2021:
     output:
-        ".done/Pietilla2021.done"
+        ".done/Pietila2021.done"
     threads: 24
     shell:
         """
-        snakemake -f download_and_align_pietilla2021.smk --cores {threads} 
+        snakemake -f download_and_align_pietila2021.smk --cores {threads} 
         """ 

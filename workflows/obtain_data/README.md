@@ -29,7 +29,7 @@ Download from [GDC](https://portal.gdc.cancer.gov/) with dbGaP access. Private t
 publication_spotter/support/.private/gdc-user-token.txt
 ```
 
-- Pietilla 2021
+- Pietila 2021
 Download from [EGA](https://ega-archive.org/studies/EGAS00001004714). The list of fastq files, token and decryption key and pass files are expected to be found at:
 ```
 # list of fastq files
