@@ -1,16 +1,17 @@
 """
 Author: Miquel Anglada Girotto
 Contact: miquelangladagirotto [at] gmail [dot] com
-Last Update: 2021-01-12
 
 Workflow purpose
 --------------
 Workflow to analyze putative associations between exons and cancer at single-exon level.
 
-
 Outline
 -------
-        
+- Spl. Dep. inference
+    1. model fitting
+    2. model selection
+    3. model validation
 """
 
 import os
@@ -25,7 +26,7 @@ SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 
 
-EVENT_TYPES = ["EX"] # ['EX','ALTA','ALTD','INT']
+EVENT_TYPES = ["EX"]
 N_SAMPLES = {
     "Thomas2020": 2,
     "Hart2015": 12
@@ -35,7 +36,6 @@ N_SAMPLES = {
 THRESH_PVALUE = 0.025
 THRESH_CORR = 0.2
 THRESH_NOBS = 0
-N_RANDOM_MODELS = 1000
 
 ##### RULES #####
 rule all:
@@ -49,23 +49,16 @@ rule all:
         ### as lists
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'), event_type=EVENT_TYPES),
-        ### randomize model selection
-        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        #expand(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes-merged.tsv.gz'), event_type=EVENT_TYPES, it=N_RANDOM_MODELS),
-        ## Associations between splicing dependency and transcriptomic indices
-        #expand(os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ## make figures
-        #os.path.join(RESULTS_DIR,'figures','model_selection'),
+        os.path.join(RESULTS_DIR,'figures','model_selection')
         
         # MODEL VALIDATION
         ## EXON-LEVEL CRISPR SCREENS
         ### compute splicing dependencies
         expand(os.path.join(RESULTS_DIR,'files','{dataset}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, dataset=["Thomas2020","Hart2015"]),
         ### make figures
-        #os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020'),
-        #os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020'),        
+        os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020'),
+        os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020'),        
         
         ## ENCORE RBP KD SCREENS
         ### compute splicing dependencies
@@ -77,23 +70,11 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi_rel-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ### compute delta Spl. Dep.
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','delta_spldep-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        ### create ontology from KDs
-        expand(os.path.join(RESULTS_DIR,'files','ENCORE','kd_gene_sets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ### compute harm scores
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score_rel-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        
-        ## CRISPR KO SCREENS - Achilles KO gene dependencies rather than KD gene dependencies
-        expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES),
-        
-        # Shortest path length from selected genes to cancer-driver genes vs random selection
-#         expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz'), event_type=EVENT_TYPES),
-#         expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz'), event_type=EVENT_TYPES, it=list(range(N_RANDOM_MODELS))),
-#         expand(os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','merged.tsv.gz'), event_type=EVENT_TYPES)
-        
-    
-        # EDA relationship between interaction terms in linear models
-        # os.path.join(RESULTS_DIR,'figures','interaction_analysis')
+        ### make figures
+        os.path.join(RESULTS_DIR,'figures','validation_encore')
         
         
 ##### MODEL SELECTION #####        
@@ -125,6 +106,7 @@ rule model_gene_dependency:
                     --log_transform
         """
         
+        
 rule compute_splicing_dependency:
     input:
         psi = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
@@ -150,6 +132,7 @@ rule compute_splicing_dependency:
                     --n_jobs={threads} \
                     --log_transform
         """
+    
     
 rule list_selected_models:
     input:
@@ -177,112 +160,6 @@ rule list_selected_models:
         
         print("Done!")
         
-rule random_model_selection:
-    input:
-        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{event_type}')
-    output:
-        selected_events_dir = directory(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events')),
-        selected_genes_dir = directory(os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes'))
-    params:
-        thresh_lr_pvalue = THRESH_PVALUE,
-        thresh_corr = THRESH_CORR,
-        thresh_nobs = THRESH_NOBS,
-        n_random_it = N_RANDOM_MODELS
-    run:
-        import os
-        import pandas as pd
-        import numpy as np
-        
-        # get number of selected exon models
-        models = pd.read_table(os.path.join(input.coefs_dir,'model_summaries.tsv.gz'))
-        idx = ((models['lr_pvalue']<params.thresh_lr_pvalue) &
-              (models['pearson_correlation_mean']>params.thresh_corr) &
-              (models['n_obs']>params.thresh_nobs))
-        n_selected = sum(idx)
-        print("Selected %s models." % n_selected)
-        
-        # randomly select exon models and save them
-        os.makedirs(output.selected_events_dir)
-        os.makedirs(output.selected_genes_dir)
-
-        for it in np.arange(params.n_random_it):
-            #print(it)
-            
-            np.random.seed(it) # ensure reproducibility
-            
-            # select randomly 
-            random_events = np.random.choice(models["EVENT"], size=n_selected, replace=False)
-            tmp_models = models.loc[models["EVENT"].isin(random_events)].copy()
-            
-            # save
-            tmp_models["EVENT"].to_csv(os.path.join(output.selected_events_dir,str(it)+".txt"), sep="\t", header=None, index=False)
-            tmp_models["GENE"].drop_duplicates().to_csv(os.path.join(output.selected_genes_dir,str(it)+".txt"), sep="\t", header=None, index=False)
-            
-        print("Done!")
-        
-rule combine_randomly_selected_models:
-    input:
-        random_events_dir = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events'),
-        random_genes_dir = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes')
-    output:
-        random_events = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','events-merged.tsv.gz'),
-        random_genes = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{it}its','genes-merged.tsv.gz')
-    params:
-        n_random_it = N_RANDOM_MODELS
-    run:
-        import os
-        import pandas as pd
-        
-        random_events = []
-        random_genes = []
-        for it in range(params.n_random_it):
-            print(it)
-            
-            # events
-            f = os.path.join(input.random_events_dir,str(it)+".txt")
-            events = pd.DataFrame({
-                "random_iteration": "it"+str(it),
-                "EVENT": pd.read_table(f, header=None)[0].to_list()
-            })
-            random_events.append(events)
-            
-            # genes
-            f = os.path.join(input.random_genes_dir,str(it)+".txt")
-            genes = pd.DataFrame({
-                "random_iteration": "it"+str(it),
-                "GENE": pd.read_table(f, header=None)[0].to_list()
-            })
-            random_genes.append(genes)
-            
-        random_events = pd.concat(random_events)
-        random_genes = pd.concat(random_genes)
-        
-        random_events.to_csv(output.random_events, sep="\t", index=False, compression="gzip")
-        random_genes.to_csv(output.random_genes, sep="\t", index=False, compression="gzip")
-        
-        print("Done!")
-        
-rule correlate_transcriptome_indices_ccle:
-    input:
-        spldep_dir = os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'),
-        indices = os.path.join(PREP_DIR,'transcriptome_indices','CCLE.tsv.gz')
-    output:
-        os.path.join(RESULTS_DIR,'files','correlation_spldep_indices-{event_type}.tsv.gz')
-    params:
-        script_dir = os.path.join(SRC_DIR,'python'),
-        sample_col = 'index',
-        cor_method = 'spearman',
-        padj_method = 'fdr_bh'
-    shell:
-        """
-        nice python {params.script_dir}/correlation_exon_transcriptome_indices.py \
-                        --omic_file={input.spldep_dir}/mean.tsv.gz \
-                        --sample_properties_file={input.indices} \
-                        --sample_col={params.sample_col} \
-                        --cor_method={params.cor_method} \
-                        --padj_method={params.padj_method} \
-                        --output_file={output}
-        """
         
 rule figures_model_selection:
     input:
@@ -303,9 +180,7 @@ rule figures_model_selection:
         ascanceratlas = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz"),
         event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
         metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
-        ppi_closeness = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz'),
-        randsel_events = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','events-merged.tsv.gz'),
-        randsel_genes = os.path.join(RESULTS_DIR,'files','random_model_selection-EX-1000its','genes-merged.tsv.gz')
+        ppi_closeness = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_selection'))
     shell:
@@ -329,10 +204,9 @@ rule figures_model_selection:
                     --event_info_file={input.event_info} \
                     --metadata_file={input.metadata} \
                     --ppi_closeness_file={input.ppi_closeness} \
-                    --randsel_events_file={input.randsel_events} \
-                    --randsel_genes_file={input.randsel_genes} \
                     --figs_dir={output}
         """
+    
     
 ##### MODEL VALIDATION #####        
 rule compute_splicing_dependency_exon_crispr_screen_datsets:
@@ -361,6 +235,7 @@ rule compute_splicing_dependency_exon_crispr_screen_datsets:
                     --log_transform
         """
         
+        
 rule figures_validation_crispr_Thomas2020:
     input:
         crispr = os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
@@ -387,6 +262,7 @@ rule figures_validation_crispr_Thomas2020:
                     --figs_dir={output}
         """
 
+        
 rule figures_validation_crispr_GonatopoulosPournatzis2020:
     input:
         crispr = os.path.join(RAW_DIR,"articles","Gonatopoulos-Pournatzis2020","exon_targeting_library_scores.xlsx"),
@@ -410,6 +286,7 @@ rule figures_validation_crispr_GonatopoulosPournatzis2020:
                     --spldep_file={input.spldep} \
                     --figs_dir={output}
         """
+        
         
 rule compute_splicing_dependency_encore:
     input:
@@ -436,6 +313,7 @@ rule compute_splicing_dependency_encore:
                     --n_jobs={threads} \
                     --log_transform
         """
+        
         
 rule diff_tpm_encore:
     input:
@@ -478,6 +356,7 @@ rule diff_tpm_encore:
         diff_tpm.reset_index().to_csv(output.diff_tpm, sep="\t", index=False, compression="gzip")
         
         print("Done!")
+        
         
 rule delta_psi_encore:
     input:
@@ -527,6 +406,7 @@ rule delta_psi_encore:
         
         print("Done!")
 
+        
 rule delta_spldep_encore:
     input:
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
@@ -567,46 +447,6 @@ rule delta_spldep_encore:
         
         print("Done!")
 
-rule make_ontology:
-    input:
-        metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
-        delta_psi = os.path.join(RESULTS_DIR,'files','ENCORE','delta_psi-{event_type}.tsv.gz')
-    output:
-        ontology = os.path.join(RESULTS_DIR,'files','ENCORE','kd_gene_sets-{event_type}.tsv.gz')
-    params:
-        thresh = 10
-    run:
-        import pandas as pd
-        import numpy as np
-        from tqdm import tqdm
-        
-        # load
-        metadata = pd.read_table(input.metadata)
-        delta_psi = pd.read_table(input.delta_psi)
-        
-        # make ontology
-        metadata["kd_lab"] = metadata["KD"] + "_" + metadata["cell_line"]
-        
-        ontology = []
-        for lab in tqdm(metadata["kd_lab"].unique()):
-            samples_oi = list(metadata.loc[metadata["kd_lab"]==lab,"sampleID"])
-            
-            gene_set = delta_psi[["EVENT"]+samples_oi]\
-                        .melt(id_vars=["EVENT"], var_name="sampleID")\
-                        .dropna()\
-                        .groupby(["EVENT"])["value"]\
-                        .mean().reset_index()
-            gene_set = gene_set.loc[np.abs(gene_set["value"])>params.thresh]
-            gene_set = gene_set.drop(columns=["value"])
-            gene_set["term"] = lab
-            
-            ontology.append(gene_set[["term","EVENT"]])
-            
-        ontology = pd.concat(ontology)
-        
-        ontology.to_csv(output.ontology, sep="\t", index=False, compression="gzip")
-        
-        print("Done!")
         
 rule harm_score_encore:
     input:
@@ -661,6 +501,7 @@ rule harm_score_encore:
         
         print("Done!")
 
+        
 rule figures_validation_encore:
     input:
         rnai = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
@@ -672,7 +513,6 @@ rule figures_validation_encore:
         event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
         gene_annot = os.path.join(RAW_DIR,"HGNC","gene_annotations.tsv.gz"),
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
-        ontology = os.path.join(RESULTS_DIR,'files','ENCORE','kd_gene_sets-EX.tsv.gz'),
         crispr = os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation_encore'))
@@ -687,103 +527,9 @@ rule figures_validation_encore:
                     --selected_events_file={input.selected_events} \
                     --event_info_file={input.event_info} \
                     --metadata_file={input.metadata} \
-                    --ontology_file={input.ontology} \
                     --crispr_file={input.crispr} \
                     --psi_file={input.psi} \
                     --figs_dir={output}
         """
         
-rule model_gene_dependency_achilles:
-    input:
-        splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
-        genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-        gene_dependency_file = os.path.join(PREP_DIR,'achilles','CCLE_comparable.tsv.gz'),
-        mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
-    output:
-        directory(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'))
-    threads: 24
-    resources:
-        runtime = 604800, # seconds = 168h = 7 days
-        memory = 30
-    params:
-        script_dir = TS_DIR,
-        n_iterations = 1000
-    shell:
-        """
-        nice python {params.script_dir}/target_spotter spldep_fit \
-                    --gene_dependency_file={input.gene_dependency_file} \
-                    --splicing_file={input.splicing_file} \
-                    --genexpr_file={input.genexpr_file} \
-                    --mapping_file={input.mapping_file} \
-                    --output_dir={output} \
-                    --n_iterations={params.n_iterations} \
-                    --n_jobs={threads} \
-                    --log_transform
-        """
         
-        
-rule ppi_cosmic_closeness_real:
-    input:
-        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        seed_nodes = os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'),
-        sink_nodes = os.path.join(PREP_DIR,'gene_sets','cancer_gene_census.txt')
-    output:
-        os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz')
-    threads: 12
-    resources:
-        runtime = 3600*6, # 6h
-        memory = 6
-    shell:
-        """
-        python scripts/ppi_compute_closeness.py \
-                    --ppi_file={input.ppi} \
-                    --seed_nodes_file={input.seed_nodes} \
-                    --sink_nodes_file={input.sink_nodes} \
-                    --output_file={output} \
-                    --n_jobs={threads}
-        """
-
-rule ppi_cosmic_closeness_random:
-    input:
-        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        seed_nodes = os.path.join(RESULTS_DIR,'files','random_model_selection-{event_type}-{n_random_it}its','genes','{it}.txt').format(n_random_it=N_RANDOM_MODELS, event_type='{event_type}', it='{it}'),
-        sink_nodes = os.path.join(PREP_DIR,'gene_sets','cancer_gene_census.txt')
-    output:
-        os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz')
-    threads: 1
-    resources:
-        runtime = 3600*8, # 6h
-        memory = 6
-    shell:
-        """
-        nice python scripts/ppi_compute_closeness.py \
-                    --ppi_file={input.ppi} \
-                    --seed_nodes_file={input.seed_nodes} \
-                    --sink_nodes_file={input.sink_nodes} \
-                    --output_file={output}
-        """
-        
-rule combine_ppi_cosmic_closeness:
-    input:
-        closeness = [os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','real.tsv.gz')] + [os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','random_it{it}.tsv.gz').format(event_type="{event_type}", it=it) for it in list(range(N_RANDOM_MODELS))]
-    output:
-        closeness = os.path.join(RESULTS_DIR,'files','COSMIC','ppi_closeness-{event_type}','merged.tsv.gz')
-    run:
-        import os
-        import pandas as pd
-        
-        dfs = []
-        for f in input.closeness:
-            dataset_id = os.path.basename(f).replace(".tsv.gz","")
-            
-            print(dataset_id)
-            
-            df = pd.read_table(f)
-            df["dataset_id"] = dataset_id
-            dfs.append(df)
-            
-        dfs = pd.concat(dfs)
-        
-        dfs.to_csv(output.closeness, sep="\t", compression="gzip", index=False)
-        
-        print("Done!")

@@ -60,14 +60,13 @@ FONT_FAMILY = "Arial"
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # gene_annot_file = file.path(RAW_DIR,"HGNC","gene_annotations.tsv.gz")
 # metadata_file = file.path(PREP_DIR,'metadata','ENCORE.tsv.gz')
-# ontology_file = file.path(RESULTS_DIR,'files','ENCORE','kd_gene_sets-EX.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_encore')
 # crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
 
 ##### FUNCTIONS #####
 prepare_data = function(
     metadata, event_info, rnai, diff_tpm, delta_psi, 
-    harm_score, selected_events, ontology, events_crispr, spldep
+    harm_score, selected_events, events_crispr, spldep
 ){
     
     cells_oi = metadata %>% pull(DepMap_ID) %>% unique()
@@ -249,7 +248,7 @@ compute_correls_dyn_ranges = function(df){
 
 plot_encore_validation = function(
     df, correls_top_max, correls_dyn_ranges, 
-    event_info, genedep, metadata, enrichment
+    event_info, genedep, metadata
 ){
     plts = list()
     
@@ -433,50 +432,18 @@ plot_encore_validation = function(
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
     
-    # are some events changing in KDs enriched in our selected events?
-    plts[["encore_val-enrichment-KD-dot"]] = enrichment %>%
-        slice_max(gene_ratio, n=10) %>%
-        arrange(gene_ratio) %>%
-        ggscatter(x="Description", y="gene_ratio", 
-                  size="Count", color="p.adjust") +
-        labs(x="Event Set", y="Event Ratio") +
-        coord_flip() +
-        scale_size(range=c(0.5,3)) + 
-        scale_color_continuous(
-            low=PAL_FDR_LIGHT, high=PAL_FDR_DARK, 
-            name="FDR", guide=guide_colorbar(reverse=TRUE)) +
-        theme_pubr()
-    
-    
-    ## number of events available in the ontology?
-    # upset plot of enriched exon sets
-    events_oi = enrichment %>% slice_max(gene_ratio, n=10) %>% pull(geneID) %>% str_split("/")
-    names(events_oi) = enrichment %>% slice_max(gene_ratio, n=10) %>% pull(Description)
-    
-    m = events_oi %>% 
-        list_to_matrix() %>% 
-        make_comb_mat()
-    plts[["encore_val-enrichment-KD-upset"]] = m %>%
-        UpSet(comb_order = order(comb_size(m)),
-              comb_col = PAL_SINGLE_NEUTRAL,
-              top_annotation = upset_top_annotation(m, gp = gpar(fill = PAL_SINGLE_NEUTRAL, col=NA)),
-              right_annotation = upset_right_annotation(m, gp = gpar(fill = PAL_SINGLE_NEUTRAL, col=NA))) %>%
-        draw() %>%
-        grid.grabExpr() %>%
-        as.ggplot()
-    
     return(plts)
 }
 
 
 make_plots = function(
     df, correls_top_max, correls_dyn_ranges, 
-    event_info, metadata, enrichment
+    event_info, metadata
 ){
     plts = list(
         plot_encore_validation(
             df, correls_top_max, correls_dyn_ranges, 
-            event_info, metadata, enrichment
+            event_info, metadata
         )
     )
     plts = do.call(c,plts)
@@ -485,7 +452,7 @@ make_plots = function(
 
 
 make_figdata = function(
-    df, correls_top_max, correls_dyn_ranges, enrichment
+    df, correls_top_max, correls_dyn_ranges
 ){
     
     evaluation = correls_top_max %>% 
@@ -496,8 +463,7 @@ make_figdata = function(
     figdata = list(
         "model_validation" = list(
             "spotter_results" = df,
-            "evaluation" = evaluation,
-            "esoa" = enrichment
+            "evaluation" = evaluation
         )
     )
     return(figdata)
@@ -542,10 +508,6 @@ save_plots = function(plts, figs_dir){
     
     # controls
     save_plt(plts, "encore_val-demeter2-scatter", ".pdf", figs_dir, width=5, height=5)
-    
-    # enrichment
-    save_plt(plts, "encore_val-enrichment-KD-dot", ".pdf", figs_dir, width=4, height=6)
-    save_plt(plts, "encore_val-enrichment-KD-upset", ".pdf", figs_dir, width=12, height=12)
 }
 
 
@@ -574,7 +536,6 @@ parseargs = function(){
         make_option("--selected_events_file", type="character"),
         make_option("--event_info_file", type="character"),
         make_option("--metadata_file", type="character"),
-        make_option("--ontology_file", type="character"),
         make_option("--crispr_file", type="character"),
         make_option("--psi_file", type="character"),
         make_option("--figs_dir", type="character")
@@ -597,7 +558,6 @@ main = function(){
     event_info_file = args[["event_info_file"]]
     gene_annot_file = args[["gene_annot_file"]]
     metadata_file = args[["metadata_file"]]
-    ontology_file = args[["ontology_file"]]
     crispr_file = args[["crispr_file"]]
     figs_dir = args[["figs_dir"]]
     
@@ -612,38 +572,25 @@ main = function(){
     harm_score = read_tsv(harm_score_file)
     selected_events = readLines(selected_events_file)
     event_info = read_tsv(event_info_file)
-    ontology = read_tsv(ontology_file)
     crispr = read_tsv(crispr_file)
     
     events_crispr = crispr %>% pull(EVENT) %>% unique()
     
     df = prepare_data(
         metadata, event_info, rnai, diff_tpm, delta_psi, 
-        harm_score, selected_events, ontology,
+        harm_score, selected_events, 
         events_crispr, spldep
     )
     correls_top_max = compute_correls_top_max(df)
     correls_dyn_ranges = compute_correls_dyn_ranges(df)
     
-    # number of events available in the ontology?
-    ontology %>% filter(EVENT %in% selected_events) %>% distinct(EVENT) %>% nrow()
-    enrichment = enricher(
-        selected_events, TERM2GENE=ontology, 
-        universe=event_info %>%  filter(str_detect(EVENT,"EX")) %>% 
-          pull(EVENT) %>% unique(), 
-        maxGSSize=Inf) %>%
-        as.data.frame() %>%
-        rowwise() %>%
-        mutate(gene_ratio = eval(parse(text=GeneRatio))) %>%
-        ungroup()
-
     # make plots
     plts = make_plots(df, correls_top_max, correls_dyn_ranges, 
-                      event_info, metadata, enrichment)
+                      event_info, metadata)
 
     # make figdata
     figdata = make_figdata(
-        df, correls_top_max, correls_dyn_ranges, enrichment
+        df, correls_top_max, correls_dyn_ranges
     )
     
     # save
