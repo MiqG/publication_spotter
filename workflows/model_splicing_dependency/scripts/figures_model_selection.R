@@ -6,25 +6,6 @@
 # --------------
 # EDA of gene dependencies regressed on event PSI and gene TPMs.
 # 
-# Outline
-# -------
-# model selection
-# - pvalue distributions tend to recover TP exons
-# - TPR vs FDR with p-value thresholds
-# - Spearman correlation with Pearson thresholds
-# 
-# models properties
-# - exon inclusion variation
-# - exon length distribution
-# - protein impact
-# - GSEA exons
-# - correlations with mitotic and stemness indices
-# - tumorigenesis
-#
-# models validation
-# - mutation frequencies at the gene level
-# - mutation frequencies at the exon level
-# - selected and not selected exons from the TP set
 
 require(optparse)
 require(tidyverse)
@@ -50,7 +31,6 @@ source(file.path(ROOT,"src","R","utils.R"))
 THRESH_LR_PVALUE = 0.025
 THRESH_CORR = 0.2
 SIZE_CTL = 100
-THRESH_INDICES = 0.3 # correlation with sample indices
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
@@ -73,7 +53,6 @@ FONT_FAMILY = "Arial"
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # models_file = file.path(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz")
 # ccle_stats_file = file.path(PREP_DIR,"stats","CCLE.tsv.gz")
-# indices_file = file.path(RESULTS_DIR,"files","correlation_spldep_indices-EX.tsv.gz")
 # event_mut_file = file.path(PREP_DIR,'event_snv','CCLE-EX.tsv.gz')
 # gene_mut_freq_file = file.path(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz")
 # event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
@@ -175,40 +154,6 @@ get_enrichment_result = function(enrich_list, thresh=0.05){
 }
 
 
-run_enrichments_indices = function(indices, selected_events, event_info){
-    X = indices %>% 
-        left_join(event_info %>% distinct(EVENT,GENE), by=c("index"="EVENT")) %>% 
-        filter(index%in%selected_events) %>%
-        mutate(corr_sign = ifelse(sign(correlation)>0,"positive","negative"),
-               corr_sign = ifelse(sign(correlation)==0,NA,corr_sign),
-               is_sel = abs(correlation)>THRESH_INDICES)
-    
-    index_names = indices %>% pull(index_name) %>% unique()
-    results = lapply(index_names, function(index_oi){
-        result = lapply(c("positive","negative"), function(sign_oi){
-            genes = X %>% 
-                filter(corr_sign==sign_oi & index_name==index_oi & is_sel) %>% 
-                pull(GENE) %>% 
-                unique()
-            
-            print(length(genes))
-            universe = X %>% filter(index_name==index_oi) %>% pull(GENE) %>% unique()
-            res = enricher(genes, TERM2GENE=ontologies[["GO_BP"]], universe=universe)
-            res = res %>% 
-                as.data.frame() %>% 
-                mutate(corr_sign=sign_oi, 
-                       index_name=index_oi, 
-                       Cluster=paste0(index_oi,"\n&\n",corr_sign))
-            return(res)
-        })
-        result = do.call(rbind, result)
-        return(result)
-    })
-    results = do.call(rbind, results)
-    return(results)
-}
-
-
 thresh_eval_pvalue = function(models, ctl_neg, ctl_pos){
     # find the threshold for the p-value
     threshs = c(
@@ -253,7 +198,7 @@ thresh_eval_pvalue = function(models, ctl_neg, ctl_pos){
 }
 
 
-thresh_eval_corr = function(models, rnai, spldep){
+thresh_eval_corr = function(models, rnai, spldep, ctl_neg, ctl_pos){
     # prep
     rnai = rnai %>% filter(index%in%models[["GENE"]]) %>% column_to_rownames("index")
     spldep = spldep %>% filter(index%in%models[["EVENT"]]) %>% column_to_rownames("index")
@@ -454,7 +399,7 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
 }
 
 
-plot_model_properties = function(models, enrichment, indices, indices_enrich, 
+plot_model_properties = function(models, enrichment,
                                  spldep_stats, harm_stats, ppi_closeness){
     
     plts=list()
@@ -600,67 +545,6 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich,
                                      names(plts_enrichment))
     plts = c(plts, plts_enrichment)
     
-    # are selected exons associated with transcriptomic indices?
-    X = models %>%
-        left_join(indices, by=c("EVENT"="index")) %>% 
-        mutate(corr_sign = ifelse(sign(correlation)>0,"Positive","Negative")) %>%
-        drop_na(correlation, is_selected)
-    
-    plts[["model_prop-indices-violin"]] = X %>% 
-        filter(is_selected) %>%
-        ggplot(aes(x=corr_sign, y=correlation)) + 
-        geom_violin(aes(fill=is_selected), color=NA) + 
-        geom_boxplot(fill=NA, outlier.size=0.1, 
-                     width=0.1, position=position_dodge(0.9)) +
-        fill_palette(PAL_SINGLE_LIGHT) + 
-        geom_hline(yintercept=c(-THRESH_INDICES,0,THRESH_INDICES), linetype="dashed", size=LINE_SIZE) + 
-        theme_pubr() + 
-        labs(x="Correlation Sign", y="Spearman Correlation", fill="Selected Model")  +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        geom_text(aes(y=0.8, label=n), 
-                  X %>% 
-                    filter(is_selected) %>%
-                    count(corr_sign),
-                  size=FONT_SIZE, family=FONT_FAMILY)
-    
-    res = new("compareClusterResult", compareClusterResult = indices_enrich)
-    plts[["model_prop-indices-enrichment-GO_BP-dotplot"]] = res %>% 
-        dotplot() + 
-        scale_size(range=c(0.5,3)) + 
-            scale_size(range=c(0.5,3)) + 
-            scale_color_continuous(
-                low=PAL_FDR_LIGHT, high=PAL_FDR_DARK, 
-                name="FDR", guide=guide_colorbar(reverse=TRUE)) +
-            theme_pubr()
-    
-    plts[["model_prop-indices-top_pos"]] = X %>% 
-        filter(is_selected) %>%
-        group_by(index_name) %>%
-        slice_max(correlation, n=15) %>%
-        ungroup() %>%
-        mutate(event_gene = as.factor(event_gene),
-               name = reorder_within(event_gene, correlation, index_name)) %>%
-        ggbarplot(x="name", y="correlation", fill=PAL_SINGLE_LIGHT, color=NA) +
-        facet_wrap(~index_name, scales="free") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        scale_x_reordered() +
-        labs(x="Event & Gene", y="Spearman Correlation") +
-        coord_flip()
-    
-    plts[["model_prop-indices-top_neg"]] = X %>% 
-        filter(is_selected) %>%
-        group_by(index_name) %>%
-        slice_max(-correlation, n=15) %>%
-        ungroup() %>%
-        mutate(event_gene = as.factor(event_gene),
-               name = reorder_within(event_gene, correlation, index_name)) %>%
-        ggbarplot(x="name", y="correlation", fill=PAL_SINGLE_LIGHT, color=NA) +
-        facet_wrap(~index_name, scales="free") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        scale_x_reordered() +
-        labs(x="Event & Gene", y="Spearman Correlation") +
-        coord_flip()
-    
     # - tumorigenesis
     #     there are exons with different behaviors dependencing 
     #     on the splicing dependency:
@@ -686,24 +570,6 @@ plot_model_properties = function(models, enrichment, indices, indices_enrich,
         geom_text_repel(aes(label=event_gene), size=FONT_SIZE, 
                         segment.size=0.1, family=FONT_FAMILY, 
                         X %>% slice_max(order_by=q75, n=10), max.overlaps=50)
-    
-    X = X %>% 
-        left_join(indices, by=c("EVENT"="index"))
-    
-    plts[["model_prop-tumorigenesis_vs_indices"]] = X %>% 
-        ggscatter(x="correlation", y="med", alpha=0.5, size=1, color=PAL_SINGLE_LIGHT) + 
-        stat_cor(method="spearman", label.y.npc = "bottom", 
-                 size=FONT_SIZE, family=FONT_FAMILY) + 
-        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) + 
-        geom_vline(xintercept=0, linetype="dashed", size=LINE_SIZE) +
-        facet_wrap(~index_name) +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) + 
-        geom_text_repel(aes(label=event_gene),
-                        X %>% 
-                            group_by(index_name) %>% 
-                            slice_max(abs(correlation)*abs(med), n=5),
-                        size=FONT_SIZE, family=FONT_FAMILY, segment.size=0.1) +
-        labs(x="Spearman Correlation", y="Median(Spl. Dep.)")
     
     ord = prot_imp_clean %>% 
         filter(is_selected) %>% 
@@ -1131,12 +997,12 @@ plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr
 
 make_plots = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
-                      enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+                      enrichment, spldep_stats, harm_stats, ppi_closeness,
                       gene_mut_freq, event_mut_freq,
                       rnai, spldep, splicing, genexpr, metadata){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
-        plot_model_properties(models, enrichment, indices, indices_enrich, 
+        plot_model_properties(models, enrichment,
                               spldep_stats, harm_stats, ppi_closeness),
         plot_model_validation(models, gene_mut_freq, event_mut_freq),
         plot_mutation_distances(event_mut),
@@ -1149,7 +1015,7 @@ make_plots = function(models, rnai_stats, cancer_events,
 
 make_figdata = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
-                      enrichment, indices, indices_enrich, spldep_stats, harm_stats,
+                      enrichment, spldep_stats, harm_stats,
                       gene_mut_freq, event_mut_freq, 
                       ppi_closeness,
                       rnai, spldep, splicing, genexpr, metadata){
@@ -1178,8 +1044,6 @@ make_figdata = function(models, rnai_stats, cancer_events,
         ),
         "model_properties" = list(
             "gsoa_selected" = df_enrichs,
-            "correlations_transcriptomic_indices" = indices,
-            "gsea_corrs_transcriptomic_indices" = indices_enrich,
             "splicing_dependecy_stats" = spldep_stats
         ),
         "model_validation" = list(
@@ -1241,14 +1105,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-enrichment-hallmarks-cnetplot", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_prop-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=9, height=6)
     save_plt(plts, "model_prop-enrichment-GO_BP-cnetplot", ".pdf", figs_dir, width=20, height=20)
-    ## transcriptomic indices
-    save_plt(plts, "model_prop-indices-violin", ".pdf", figs_dir, width=4, height=6)
-    save_plt(plts, "model_prop-indices-enrichment-GO_BP-dotplot", ".pdf", figs_dir, width=8.2, height=6)
-    save_plt(plts, "model_prop-indices-top_pos", ".pdf", figs_dir, width=5.5, height=5)
-    save_plt(plts, "model_prop-indices-top_neg", ".pdf", figs_dir, width=5.5, height=5)
     ## tumorigenesis
     save_plt(plts, "model_prop-tumorigenesis-scatter", ".pdf", figs_dir, width=6, height=6)
-    save_plt(plts, "model_prop-tumorigenesis_vs_indices", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_prop-tumorigenesis_vs_prot_imp", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_prop-harm_scores-scatter", ".pdf", figs_dir, width=8, height=7)
     save_plt(plts, "model_prop-harm_scores_vs_prot_imp", ".pdf", figs_dir, width=8, height=7)
@@ -1299,11 +1157,12 @@ parseargs = function(){
     option_list = list( 
         make_option("--models_file", type="character"),
         make_option("--ccle_stats_file", type="character"),
-        make_option("--indices_file", type="character"),
         make_option("--event_mut_file", type="character"),
         make_option("--gene_mut_freq_file", type="character"),
         make_option("--event_mut_freq_file", type="character"),
         make_option("--msigdb_dir", type="character"),
+        make_option("--protein_impact_file", type="character"),
+        make_option("--cosmic_genes_file", type="character"),
         make_option("--spldep_file", type="character"),
         make_option("--rnai_file", type="character"),
         make_option("--genexpr_file", type="character"),
@@ -1327,7 +1186,6 @@ main = function(){
     
     models_file = args[["models_file"]]
     ccle_stats_file = args[["ccle_stats_file"]]
-    indices_file = args[["indices_file"]]
     event_mut_file = args[["event_mut_file"]]
     gene_mut_freq_file = args[["gene_mut_freq_file"]]
     event_mut_freq_file = args[["event_mut_freq_file"]]
@@ -1350,7 +1208,6 @@ main = function(){
     # load
     models = read_tsv(models_file)
     ccle_stats = read_tsv(ccle_stats_file)
-    indices = read_tsv(indices_file) %>% filter(index_name %in% c("stemness"))
     event_mut = read_tsv(event_mut_file)
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% dplyr::rename(GENE=Hugo_Symbol)
     event_mut_freq = read_tsv(event_mut_freq_file)
@@ -1425,7 +1282,7 @@ main = function(){
                is_ctl_neg = GENE %in% ctl_neg)
     ### evaluate thresholds
     eval_pvalue = thresh_eval_pvalue(models, ctl_neg, ctl_pos)
-    eval_corr = thresh_eval_corr(models, rnai, spldep)
+    eval_corr = thresh_eval_corr(models, rnai, spldep, ctl_neg, ctl_pos)
     
     ## model properties
     ### GSEA of selected events
@@ -1442,9 +1299,6 @@ main = function(){
     )
     enrichment = run_enrichment(genes_oi, events_oi, universe, ontologies)
     enrichment[sapply(enrichment, nrow)<1] = NULL
-    
-    ## GSEA of selected events correlating with transcriptomic indices
-    indices_enrich = run_enrichments_indices(indices, selected_events, event_info)
     
     ## mutations affecting selected events
     event_mut = event_mut %>%
@@ -1485,7 +1339,7 @@ main = function(){
     plts = make_plots(
         models, rnai_stats, cancer_events, 
         eval_pvalue, eval_corr, 
-        enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+        enrichment, spldep_stats, harm_stats, ppi_closeness,
         gene_mut_freq, event_mut_freq,
         rnai, spldep, splicing, genexpr, metadata
     )
@@ -1494,7 +1348,7 @@ main = function(){
     figdata = make_figdata(
         models, rnai_stats, cancer_events, 
         eval_pvalue, eval_corr, 
-        enrichment, indices, indices_enrich, spldep_stats, harm_stats, ppi_closeness,
+        enrichment, spldep_stats, harm_stats, ppi_closeness,
         gene_mut_freq, event_mut_freq,
         rnai, spldep, splicing, genexpr, metadata
     )
