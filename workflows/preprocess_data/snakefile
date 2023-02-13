@@ -51,8 +51,7 @@ CANCER_TYPES = [
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
 DEPMAP_RAW = {
-    "demeter2": os.path.join(RAW_DIR,"DepMap","demeter2","D2_combined_gene_dep_scores.csv"),
-    "achilles": os.path.join(RAW_DIR,"DepMap","achilles_ccle","Achilles_gene_effect_transposed.tsv.gz")
+    "demeter2": os.path.join(RAW_DIR,"DepMap","demeter2","D2_combined_gene_dep_scores.csv")
 }
 
 tcga_metadata = pd.read_table(os.path.join(RAW_DIR,"TCGA","metadata","PANCAN.tsv.gz"))
@@ -72,7 +71,6 @@ rule all:
         os.path.join(PREP_DIR,"mutations","CCLE.tsv.gz"),
 
         # preprocess DepMap data
-        ## prep
         expand(os.path.join(PREP_DIR,"{dataset}","CCLE.tsv.gz"), dataset=DEPMAP_RAW.keys()),
 
         # preprocess Thomas 2020
@@ -216,9 +214,9 @@ rule preprocess_depmap:
     shell:
         """
         python scripts/preprocess_depmap.py \
-                    --raw_achilles_file={input} \
+                    --raw_depmap_file={input} \
                     --raw_metadata_file={params.metadata_file} \
-                    --prep_achilles_file={output}
+                    --prep_depmap_file={output}
         """
         
 
