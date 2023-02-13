@@ -14,11 +14,22 @@ Outline
         - PSI
         - gene expression
         - mutations: gene mutation frequency
-    2. preprocess DepMap
-    3. 
--
-- preprocess ENCORE
-- 
+    2. preprocess DepMap: demeter2 gene dependency
+    
+- Spl. Dep. validation
+    1. preprocess Thomas2020
+    2. preprocess ENCORE
+    3. preprocess COSMIC
+    4. preprocess TCGA
+    5. preprocess inhouse
+
+- Drug-Exon Inference
+    1. preprocess STRINGDB
+    2. preprocess GDSC
+
+- Drug-Exon Validation
+    1. preprocess Pietila2021
+
 """
 
 import os
@@ -93,7 +104,6 @@ rule all:
         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         expand(os.path.join(PREP_DIR,"genexpr_counts","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
         ## merge metadata TCGA
         os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
@@ -102,18 +112,26 @@ rule all:
         ## merge metadata TCGA subtypes
         os.path.join(PREP_DIR,"metadata","PANCAN_subtypes.tsv.gz"),
         
+        # preprocess inhouse RNA-seq
+        os.path.join(PREP_DIR,"metadata","inhouse.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-ALTA.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-ALTD.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","inhouse-INT.tsv.gz"),
+        os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")        
+
+        # preprocess STRINGDB
+        os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
+
         # preprocess drug screens GDSC
-        ## clean names
-        os.path.join(PREP_DIR,"drug_screens","drug_targets.tsv.gz"),
         ## split datasets GDSC platforms
         os.path.join(PREP_DIR,"drug_screens","train","GDSC1.tsv.gz"),
         os.path.join(PREP_DIR,"drug_screens","train","GDSC2.tsv.gz"),
         os.path.join(PREP_DIR,"drug_screens","test","GDSC1.tsv.gz"),
         os.path.join(PREP_DIR,"drug_screens","test","GDSC2.tsv.gz"),
+        ## clean names
+        os.path.join(PREP_DIR,"drug_screens","drug_targets.tsv.gz"),
         
-        # preprocess STRINGDB
-        os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
-
         # preprocess Pietila2021
         os.path.join(PREP_DIR,"metadata","Pietila2021.tsv.gz"),
         os.path.join(PREP_DIR,"event_psi","Pietila2021-EX.tsv.gz"),
@@ -121,14 +139,6 @@ rule all:
         os.path.join(PREP_DIR,"event_psi","Pietila2021-ALTD.tsv.gz"),
         os.path.join(PREP_DIR,"event_psi","Pietila2021-INT.tsv.gz"),
         os.path.join(PREP_DIR,"genexpr_tpm","Pietila2021.tsv.gz"),
-        
-        # preprocess inhouse RNA-seq
-        os.path.join(PREP_DIR,"metadata","inhouse.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-ALTA.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-ALTD.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-INT.tsv.gz"),
-        os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")
         
         
 rule prepare_metadata_ccle:
@@ -385,14 +395,12 @@ rule preprocess_TCGA:
     input:
         metadata = os.path.join(RAW_DIR,"TCGA","metadata","{cancer}.tsv.gz"),
         psi = os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out",'PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
-        genexpr = lambda wildcards: os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out","TPM-hg38-{n_samples}.tab.gz").format(cancer=wildcards.cancer, n_samples=TCGA_N_SAMPLES[wildcards.cancer])
     output:
         metadata = os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"),
         psi_EX = os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"),
         psi_ALTA = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"),
         psi_ALTD = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"),
-        psi_INT = os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"),
-        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz")
+        psi_INT = os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz")
     run:
         import gc
         import pandas as pd
@@ -438,11 +446,6 @@ rule preprocess_TCGA:
             file_ids_todrop = sum(list(file_ids_todrop.values()),[]) # unlist
             metadata = metadata.loc[~metadata['file_id'].isin(file_ids_todrop)]
             
-        # TPM
-        print("Processing TPM matrix...")
-        ## remove vast-tools' suffix
-        genexpr.columns = [c.replace("_1","") for c in genexpr.columns]
-        
         # subset
         ## find common samples
         common_samples = set(metadata["file_id"]).intersection(
@@ -474,8 +477,6 @@ rule preprocess_TCGA:
         psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
         psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
         psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
-        ## TPMs
-        genexpr.reset_index().drop(columns="NAME").to_csv(output.genexpr, **SAVE_PARAMS)        
 
         print("Done!")
         
