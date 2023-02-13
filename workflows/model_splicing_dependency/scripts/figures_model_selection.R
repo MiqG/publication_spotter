@@ -53,9 +53,7 @@ FONT_FAMILY = "Arial"
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # models_file = file.path(RESULTS_DIR,"files","models_gene_dependency-EX","model_summaries.tsv.gz")
 # ccle_stats_file = file.path(PREP_DIR,"stats","CCLE.tsv.gz")
-# event_mut_file = file.path(PREP_DIR,'event_snv','CCLE-EX.tsv.gz')
 # gene_mut_freq_file = file.path(ROOT,"data","prep","gene_mutation_freq","CCLE.tsv.gz")
-# event_mut_freq_file = file.path(ROOT,"data","prep","event_mutation_freq","CCLE-EX.tsv.gz")
 # msigdb_dir = file.path(ROOT,"data","raw","MSigDB","msigdb_v7.4","msigdb_v7.4_files_to_download_locally","msigdb_v7.4_GMTs")
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 # cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
@@ -67,7 +65,6 @@ FONT_FAMILY = "Arial"
 # ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
-# ppi_closeness_file = file.path(RESULTS_DIR,'files','COSMIC','ppi_closeness-EX','merged.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
 
@@ -400,7 +397,7 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
 
 
 plot_model_properties = function(models, enrichment,
-                                 spldep_stats, harm_stats, ppi_closeness){
+                                 spldep_stats, harm_stats){
     
     plts=list()
     
@@ -608,81 +605,11 @@ plot_model_properties = function(models, enrichment,
         facet_wrap(~harm_type, scales="free_y") +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
-    # are genes bearing selected exons closer to oncogenes?
-    X = ppi_closeness %>%
-        count(type, shortest_path_length) %>%
-        group_by(type) %>%
-        mutate(freq = n / sum(n)) %>%
-        ungroup()
-    
-    test = compare_means(
-        shortest_path_length ~ type, data=ppi_closeness,
-        method = "kruskal.test"
-    ) %>%
-    mutate(label = paste0(method,", = ",p.adj))
-    
-    plts[["model_prop-ppi_closeness"]] = X %>% 
-        ggbarplot(x="shortest_path_length", y="freq", fill="type", 
-                  color=NA, position=position_dodge(0.7), 
-                  palette=c("grey", PAL_SINGLE_LIGHT)) +
-        labs(x="Shortest Path Length", y="Rel. Proportion", fill="Dataset Type") +
-        geom_text(aes(x=1.7, y=0.7, label=label), test, size=FONT_SIZE, family=FONT_FAMILY)
-    
-    # consider type of splicing impact
-    X = ppi_closeness %>%
-        left_join(models %>% distinct(GENE, term_clean), by=c("sink"="GENE")) %>%
-        count(term_clean, type, shortest_path_length) %>%
-        group_by(term_clean, type) %>%
-        mutate(freq = n / sum(n)) %>%
-        ungroup() %>%
-        drop_na()
-    
-    test = lapply(unique(models[["term_clean"]]), function(term_i){
-        
-        df = tryCatch(
-                ppi_closeness %>%
-                left_join(models %>% distinct(GENE, term_clean), by=c("sink"="GENE")) %>%
-                filter(term_clean == term_i) %>%
-                compare_means(
-                    shortest_path_length ~ type, data=.,
-                    method = "kruskal.test"
-                ) %>%
-                mutate(label = paste0(method,", = ",p.adj),
-                       term_clean = term_i),
-            
-                error = function(e){
-                    df = data.frame(
-                        ".y." = NA,
-                        "p" = NA,
-                        "p.adj" = NA,
-                        "p.format" = NA,
-                        "p.signif" = NA,
-                        "method" = NA,
-                        "label" = NA,
-                        "term_clean" = term_i
-                    )
-                    
-                    return(df)
-                }
-            )
-        
-        return(df)
-    })
-    test = do.call(rbind, test)
-    
-    plts[["model_prop-ppi_closeness_by_impact"]] = X %>% 
-        ggbarplot(x="shortest_path_length", y="freq", fill="type", 
-                  color=NA, position=position_dodge(0.7), 
-                  palette=c("grey", PAL_SINGLE_LIGHT)) +
-        labs(x="Shortest Path Length", y="Rel. Proportion", fill="Dataset Type") +
-        geom_text(aes(x=1.7, y=0.7, label=label), test, size=FONT_SIZE, family=FONT_FAMILY) + 
-        facet_wrap(~term_clean)
-    
     return(plts)
 }
 
 
-plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
+plot_model_validation = function(models, gene_mut_freq){
     plts = list()
     
     # - mutation frequencies at the gene level
@@ -752,163 +679,9 @@ plot_model_validation = function(models, gene_mut_freq, event_mut_freq){
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb) Norm.", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
       
-    # - mutation frequencies at the exon level
-    # how often do selected exons get hit when the gene is mutated?
-    X = models %>%
-        left_join(event_mut_freq, by=c("EVENT","GENE")) %>%
-        # keep only genes with a selected exon
-        group_by(GENE) %>%
-        filter(any(is_selected)) %>%
-        ungroup() %>%
-        drop_na(Variant_Classification, term_clean, is_selected)
-
-    notsel_mut_freq = X %>%
-        # average mutation frequency per kb of not selected events
-        filter(!is_selected) %>%
-        group_by(Variant_Classification, GENE) %>%
-        summarize(notsel_mut_freq = mean(event_mut_freq_per_kb, na.rm=TRUE))
-    
-    X = X %>% 
-        left_join(notsel_mut_freq, by=c("Variant_Classification","GENE")) %>%
-        # Fold change difference 
-        mutate(fc_mut_freq = log2(event_mut_freq_per_kb / notsel_mut_freq))
-      
-    ## do the same with a null distribution of 1000 random exons
-    null = models %>%
-        left_join(event_mut_freq, by=c("EVENT","GENE")) %>%
-        # shuffle selected exons by protein impact and mutation variant
-        group_by(Variant_Classification,GENE) %>%
-        mutate(is_selected = sample(is_selected)) %>%
-        ungroup() %>%
-        # keep only genes with a selected exon
-        group_by(GENE) %>%
-        filter(any(is_selected)) %>%
-        ungroup() %>%
-        drop_na(Variant_Classification, term_clean, is_selected)
-    
-    notsel_mut_freq = null %>%
-        # average mutation frequency per kb of not selected events
-        filter(!is_selected) %>%
-        group_by(Variant_Classification, GENE) %>%
-        summarize(notsel_mut_freq = mean(event_mut_freq_per_kb, na.rm=TRUE))
-    
-    null = null %>% 
-        left_join(notsel_mut_freq, by=c("Variant_Classification","GENE")) %>%
-        # Fold change difference 
-        mutate(fc_mut_freq = log2(event_mut_freq_per_kb / notsel_mut_freq))
-    
-    X = X %>% 
-        mutate(dataset = "Real") %>% 
-        bind_rows(null %>% mutate(dataset = "Random"))
-    
-    plts[["model_val-mutation_event_count"]] = X %>% 
-        filter(Variant_Classification %in% variants_oi) %>%
-        count(dataset, Variant_Classification, is_selected) %>%
-        ggbarplot(x="Variant_Classification", y="n", 
-                  label=TRUE, palette=PAL_DUAL, 
-                  lab.size=FONT_SIZE, lab.family=FONT_FAMILY,
-                  fill="is_selected", color=NA, position=position_dodge(0.9)) + 
-        yscale("log10", .format=TRUE) + 
-        labs(x="Mutation Effect", y="No. Events", fill="Selected Model") +
-        theme_pubr(x.text.angle=70) +
-        facet_wrap(~dataset, ncol=1) +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-    
-    
-    plts[["model_val-mutation_event_frequency"]] = X %>% 
-        filter(Variant_Classification %in% variants_oi) %>%
-        filter(is_selected) %>%
-        ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
-                   group=interaction(Variant_Classification,dataset))) +
-        geom_boxplot(aes(fill=dataset), outlier.size=0.1, 
-                     position=position_dodge(0.7)) +
-        fill_palette(PAL_DUAL) + 
-        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
-        stat_compare_means(aes(group=dataset), method="wilcox.test", 
-                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
-        labs(x="Mutation Effect", y="log2(FC Mut. Freq. per Kb)", 
-             fill="Selected Model") +
-        theme_pubr(x.text.angle=70)
-    
-    
-    plts[["model_val-mutation_event_frequency-by_protein_impact"]] = X %>% 
-        filter(Variant_Classification %in% variants_oi) %>%
-        drop_na(fc_mut_freq) %>%
-        filter(is_selected) %>%
-        ggplot(aes(x=Variant_Classification, y=fc_mut_freq, 
-                   group=interaction(Variant_Classification,dataset))) +
-        geom_boxplot(aes(fill=dataset), outlier.size=0.1, 
-                     position=position_dodge(0.7)) +
-        fill_palette(PAL_DUAL) + 
-        geom_hline(yintercept=0, linetype="dashed", size=LINE_SIZE) +
-        stat_compare_means(aes(group=dataset), method="wilcox.test", 
-                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
-        labs(x="Mutation Effect", y="log2(FC Mut. Freq. per Kb)", 
-             fill="Selected Model") +
-        theme_pubr(x.text.angle=70) +
-        facet_wrap(~term_clean) +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-
     return(plts)
 }
 
-
-plot_mutation_distances = function(event_mut, margin=500){
-    X = event_mut %>%
-        group_by(Variant_Classification) %>%
-        mutate(
-            on_event = sign(distance_to_3ss) != sign(distance_to_5ss),
-            var_class_lab = sprintf("%s (n=%s)", Variant_Classification, n())
-        ) %>%
-        filter(sum(is_selected)>5) %>%
-        ungroup() 
-    
-    plts = list()
-    
-    plts[["mutation_dists-closest_ss-distrs"]] = X %>%
-        filter(abs(distance_to_closest_ss)<margin) %>% 
-        ggdensity(x="distance_to_closest_ss", color="is_selected", fill=NA) + 
-        geom_text(
-            aes(x=-250, y=0.004, label=label, color=is_selected), 
-            . %>% count(Variant_Classification, is_selected) %>%
-            mutate(label = sprintf("%s (n=%s)", is_selected, n)),
-            size=FONT_SIZE, family=FONT_FAMILY
-        ) +
-        color_palette(PAL_DUAL) + 
-        facet_wrap(~Variant_Classification, scales="free_y") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
-        labs(x="Distance to Closest Splice Site", y="Density", color="Selected Model")
-    
-    plts[["mutation_dists-5ss-distrs"]] = X %>% 
-        filter(abs(distance_to_5ss)<margin) %>% 
-        ggdensity(x="distance_to_5ss", color="is_selected", fill=NA) + 
-        geom_text(
-            aes(x=-250, y=0.004, label=label, color=is_selected), 
-            . %>% count(Variant_Classification, is_selected) %>%
-            mutate(label = sprintf("%s (n=%s)", is_selected, n)),
-            size=FONT_SIZE, family=FONT_FAMILY
-        ) +
-        color_palette(PAL_DUAL) + 
-        facet_wrap(~Variant_Classification, scales="free_y") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
-        labs(x="Distance to Closest Splice Site", y="Density", color="Selected Model")
-    
-    plts[["mutation_dists-3ss-distrs"]] = X %>% 
-        filter(abs(distance_to_3ss)<margin) %>% 
-        ggdensity(x="distance_to_3ss", color="is_selected", fill=NA) + 
-        geom_text(
-            aes(x=-250, y=0.004, label=label, color=is_selected), 
-            . %>% count(Variant_Classification, is_selected) %>%
-            mutate(label = sprintf("%s (n=%s)", is_selected, n)),
-            size=FONT_SIZE, family=FONT_FAMILY
-        ) +
-        color_palette(PAL_DUAL) + 
-        facet_wrap(~Variant_Classification, scales="free_y") +
-        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
-        labs(x="Distance to Closest Splice Site", y="Density", color="Selected Model")
-    
-    return(plts)
-}
 
 plot_event_oi = function(event_oi, gene_oi, ensembl_oi, 
                          rnai, spldep, splicing, genexpr, patt){
@@ -997,15 +770,14 @@ plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr
 
 make_plots = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
-                      enrichment, spldep_stats, harm_stats, ppi_closeness,
-                      gene_mut_freq, event_mut_freq,
+                      enrichment, spldep_stats, harm_stats, 
+                      gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
         plot_model_properties(models, enrichment,
-                              spldep_stats, harm_stats, ppi_closeness),
-        plot_model_validation(models, gene_mut_freq, event_mut_freq),
-        plot_mutation_distances(event_mut),
+                              spldep_stats, harm_stats),
+        plot_model_validation(models, gene_mut_freq),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata)
     )
     plts = do.call(c,plts)
@@ -1016,8 +788,7 @@ make_plots = function(models, rnai_stats, cancer_events,
 make_figdata = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
                       enrichment, spldep_stats, harm_stats,
-                      gene_mut_freq, event_mut_freq, 
-                      ppi_closeness,
+                      gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata){
     # prep enrichments
     df_enrichs = do.call(rbind,
@@ -1047,8 +818,7 @@ make_figdata = function(models, rnai_stats, cancer_events,
             "splicing_dependecy_stats" = spldep_stats
         ),
         "model_validation" = list(
-            "gene_mutation_frequency" = gene_mut_freq,
-            "event_mutation_frequency" = event_mut_freq
+            "gene_mutation_frequency" = gene_mut_freq
         )
     )
     return(figdata)
@@ -1110,21 +880,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_prop-tumorigenesis_vs_prot_imp", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_prop-harm_scores-scatter", ".pdf", figs_dir, width=8, height=7)
     save_plt(plts, "model_prop-harm_scores_vs_prot_imp", ".pdf", figs_dir, width=8, height=7)
-    # ppi closeness
-    save_plt(plts, "model_prop-ppi_closeness", ".pdf", figs_dir, width=5, height=6)
 
     # model validation
     save_plt(plts, "model_val-mutation_gene_count", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_val-mutation_event_count", ".pdf", figs_dir, width=8, height=10)
     save_plt(plts, "model_val-mutation_gene_frequency", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_gene_frequency_silent_norm", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_val-mutation_event_frequency", ".pdf", figs_dir, width=8, height=8)
-    save_plt(plts, "model_val-mutation_event_frequency-by_protein_impact", ".pdf", figs_dir, width=14, height=8)
-    
-    # event mutation distances
-    save_plt(plts, "mutation_dists-closest_ss-distrs", ".pdf", figs_dir, width=12, height=14)
-    save_plt(plts, "mutation_dists-5ss-distrs", ".pdf", figs_dir, width=12, height=14)
-    save_plt(plts, "mutation_dists-3ss-distrs", ".pdf", figs_dir, width=12, height=14)
     
     # events oi
     genes_oi = c("KRAS","SMNDC1","NUMB","NUMB_lung")
@@ -1157,9 +917,7 @@ parseargs = function(){
     option_list = list( 
         make_option("--models_file", type="character"),
         make_option("--ccle_stats_file", type="character"),
-        make_option("--event_mut_file", type="character"),
         make_option("--gene_mut_freq_file", type="character"),
-        make_option("--event_mut_freq_file", type="character"),
         make_option("--msigdb_dir", type="character"),
         make_option("--protein_impact_file", type="character"),
         make_option("--cosmic_genes_file", type="character"),
@@ -1171,7 +929,6 @@ parseargs = function(){
         make_option("--ascanceratlas_file", type="character"),
         make_option("--event_info_file", type="character"),
         make_option("--metadata_file", type="character"),
-        make_option("--ppi_closeness_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -1186,9 +943,7 @@ main = function(){
     
     models_file = args[["models_file"]]
     ccle_stats_file = args[["ccle_stats_file"]]
-    event_mut_file = args[["event_mut_file"]]
     gene_mut_freq_file = args[["gene_mut_freq_file"]]
-    event_mut_freq_file = args[["event_mut_freq_file"]]
     msigdb_dir = args[["msigdb_dir"]]
     protein_impact_file = args[["protein_impact_file"]]
     cosmic_genes_file = args[["cosmic_genes_file"]]
@@ -1200,7 +955,6 @@ main = function(){
     ascanceratlas_file = args[["ascanceratlas_file"]]
     event_info_file = args[["event_info_file"]]
     metadata_file = args[["metadata_file"]]
-    ppi_closeness_file = args[["ppi_closeness_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -1208,9 +962,7 @@ main = function(){
     # load
     models = read_tsv(models_file)
     ccle_stats = read_tsv(ccle_stats_file)
-    event_mut = read_tsv(event_mut_file)
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% dplyr::rename(GENE=Hugo_Symbol)
-    event_mut_freq = read_tsv(event_mut_freq_file)
     ontologies = load_ontologies(msigdb_dir, protein_impact_file, cosmic_genes_file)
     spldep = read_tsv(spldep_file)
     rnai = read_tsv(rnai_file)
@@ -1220,8 +972,6 @@ main = function(){
     ascanceratlas = read_tsv(ascanceratlas_file)
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
-    ppi_closeness = read_tsv(ppi_closeness_file) %>% 
-        mutate(type = gsub("_.*","",dataset_id))
     
     gc()
     
@@ -1300,10 +1050,6 @@ main = function(){
     enrichment = run_enrichment(genes_oi, events_oi, universe, ontologies)
     enrichment[sapply(enrichment, nrow)<1] = NULL
     
-    ## mutations affecting selected events
-    event_mut = event_mut %>%
-        mutate(is_selected = EVENT %in% selected_events)
-    
     # compute harm score
     ## H.S. = (-1) * SplDep * DeltaPSI
     ## where DeltaPSI is in the direction of inclusion if SplDep>0, or exclusion if SplDep<0
@@ -1339,8 +1085,8 @@ main = function(){
     plts = make_plots(
         models, rnai_stats, cancer_events, 
         eval_pvalue, eval_corr, 
-        enrichment, spldep_stats, harm_stats, ppi_closeness,
-        gene_mut_freq, event_mut_freq,
+        enrichment, spldep_stats, harm_stats, 
+        gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata
     )
 
@@ -1348,8 +1094,8 @@ main = function(){
     figdata = make_figdata(
         models, rnai_stats, cancer_events, 
         eval_pvalue, eval_corr, 
-        enrichment, spldep_stats, harm_stats, ppi_closeness,
-        gene_mut_freq, event_mut_freq,
+        enrichment, spldep_stats, harm_stats,
+        gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata
     )
     
