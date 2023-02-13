@@ -116,13 +116,13 @@ rule all:
         # preprocess STRINGDB
         os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
 
-        # preprocess Zhang2022
-        os.path.join(PREP_DIR,"metadata","Zhang2022.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Zhang2022-EX.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Zhang2022-ALTA.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Zhang2022-ALTD.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Zhang2022-INT.tsv.gz"),
-        os.path.join(PREP_DIR,"genexpr_tpm","Zhang2022.tsv.gz"),
+        # preprocess Pietila2021
+        os.path.join(PREP_DIR,"metadata","Pietila2021.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","Pietila2021-EX.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","Pietila2021-ALTA.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","Pietila2021-ALTD.tsv.gz"),
+        os.path.join(PREP_DIR,"event_psi","Pietila2021-INT.tsv.gz"),
+        os.path.join(PREP_DIR,"genexpr_tpm","Pietila2021.tsv.gz"),
         
         # preprocess inhouse RNA-seq
         os.path.join(PREP_DIR,"metadata","inhouse.tsv.gz"),
@@ -681,19 +681,18 @@ rule make_cosmic_gene_set:
         gene_set.to_csv(output.cosmic, sep="\t", index=False, header=None)
         
         
-rule preprocess_Zhang2022:
+rule preprocess_Pietila2021:
     input:
-        metadata_pietila = os.path.join(RAW_DIR,'articles','Zhang2022','metadata-EGAD00001006456-Pietila2021.tsv'),
-        metadata_zhang = os.path.join(RAW_DIR,'articles','Zhang2022','metadata-EGAD00001006456-Zhang2022.tsv'),
-        psi = os.path.join(RAW_DIR,'articles','Zhang2022','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
-        genexpr = os.path.join(RAW_DIR,'articles','Zhang2022','vast_out','TPM-hg38-329.tab.gz')
+        metadata = os.path.join(RAW_DIR,'articles','Pietila2021','metadata-EGAD00001006456-Pietila2021.tsv'),
+        psi = os.path.join(RAW_DIR,'articles','Pietila2021','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'articles','Pietila2021','vast_out','TPM-hg38-329.tab.gz')
     output:
-        metadata = os.path.join(PREP_DIR,'metadata','Zhang2022.tsv.gz'),
-        psi_EX = os.path.join(PREP_DIR,'event_psi','Zhang2022-EX.tsv.gz'),
-        psi_ALTA = os.path.join(PREP_DIR,'event_psi','Zhang2022-ALTA.tsv.gz'),
-        psi_ALTD = os.path.join(PREP_DIR,'event_psi','Zhang2022-ALTD.tsv.gz'),
-        psi_INT = os.path.join(PREP_DIR,'event_psi','Zhang2022-INT.tsv.gz'),
-        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','Zhang2022.tsv.gz')
+        metadata = os.path.join(PREP_DIR,'metadata','Pietila2021.tsv.gz'),
+        psi_EX = os.path.join(PREP_DIR,'event_psi','Pietila2021-EX.tsv.gz'),
+        psi_ALTA = os.path.join(PREP_DIR,'event_psi','Pietila2021-ALTA.tsv.gz'),
+        psi_ALTD = os.path.join(PREP_DIR,'event_psi','Pietila2021-ALTD.tsv.gz'),
+        psi_INT = os.path.join(PREP_DIR,'event_psi','Pietila2021-INT.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','Pietila2021.tsv.gz')
     run:
         import gc
         import pandas as pd
@@ -701,15 +700,11 @@ rule preprocess_Zhang2022:
         
         # load
         print("Loading data...")
-        metadata_pietila = pd.read_table(input.metadata_pietila)
-        metadata_zhang = pd.read_table(input.metadata_zhang)
+        metadata = pd.read_table(input.metadata)
         psi = pd.read_table(input.psi, index_col=0)
         genexpr = pd.read_table(input.genexpr, index_col=[0,1])
         
         gc.collect()
-        
-        # preprocess metadata
-        # TODO
         
         # PSI
         print("Processing PSI matrix...")
@@ -735,7 +730,7 @@ rule preprocess_Zhang2022:
         print("Saving...")
         
         ## metadata
-        metadata_pietila.to_csv(output.metadata, **SAVE_PARAMS)
+        metadata.to_csv(output.metadata, **SAVE_PARAMS)
         
         ## PSIs
         psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
