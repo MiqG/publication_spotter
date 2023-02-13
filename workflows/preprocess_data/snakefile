@@ -1,7 +1,6 @@
 """
 Author: Miquel Anglada Girotto
 Contact: miquelangladagirotto [at] gmail [dot] com
-Last Update: 2021-01-12
 
 Workflow purpose
 --------------
@@ -9,7 +8,17 @@ Preprocess raw data.
 
 Outline
 -------
-
+- Spl. Dep. inference
+    1. preprocess CCLE
+        - metadata
+        - PSI
+        - gene expression
+        - mutations: gene mutation frequency
+    2. preprocess DepMap
+    3. 
+-
+- preprocess ENCORE
+- 
 """
 
 import os
@@ -22,34 +31,21 @@ SRC_DIR = os.path.join(ROOT,"src")
 PREP_DIR = os.path.join(ROOT,"data","prep")
 SUPPORT_DIR = os.path.join(ROOT,"support")
 
-EVENT_TYPES = ["EX","ALTA","ALTD","INT"]
+EVENT_TYPES = ["EX"]
 CANCER_TYPES = [
+    "BLCA",
     "BRCA",
     "COAD",
-    "GBM",
     "HNSC",
     "KICH",
     "KIRC",
     "KIRP",
-    "LGG",
     "LIHC",
     "LUAD",
     "LUSC",
     "PRAD",
-    "READ",
     "THCA",
-    "UCEC",
-    "UCS"
-]
-
-CANCER_TYPES = [
-    "UCS","UCEC", "LGG","GBM",
-    "LUAD","KICH","KIRP","KIRC",
-    "SKCM","TGCT","THCA","THYM","UVM",
-    "ACC","BLCA","CESC","CHOL","COAD",
-    "DLBC","HNSC","LIHC","MESO",
-    "LUSC","PAAD","PCPG","PRAD",
-    "READ","SARC","BRCA"
+    "UCEC"
 ]
 
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
@@ -68,14 +64,12 @@ rule all:
         # preprocess CCLE
         ## metadata
         os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
-        # ## PSI
-        # expand(os.path.join(PREP_DIR,"event_psi","CCLE-{event_type}.tsv.gz"), event_type=EVENT_TYPES),
+        ## PSI
+        expand(os.path.join(PREP_DIR,"event_psi","CCLE-{event_type}.tsv.gz"), event_type=EVENT_TYPES),
         ## gene expression
         os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         ## mutations
         os.path.join(PREP_DIR,"mutations","CCLE.tsv.gz"),
-        expand(os.path.join(PREP_DIR,"event_snv","CCLE-{event_type}.tsv.gz"), event_type=["EX"]),
-        expand(os.path.join(PREP_DIR,"event_mutation_freq","CCLE-{event_type}.tsv.gz"), event_type=["EX"]),
 
         # preprocess DepMap data
         ## prep
@@ -246,53 +240,6 @@ rule mutation_frequency:
                     --snv_file={input.snv} \
                     --annotation_file={input.annotation} \
                     --id_col={params.id_col} \
-                    --gene_col={params.gene_col} \
-                    --effect_col={params.effect_col} \
-                    --output_file={output}
-        """
-        
-        
-rule annotate_mutations_to_events:
-    input:
-        mutations = os.path.join(PREP_DIR,'mutations','CCLE.tsv.gz'),
-        exon_annotation = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
-    output:
-        os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz')
-    params:
-        event_type = '{event_type}',
-        #margin = 100
-    shell:
-        """
-        nice python scripts/annotate_mutations_to_events.py \
-                        --mutations_file={input.mutations} \
-                        --annotation_file={input.exon_annotation} \
-                        --event_type={params.event_type} \
-                        --output_file={output}
-        """
-        
-        
-rule mutation_frequency_per_event:
-    input:
-        snv_event = os.path.join(PREP_DIR,'event_snv','CCLE-{event_type}.tsv.gz'),
-        snv_gene = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
-        annot_events = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-        annot_genes = os.path.join(RAW_DIR,'ENSEMBL','gene_annotation-hg19.tsv.gz')
-    output:
-        os.path.join(PREP_DIR,'event_mutation_freq','CCLE-{event_type}.tsv.gz')
-    params:
-        id_col = 'DepMap_ID',
-        event_col = 'EVENT',
-        gene_col = 'Hugo_Symbol',
-        effect_col = 'Variant_Classification'
-    shell:
-        """
-        python scripts/count_mutations_per_event_and_variant.py \
-                    --snv_event_file={input.snv_event} \
-                    --snv_gene_file={input.snv_gene} \
-                    --annot_events_file={input.annot_events} \
-                    --annot_genes_file={input.annot_genes} \
-                    --id_col={params.id_col} \
-                    --event_col={params.event_col} \
                     --gene_col={params.gene_col} \
                     --effect_col={params.effect_col} \
                     --output_file={output}
