@@ -240,6 +240,19 @@ rule mutation_frequency:
                     --effect_col={params.effect_col} \
                     --output_file={output}
         """
+
+        
+rule make_cosmic_gene_set:
+    input:
+        cosmic = os.path.join(RAW_DIR,"COSMIC","cancer_gene_census.tsv")
+    output:
+        cosmic = os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt")
+    run:
+        import pandas as pd
+        
+        df = pd.read_table(input.cosmic)
+        gene_set = df["Gene Symbol"]
+        gene_set.to_csv(output.cosmic, sep="\t", index=False, header=None)
         
         
 rule prepare_thomas2020:
@@ -257,291 +270,6 @@ rule prepare_thomas2020:
         """
 
 
-rule merge_tcga_metadata:
-    input:
-        metadata_files = [os.path.join(PREP_DIR,'metadata','%s.tsv' % cancer) 
-                          for cancer in CANCER_TYPES]
-    output:
-        os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz')
-    run:
-        import pandas as pd
-        metadata = []
-        for f in input.metadata_files:
-            df = pd.read_table(f)
-            metadata.append(df)
-            del df
-        metadata = pd.concat(metadata)
-        metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
-    
-    
-rule preprocess_gdsc:
-    input:
-        drug_screen = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
-        demeter2 = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
-    output:
-        gdsc1_train = os.path.join(PREP_DIR,'drug_screens','train','GDSC1.tsv.gz'),
-        gdsc1_test = os.path.join(PREP_DIR,'drug_screens','test','GDSC1.tsv.gz'),
-        gdsc2_train = os.path.join(PREP_DIR,'drug_screens','train','GDSC2.tsv.gz'),
-        gdsc2_test = os.path.join(PREP_DIR,'drug_screens','test','GDSC2.tsv.gz'),
-    run:
-        import pandas as pd
-        SAVE_KWS = {"sep":"\t", "index":False, "compression":"gzip"}
-        drug_response = pd.read_csv(input.drug_screen)
-        demeter2_samples = list(pd.read_table(input.demeter2, index_col=0, nrows=0).columns)
-        
-        # generate unique drug id to avoid duplicates
-        # as there are drugs screend with different concentrations
-        # in both screens
-        drug_response["ID"] = drug_response["DRUG_ID"].astype(str) + "_" +\
-                              drug_response["MAX_CONC"].astype(str)
-        
-        # mark if cell line was also screened in Demeter2
-        # (we want to train only with unseen cell lines)
-        drug_response["in_demeter2"] = drug_response["ARXSPAN_ID"].isin(demeter2_samples)
-        
-        # GDSC1
-        idx_train = (drug_response["DATASET"] == "GDSC1") & (~drug_response["in_demeter2"])
-        idx_test = (drug_response["DATASET"] == "GDSC1") & (drug_response["in_demeter2"])
-        drug_response.loc[idx_train].to_csv(output.gdsc1_train, **SAVE_KWS)
-        drug_response.loc[idx_test].to_csv(output.gdsc1_test, **SAVE_KWS)
-        
-        # GDSC2
-        idx_train = (drug_response["DATASET"] == "GDSC2") & (~drug_response["in_demeter2"])
-        idx_test = (drug_response["DATASET"] == "GDSC2") & (drug_response["in_demeter2"])
-        drug_response.loc[idx_train].to_csv(output.gdsc2_train, **SAVE_KWS)
-        drug_response.loc[idx_test].to_csv(output.gdsc2_test, **SAVE_KWS)
-        
-        
-rule preprocess_TCGA:
-    input:
-        metadata = os.path.join(RAW_DIR,"TCGA","metadata","{cancer}.tsv.gz"),
-        psi = os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out",'PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
-        genexpr = lambda wildcards: os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out","TPM-hg38-{n_samples}.tab.gz").format(cancer=wildcards.cancer, n_samples=TCGA_N_SAMPLES[wildcards.cancer])
-    output:
-        metadata = os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"),
-        psi_EX = os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"),
-        psi_ALTA = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"),
-        psi_ALTD = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"),
-        psi_INT = os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"),
-        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz")
-    run:
-        import gc
-        import pandas as pd
-        import numpy as np
-
-        # load
-        print("Loading data...")
-        metadata = pd.read_table(input.metadata)
-        psi = pd.read_table(input.psi, index_col=0)
-        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
-
-        gc.collect()
-
-        # preprocess metadata
-        ## drop FFPE samples
-        metadata = metadata.loc[~metadata["is_ffpe"],:].copy()
-
-        # PSI
-        print("Processing PSI matrix...")
-        ## drop empty rows
-        is_na = psi.isnull()
-        non_missing = is_na.shape[1] - is_na.sum(1)
-        to_keep = non_missing >= 1
-        psi = psi.loc[to_keep]
-
-        ## remove vast-tools' suffix
-        psi.columns = [c.replace("_1","") for c in psi.columns]
-
-        ## split by event type
-        event_types = ["EX","ALTA","ALTD","INT"]
-        psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
-        
-        ## keep only the replicate with less missing values for each patient
-        duplicated_sampleIDs = metadata.loc[metadata.duplicated('sampleID'),'sampleID'].unique()
-        if len(duplicated_sampleIDs)>0:
-            duplicated_file_ids = metadata.set_index('sampleID').loc[duplicated_sampleIDs,'file_id']
-
-            # decide which sample to keep based on their missing values
-            nan_count = psi[duplicated_file_ids].isnull().sum()
-            file_ids_todrop = {sampleID: list(nan_count[duplicated_file_ids[sampleID]].sort_values().index[1:])
-                               for sampleID in duplicated_file_ids.index.unique()}
-            # drop samples
-            file_ids_todrop = sum(list(file_ids_todrop.values()),[]) # unlist
-            metadata = metadata.loc[~metadata['file_id'].isin(file_ids_todrop)]
-            
-        # TPM
-        print("Processing TPM matrix...")
-        ## remove vast-tools' suffix
-        genexpr.columns = [c.replace("_1","") for c in genexpr.columns]
-        
-        # subset
-        ## find common samples
-        common_samples = set(metadata["file_id"]).intersection(
-            psis["EX"].columns
-        ).intersection(
-            genexpr.columns
-        )
-        psis = {e: psis[e][common_samples].copy() for e in event_types}
-        genexpr = genexpr[common_samples].copy()
-        metadata = metadata.loc[metadata["file_id"].isin(common_samples)]
-        
-        ## rename columns
-        psis = {
-            e: psis[e].rename(
-                columns=metadata.set_index("file_id")["sampleID"].to_dict()
-                ).copy() 
-            for e in event_types
-        }
-        genexpr = genexpr.rename(
-            columns=metadata.set_index("file_id")["sampleID"].to_dict()
-        ).copy()        
-            
-        # save
-        print("Saving...")
-        ## metadata
-        metadata.to_csv(output.metadata, **SAVE_PARAMS)
-        ## PSIs
-        psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
-        psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
-        psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
-        psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
-        ## TPMs
-        genexpr.reset_index().drop(columns="NAME").to_csv(output.genexpr, **SAVE_PARAMS)        
-
-        print("Done!")
-        
-        
-rule prep_cancer_subtypes:
-    input:
-        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv.gz'),
-        subtypes = os.path.join(RAW_DIR,'articles','Mina2017','tcga_subtypes.xls')
-    output:
-        subtypes = os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv.gz')
-    run:
-        import pandas as pd
-        
-        subtypes = pd.read_excel(input.subtypes, skiprows=2)
-        subtypes["sampleID"] = subtypes["Sample id"].str.replace(".","-",regex=False)
-        subtypes["cancer_subtype"] = subtypes["Subtype"]
-        subtypes = subtypes[["sampleID","cancer_subtype"]]
-        
-        metadata = pd.read_table(input.metadata)
-        metadata = metadata[["file_id","sampleID","cancer_type","sample_type"]]
-        
-        df = pd.merge(metadata, subtypes, how="left", on="sampleID")
-        
-        # consider STN as a subtype
-        df.loc[df["sample_type"]=="Solid Tissue Normal","cancer_subtype"] = "STN"
-        
-        df.to_csv(output.subtypes, sep="\t", index=False, compression="gzip")
-        
-        print("Done!")
-        
-        
-rule merge_tcga_metadata_subtypes:
-    input:
-        metadata_files = [os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv.gz').format(cancer=c) 
-                          for c in CANCER_TYPES]
-    output:
-        os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
-    run:
-        import pandas as pd
-        metadata = []
-        for f in input.metadata_files:
-            df = pd.read_table(f)
-            metadata.append(df)
-            del df
-        metadata = pd.concat(metadata)
-        metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
-        
-        print("Done!")
-        
-        
-rule preprocess_stringdb:
-    input:
-        ppi = os.path.join(RAW_DIR,'STRINGDB','9606.protein.links.full.v11.5.txt.gz'),
-        aliases = os.path.join(RAW_DIR,'STRINGDB','9606.protein.aliases.v11.5.txt.gz')
-    output:
-        os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz')
-    shell:
-        """
-        python scripts/preprocess_stringdb.py \
-                    --raw_ppi_file={input.ppi} \
-                    --raw_aliases_file={input.aliases} \
-                    --prep_ppi_file={output}
-        """
-        
-        
-rule preprocess_gdsc_targets:
-    input:
-        raw_drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
-        Goncalves2020 = os.path.join(SUPPORT_DIR,'msb199405-sup-0003-datasetev2.xlsx'),
-        symbol_checker = os.path.join(SUPPORT_DIR,'hgnc-symbol-check-drug_targets.csv')
-    output:
-        os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
-    run:
-        import pandas as pd
-        raw_drug_targets = pd.read_csv(input.raw_drug_targets)
-        # gonc = pd.read_excel(input.Goncalves2020, sheet_name="Drug sheet")
-        corrector = pd.read_csv(input.symbol_checker, skiprows=1)
-        
-        # prep gonc
-#         cols_oi = ["DRUG_ID","DRUG_NAME","SYNONYMS","TARGET","TARGET_PATHWAY"]
-#         gonc = gonc.rename(columns={
-#             "Drug ID": "DRUG_ID",
-#             "Name": "DRUG_NAME",
-#             "Synonyms": "SYNONYMS",
-#             "Gene Target": "TARGET",
-#             "Pathway": "TARGET_PATHWAY"
-#         })[cols_oi]
-#         gonc["DRUG_NAME"] = gonc["DRUG_NAME"].str.upper()
-#         gonc["ORIGIN"] = "Gonçalves 2020"
-        
-        # prep raw
-        raw_drug_targets["TARGET"] = raw_drug_targets["TARGET"].str.replace(",",";")
-        raw_drug_targets["DRUG_NAME"] = raw_drug_targets["DRUG_NAME"].str.upper()
-        raw_drug_targets["ORIGIN"] = "GDSC"
-        raw_drug_targets = raw_drug_targets.drop(columns="SCREENING_SITE")
-        
-        # if available in Goncalves, keep it
-#         avail_drug_ids = set(gonc["DRUG_ID"]).intersection(raw_drug_targets["DRUG_ID"])
-#         drug_targets = {}
-#         for drug_id in raw_drug_targets["DRUG_ID"].unique():
-#             drug_name = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id,"DRUG_NAME"].values
-#             alternative = (gonc["DRUG_NAME"].isin(drug_name)) &\
-#                           (~gonc["DRUG_ID"].isin(avail_drug_ids))
-            
-#             if drug_id in gonc["DRUG_ID"]:
-#                 drug_targets[drug_id] = gonc.loc[gonc["DRUG_ID"]==drug_id]
-#             elif any(alternative):
-#                 drug_targets[drug_id] = gonc.loc[alternative]
-#             else:
-#                 drug_targets[drug_id] = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id]
-                
-        drug_targets = raw_drug_targets.copy()
-        
-        # prep corrector dictionary
-        corrector = corrector[
-            ["Input","Approved symbol"]
-        ].dropna().drop_duplicates()
-        corrector["symbol"] = corrector["Approved symbol"].str.split(";")
-        corrector = corrector.explode("symbol")
-        corrector["symbol"] = corrector["symbol"].str.replace(" ","")
-        corrector = corrector.set_index("Input")["symbol"].to_dict()
-        
-        # pivot longer the target genes
-        drug_targets["TARGET"] = drug_targets["TARGET"].str.split(";")
-        drug_targets = drug_targets.explode("TARGET")
-        drug_targets["TARGET"] = drug_targets["TARGET"].str.replace(" ", "")
-        drug_targets["TARGET"] = [corrector[t] if t in corrector.keys() else t 
-                                  for t in drug_targets["TARGET"]]
-        
-        # save
-        drug_targets.to_csv(output[0], index=False, sep="\t", compression="gzip")
-        
-        print("Done!")
-        
-        
 rule preprocess_encore:
     input:
         metadata = os.path.join(RAW_DIR,'ENCODE','ENCORE','metadata','ENCORE.tsv'),
@@ -650,45 +378,38 @@ rule preprocess_encore:
         ## TPMs
         genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)
         
+        print("Done!")
         
-rule make_cosmic_gene_set:
+        
+rule preprocess_TCGA:
     input:
-        cosmic = os.path.join(RAW_DIR,"COSMIC","cancer_gene_census.tsv")
+        metadata = os.path.join(RAW_DIR,"TCGA","metadata","{cancer}.tsv.gz"),
+        psi = os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out",'PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = lambda wildcards: os.path.join(RAW_DIR,"TCGA","{cancer}","vast_out","TPM-hg38-{n_samples}.tab.gz").format(cancer=wildcards.cancer, n_samples=TCGA_N_SAMPLES[wildcards.cancer])
     output:
-        cosmic = os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt")
-    run:
-        import pandas as pd
-        
-        df = pd.read_table(input.cosmic)
-        gene_set = df["Gene Symbol"]
-        gene_set.to_csv(output.cosmic, sep="\t", index=False, header=None)
-        
-        
-rule preprocess_Pietila2021:
-    input:
-        metadata = os.path.join(RAW_DIR,'articles','Pietila2021','metadata-EGAD00001006456-Pietila2021.tsv'),
-        psi = os.path.join(RAW_DIR,'articles','Pietila2021','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
-        genexpr = os.path.join(RAW_DIR,'articles','Pietila2021','vast_out','TPM-hg38-329.tab.gz')
-    output:
-        metadata = os.path.join(PREP_DIR,'metadata','Pietila2021.tsv.gz'),
-        psi_EX = os.path.join(PREP_DIR,'event_psi','Pietila2021-EX.tsv.gz'),
-        psi_ALTA = os.path.join(PREP_DIR,'event_psi','Pietila2021-ALTA.tsv.gz'),
-        psi_ALTD = os.path.join(PREP_DIR,'event_psi','Pietila2021-ALTD.tsv.gz'),
-        psi_INT = os.path.join(PREP_DIR,'event_psi','Pietila2021-INT.tsv.gz'),
-        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','Pietila2021.tsv.gz')
+        metadata = os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"),
+        psi_EX = os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"),
+        psi_ALTA = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"),
+        psi_ALTD = os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"),
+        psi_INT = os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","{cancer}.tsv.gz")
     run:
         import gc
         import pandas as pd
         import numpy as np
-        
+
         # load
         print("Loading data...")
         metadata = pd.read_table(input.metadata)
         psi = pd.read_table(input.psi, index_col=0)
         genexpr = pd.read_table(input.genexpr, index_col=[0,1])
-        
+
         gc.collect()
-        
+
+        # preprocess metadata
+        ## drop FFPE samples
+        metadata = metadata.loc[~metadata["is_ffpe"],:].copy()
+
         # PSI
         print("Processing PSI matrix...")
         ## drop empty rows
@@ -696,35 +417,67 @@ rule preprocess_Pietila2021:
         non_missing = is_na.shape[1] - is_na.sum(1)
         to_keep = non_missing >= 1
         psi = psi.loc[to_keep]
-        
+
         ## remove vast-tools' suffix
-        psi.columns = [c.replace('_1','') for c in psi.columns]
-        
+        psi.columns = [c.replace("_1","") for c in psi.columns]
+
         ## split by event type
         event_types = ["EX","ALTA","ALTD","INT"]
         psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
         
+        ## keep only the replicate with less missing values for each patient
+        duplicated_sampleIDs = metadata.loc[metadata.duplicated('sampleID'),'sampleID'].unique()
+        if len(duplicated_sampleIDs)>0:
+            duplicated_file_ids = metadata.set_index('sampleID').loc[duplicated_sampleIDs,'file_id']
+
+            # decide which sample to keep based on their missing values
+            nan_count = psi[duplicated_file_ids].isnull().sum()
+            file_ids_todrop = {sampleID: list(nan_count[duplicated_file_ids[sampleID]].sort_values().index[1:])
+                               for sampleID in duplicated_file_ids.index.unique()}
+            # drop samples
+            file_ids_todrop = sum(list(file_ids_todrop.values()),[]) # unlist
+            metadata = metadata.loc[~metadata['file_id'].isin(file_ids_todrop)]
+            
         # TPM
         print("Processing TPM matrix...")
         ## remove vast-tools' suffix
-        genexpr.columns = [c.replace('_1','') for c in genexpr.columns]
+        genexpr.columns = [c.replace("_1","") for c in genexpr.columns]
         
+        # subset
+        ## find common samples
+        common_samples = set(metadata["file_id"]).intersection(
+            psis["EX"].columns
+        ).intersection(
+            genexpr.columns
+        )
+        psis = {e: psis[e][common_samples].copy() for e in event_types}
+        genexpr = genexpr[common_samples].copy()
+        metadata = metadata.loc[metadata["file_id"].isin(common_samples)]
+        
+        ## rename columns
+        psis = {
+            e: psis[e].rename(
+                columns=metadata.set_index("file_id")["sampleID"].to_dict()
+                ).copy() 
+            for e in event_types
+        }
+        genexpr = genexpr.rename(
+            columns=metadata.set_index("file_id")["sampleID"].to_dict()
+        ).copy()        
+            
         # save
         print("Saving...")
-        
         ## metadata
         metadata.to_csv(output.metadata, **SAVE_PARAMS)
-        
         ## PSIs
         psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
         psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
         psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
         psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
-        
         ## TPMs
-        genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)        
-        
-        print("Done!")      
+        genexpr.reset_index().drop(columns="NAME").to_csv(output.genexpr, **SAVE_PARAMS)        
+
+        print("Done!")
         
         
 rule preprocess_tcga_genexpr_counts:
@@ -749,6 +502,72 @@ rule preprocess_tcga_genexpr_counts:
         genexpr.reset_index().to_csv(output.genexpr, **SAVE_PARAMS)
         
         print("Done!")
+        
+        
+rule prep_cancer_subtypes:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','{cancer}.tsv.gz'),
+        subtypes = os.path.join(RAW_DIR,'articles','Mina2017','tcga_subtypes.xls')
+    output:
+        subtypes = os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv.gz')
+    run:
+        import pandas as pd
+        
+        subtypes = pd.read_excel(input.subtypes, skiprows=2)
+        subtypes["sampleID"] = subtypes["Sample id"].str.replace(".","-",regex=False)
+        subtypes["cancer_subtype"] = subtypes["Subtype"]
+        subtypes = subtypes[["sampleID","cancer_subtype"]]
+        
+        metadata = pd.read_table(input.metadata)
+        metadata = metadata[["file_id","sampleID","cancer_type","sample_type"]]
+        
+        df = pd.merge(metadata, subtypes, how="left", on="sampleID")
+        
+        # consider STN as a subtype
+        df.loc[df["sample_type"]=="Solid Tissue Normal","cancer_subtype"] = "STN"
+        
+        df.to_csv(output.subtypes, sep="\t", index=False, compression="gzip")
+        
+        print("Done!")
+        
+        
+rule merge_tcga_metadata:
+    input:
+        metadata_files = [os.path.join(PREP_DIR,'metadata','%s.tsv' % cancer) 
+                          for cancer in CANCER_TYPES]
+    output:
+        os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz')
+    run:
+        import pandas as pd
+        metadata = []
+        for f in input.metadata_files:
+            df = pd.read_table(f)
+            metadata.append(df)
+            del df
+        metadata = pd.concat(metadata)
+        metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        print("Done!")
+        
+        
+rule merge_tcga_metadata_subtypes:
+    input:
+        metadata_files = [os.path.join(PREP_DIR,'metadata','{cancer}_subtypes.tsv.gz').format(cancer=c) 
+                          for c in CANCER_TYPES]
+    output:
+        os.path.join(PREP_DIR,'metadata','PANCAN_subtypes.tsv.gz')
+    run:
+        import pandas as pd
+        metadata = []
+        for f in input.metadata_files:
+            df = pd.read_table(f)
+            metadata.append(df)
+            del df
+        metadata = pd.concat(metadata)
+        metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
+        
+        print("Done!")
+        
         
 rule preprocess_inhouse:
     input:
@@ -824,3 +643,189 @@ rule preprocess_inhouse:
         genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)        
         
         print("Done!")   
+        
+        
+rule preprocess_gdsc:
+    input:
+        drug_screen = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
+        demeter2 = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz')
+    output:
+        gdsc1_train = os.path.join(PREP_DIR,'drug_screens','train','GDSC1.tsv.gz'),
+        gdsc1_test = os.path.join(PREP_DIR,'drug_screens','test','GDSC1.tsv.gz'),
+        gdsc2_train = os.path.join(PREP_DIR,'drug_screens','train','GDSC2.tsv.gz'),
+        gdsc2_test = os.path.join(PREP_DIR,'drug_screens','test','GDSC2.tsv.gz'),
+    run:
+        import pandas as pd
+        SAVE_KWS = {"sep":"\t", "index":False, "compression":"gzip"}
+        drug_response = pd.read_csv(input.drug_screen)
+        demeter2_samples = list(pd.read_table(input.demeter2, index_col=0, nrows=0).columns)
+        
+        # generate unique drug id to avoid duplicates
+        # as there are drugs screend with different concentrations
+        # in both screens
+        drug_response["ID"] = drug_response["DRUG_ID"].astype(str) + "_" +\
+                              drug_response["MAX_CONC"].astype(str)
+        
+        # mark if cell line was also screened in Demeter2
+        # (we want to train only with unseen cell lines)
+        drug_response["in_demeter2"] = drug_response["ARXSPAN_ID"].isin(demeter2_samples)
+        
+        # GDSC1
+        idx_train = (drug_response["DATASET"] == "GDSC1") & (~drug_response["in_demeter2"])
+        idx_test = (drug_response["DATASET"] == "GDSC1") & (drug_response["in_demeter2"])
+        drug_response.loc[idx_train].to_csv(output.gdsc1_train, **SAVE_KWS)
+        drug_response.loc[idx_test].to_csv(output.gdsc1_test, **SAVE_KWS)
+        
+        # GDSC2
+        idx_train = (drug_response["DATASET"] == "GDSC2") & (~drug_response["in_demeter2"])
+        idx_test = (drug_response["DATASET"] == "GDSC2") & (drug_response["in_demeter2"])
+        drug_response.loc[idx_train].to_csv(output.gdsc2_train, **SAVE_KWS)
+        drug_response.loc[idx_test].to_csv(output.gdsc2_test, **SAVE_KWS)
+        
+        
+rule preprocess_stringdb:
+    input:
+        ppi = os.path.join(RAW_DIR,'STRINGDB','9606.protein.links.full.v11.5.txt.gz'),
+        aliases = os.path.join(RAW_DIR,'STRINGDB','9606.protein.aliases.v11.5.txt.gz')
+    output:
+        os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz')
+    shell:
+        """
+        python scripts/preprocess_stringdb.py \
+                    --raw_ppi_file={input.ppi} \
+                    --raw_aliases_file={input.aliases} \
+                    --prep_ppi_file={output}
+        """
+        
+        
+rule preprocess_gdsc_targets:
+    input:
+        raw_drug_targets = os.path.join(RAW_DIR,'GDSC','screened_compunds_rel_8.2.csv'),
+        Goncalves2020 = os.path.join(SUPPORT_DIR,'msb199405-sup-0003-datasetev2.xlsx'),
+        symbol_checker = os.path.join(SUPPORT_DIR,'hgnc-symbol-check-drug_targets.csv')
+    output:
+        os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
+    run:
+        import pandas as pd
+        raw_drug_targets = pd.read_csv(input.raw_drug_targets)
+        # gonc = pd.read_excel(input.Goncalves2020, sheet_name="Drug sheet")
+        corrector = pd.read_csv(input.symbol_checker, skiprows=1)
+        
+        # prep gonc
+#         cols_oi = ["DRUG_ID","DRUG_NAME","SYNONYMS","TARGET","TARGET_PATHWAY"]
+#         gonc = gonc.rename(columns={
+#             "Drug ID": "DRUG_ID",
+#             "Name": "DRUG_NAME",
+#             "Synonyms": "SYNONYMS",
+#             "Gene Target": "TARGET",
+#             "Pathway": "TARGET_PATHWAY"
+#         })[cols_oi]
+#         gonc["DRUG_NAME"] = gonc["DRUG_NAME"].str.upper()
+#         gonc["ORIGIN"] = "Gonçalves 2020"
+        
+        # prep raw
+        raw_drug_targets["TARGET"] = raw_drug_targets["TARGET"].str.replace(",",";")
+        raw_drug_targets["DRUG_NAME"] = raw_drug_targets["DRUG_NAME"].str.upper()
+        raw_drug_targets["ORIGIN"] = "GDSC"
+        raw_drug_targets = raw_drug_targets.drop(columns="SCREENING_SITE")
+        
+        # if available in Goncalves, keep it
+#         avail_drug_ids = set(gonc["DRUG_ID"]).intersection(raw_drug_targets["DRUG_ID"])
+#         drug_targets = {}
+#         for drug_id in raw_drug_targets["DRUG_ID"].unique():
+#             drug_name = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id,"DRUG_NAME"].values
+#             alternative = (gonc["DRUG_NAME"].isin(drug_name)) &\
+#                           (~gonc["DRUG_ID"].isin(avail_drug_ids))
+            
+#             if drug_id in gonc["DRUG_ID"]:
+#                 drug_targets[drug_id] = gonc.loc[gonc["DRUG_ID"]==drug_id]
+#             elif any(alternative):
+#                 drug_targets[drug_id] = gonc.loc[alternative]
+#             else:
+#                 drug_targets[drug_id] = raw_drug_targets.loc[raw_drug_targets["DRUG_ID"]==drug_id]
+                
+        drug_targets = raw_drug_targets.copy()
+        
+        # prep corrector dictionary
+        corrector = corrector[
+            ["Input","Approved symbol"]
+        ].dropna().drop_duplicates()
+        corrector["symbol"] = corrector["Approved symbol"].str.split(";")
+        corrector = corrector.explode("symbol")
+        corrector["symbol"] = corrector["symbol"].str.replace(" ","")
+        corrector = corrector.set_index("Input")["symbol"].to_dict()
+        
+        # pivot longer the target genes
+        drug_targets["TARGET"] = drug_targets["TARGET"].str.split(";")
+        drug_targets = drug_targets.explode("TARGET")
+        drug_targets["TARGET"] = drug_targets["TARGET"].str.replace(" ", "")
+        drug_targets["TARGET"] = [corrector[t] if t in corrector.keys() else t 
+                                  for t in drug_targets["TARGET"]]
+        
+        # save
+        drug_targets.to_csv(output[0], index=False, sep="\t", compression="gzip")
+        
+        print("Done!")
+        
+        
+rule preprocess_Pietila2021:
+    input:
+        metadata = os.path.join(RAW_DIR,'articles','Pietila2021','metadata-EGAD00001006456-Pietila2021.tsv'),
+        psi = os.path.join(RAW_DIR,'articles','Pietila2021','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        genexpr = os.path.join(RAW_DIR,'articles','Pietila2021','vast_out','TPM-hg38-329.tab.gz')
+    output:
+        metadata = os.path.join(PREP_DIR,'metadata','Pietila2021.tsv.gz'),
+        psi_EX = os.path.join(PREP_DIR,'event_psi','Pietila2021-EX.tsv.gz'),
+        psi_ALTA = os.path.join(PREP_DIR,'event_psi','Pietila2021-ALTA.tsv.gz'),
+        psi_ALTD = os.path.join(PREP_DIR,'event_psi','Pietila2021-ALTD.tsv.gz'),
+        psi_INT = os.path.join(PREP_DIR,'event_psi','Pietila2021-INT.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','Pietila2021.tsv.gz')
+    run:
+        import gc
+        import pandas as pd
+        import numpy as np
+        
+        # load
+        print("Loading data...")
+        metadata = pd.read_table(input.metadata)
+        psi = pd.read_table(input.psi, index_col=0)
+        genexpr = pd.read_table(input.genexpr, index_col=[0,1])
+        
+        gc.collect()
+        
+        # PSI
+        print("Processing PSI matrix...")
+        ## drop empty rows
+        is_na = psi.isnull()
+        non_missing = is_na.shape[1] - is_na.sum(1)
+        to_keep = non_missing >= 1
+        psi = psi.loc[to_keep]
+        
+        ## remove vast-tools' suffix
+        psi.columns = [c.replace('_1','') for c in psi.columns]
+        
+        ## split by event type
+        event_types = ["EX","ALTA","ALTD","INT"]
+        psis = {e: psi.loc[psi.index.str.contains(e)] for e in event_types}        
+        
+        # TPM
+        print("Processing TPM matrix...")
+        ## remove vast-tools' suffix
+        genexpr.columns = [c.replace('_1','') for c in genexpr.columns]
+        
+        # save
+        print("Saving...")
+        
+        ## metadata
+        metadata.to_csv(output.metadata, **SAVE_PARAMS)
+        
+        ## PSIs
+        psis["EX"].reset_index().to_csv(output.psi_EX, **SAVE_PARAMS)
+        psis["ALTD"].reset_index().to_csv(output.psi_ALTD, **SAVE_PARAMS)
+        psis["ALTA"].reset_index().to_csv(output.psi_ALTA, **SAVE_PARAMS)
+        psis["INT"].reset_index().to_csv(output.psi_INT, **SAVE_PARAMS)
+        
+        ## TPMs
+        genexpr.reset_index().drop(columns='NAME').to_csv(output.genexpr, **SAVE_PARAMS)        
+        
+        print("Done!")
