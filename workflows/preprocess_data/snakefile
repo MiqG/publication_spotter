@@ -274,21 +274,6 @@ rule merge_tcga_metadata:
         metadata.to_csv(output[0], sep='\t', index=False, compression='gzip')
     
     
-rule prepare_moiso2021:
-        input:
-            metadata = os.path.join(PREP_DIR,'metadata','PANCAN.tsv.gz'),
-            response = os.path.join(RAW_DIR,'articles','Moiso2021','drug_response_filtered.tsv')
-        output:
-            os.path.join(PREP_DIR,'Moiso2021','drug_response.tsv.gz')
-        shell:
-            """
-            python scripts/preprocess_Moiso2021.py \
-                        --metadata_file={input.metadata} \
-                        --response_file={input.response} \
-                        --output_file={output}
-            """
-            
-
 rule preprocess_gdsc:
     input:
         drug_screen = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
