@@ -1,7 +1,6 @@
 """
 Author: Miquel Anglada Girotto
 Contact: miquelangladagirotto [at] gmail [dot] com
-Last Update: 2021-01-12
 
 Workflow purpose
 --------------
@@ -10,11 +9,13 @@ Workflow to analyze putative associations between exons and cancer at single-exo
 
 Outline
 -------
-        
+- Spl. Dep. validation
+    1. compute inhouse splicing dependencies
+    2. identify targets with therapeutic potential in inhouse cancer cell lines
+    3. validate selected targets experimentally
 """
 
 import os
-import pandas as pd
 
 # variables
 ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
@@ -23,180 +24,23 @@ SRC_DIR = os.path.join(ROOT,"src")
 RAW_DIR = os.path.join(ROOT,'data','raw')
 PREP_DIR = os.path.join(ROOT,'data','prep')
 RESULTS_DIR = os.path.join(ROOT,'results','experimental_validation')
-PANGOLIN_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','Pangolin')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 CCLE_DIR = os.path.join(ROOT,"results","model_splicing_dependency")
 TCGA_DIR = os.path.join(ROOT,'results','streamlined_therapy_dev')
-
-EVENTS_OI = [
-    "HsaEX0006970",
-    "HsaEX0008092",
-    "HsaEX0020455",
-    "HsaEX0022946",
-    "HsaEX0026116",
-    "HsaEX0034998",
-    "HsaEX0043609",
-    "HsaEX0044398",
-    "HsaEX0044468",
-    "HsaEX0049558",
-    "HsaEX0050345",
-    "HsaEX0052877",
-    "HsaEX0056284",
-    "HsaEX0066096",
-    "HsaEX0070392",
-    "HsaEX0071941",
-]
-
-EVENT_GENES_OI = {
-    #'HsaEX0006970': 'ATP6V0A2',
-    #'HsaEX0008092': 'BIN1',
-    'HsaEX0020455': 'DNM2',
-    #'HsaEX0022946': 'ERBIN',
-    'HsaEX0026116': 'FNBP1',
-    'HsaEX0034998': 'KRAS',
-    #'HsaEX0043609': 'NPNT',
-    'HsaEX0044398': 'NUP85',
-    #'HsaEX0044468': 'NVL',
-    'HsaEX0049558': 'PPP1R12A',
-    'HsaEX0050345': 'PRPF18',
-    'HsaEX0052877': 'RCC1',
-    #'HsaEX0056284': 'SATB2',
-    #'HsaEX0066096': 'TMTC1',
-    'HsaEX0070392': 'VLDLR',
-    'HsaEX0071941': 'YAP1'
-}
-
-
-# event_info = pd.read_table(os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"))
-# EVENTS_INFO = {
-#     event: {
-#         "event_chr": event_info.loc[event_info["EVENT"]==event,"COORD_o"].values[0].split(":")[0],
-#         "event_start": event_info.loc[event_info["EVENT"]==event,"COORD_o"].values[0].split(":")[1].split("-")[0],
-#         "event_end": event_info.loc[event_info["EVENT"]==event,"COORD_o"].values[0].split(":")[1].split("-")[1],
-#         "event_strand": event_info.loc[event_info["EVENT"]==event,"REF_CO"].values[0].split(":")[-1]
-#     }
-#     for event in EVENTS_OI
-# }
-
-# METHODS_KWS = {
-#     "deletion": {
-#         "size": 10
-#     },
-#     "substitution": {
-#         "size": 1
-#     }
-# }
 
 EVENT_TYPES = ["EX"]
 
 ##### RULES #####
 rule all:
     input:
-        # compute splicing dependencies (mean, median, std)
+        # compute splicing dependencies inhouse dataset
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
         
-        # infer structures
-        #expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
-        #expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
-
-        # fit gene dependencies and get empirical distributions of coefficients
-        #expand(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"), event=EVENTS_OI, method=METHODS_KWS.keys()),
-        #expand(os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta"), event=EVENTS_OI),
-        
         # figures
-        #os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
-        #os.path.join(RESULTS_DIR,"figures","validation")
+        os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
+        os.path.join(RESULTS_DIR,"figures","validation")
 
         
-rule get_splicing_enhancers:
-    input:
-        reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz"),
-        pangolin_dir = PANGOLIN_DIR
-    output:
-        directory(os.path.join(RESULTS_DIR,"files","pangolin_splicing_enhancers","{method}","{event}"))
-    params:
-        event_name = "{event}",
-        event_chr = lambda wildcards: EVENTS_INFO[wildcards.event]["event_chr"],
-        event_start = lambda wildcards: EVENTS_INFO[wildcards.event]["event_start"],
-        event_end = lambda wildcards: EVENTS_INFO[wildcards.event]["event_end"],
-        event_strand = lambda wildcards: EVENTS_INFO[wildcards.event]["event_strand"],
-        margin_out = 250,
-        method = "{method}",
-        size = lambda wildcards: METHODS_KWS[wildcards.method]["size"]
-    threads: 1
-    resources:
-        runtime = 3600*24, # 24h
-        memory = 10 # GB
-    shell:
-        """
-        nice python scripts/explore_splicing_enhancers.py \
-                --event_name={params.event_name} \
-                --event_chr={params.event_chr} \
-                --event_start={params.event_start} \
-                --event_end={params.event_end} \
-                --event_strand={params.event_strand} \
-                --margin_out={params.margin_out} \
-                --size={params.size} \
-                --method={params.method} \
-                --reference_file={input.reference} \
-                --pangolin_dir={input.pangolin_dir} \
-                --output_dir={output}
-        """
-        
-        
-rule get_exon_sequences:
-    input:
-        reference = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz"),
-    output:
-        os.path.join(RESULTS_DIR,"files","selected_exon_sequences","{event}.fasta")
-    params:
-        event_name = "{event}",
-        event_chr = lambda wildcards: EVENTS_INFO[wildcards.event]["event_chr"],
-        event_start = lambda wildcards: EVENTS_INFO[wildcards.event]["event_start"],
-        event_end = lambda wildcards: EVENTS_INFO[wildcards.event]["event_end"],
-        event_strand = lambda wildcards: EVENTS_INFO[wildcards.event]["event_strand"],
-        margin_out = 250
-    threads: 1
-    resources:
-        runtime = int(3600*0.5), # 0.5h
-        memory = 2 # GB
-    shell:
-        """
-        nice python scripts/get_exon_sequence.py \
-                        --event_name={params.event_name} \
-                        --event_chr={params.event_chr} \
-                        --event_start={params.event_start} \
-                        --event_end={params.event_end} \
-                        --event_strand={params.event_strand} \
-                        --margin_out={params.margin_out} \
-                        --reference_file={input.reference} \
-                        --output_file={output}
-        """
-        
-        
-rule structure_inference_get_proteoforms:
-    input:
-        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
-        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38.tab.gz")
-    output:
-        df = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'),
-        fasta = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta')
-    params:
-        script_dir = os.path.join(SRC_DIR,"python"),
-        event_oi = "{event}",
-        gene_oi = "{gene}"
-    shell:
-        """
-        nice python {params.script_dir}/get_proteoforms.py \
-                    --event_oi={params.event_oi} \
-                    --gene_oi={params.gene_oi} \
-                    --annotation_file={input.annotation} \
-                    --event_info_file={input.event_info} \
-                    --output_df_file={output.df} \
-                    --output_fasta_file={output.fasta}
-        """
-        
-
 rule compute_splicing_dependency:
     input:
         psi = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
@@ -223,6 +67,7 @@ rule compute_splicing_dependency:
                     --log_transform
         """
         
+        
 rule figures_selection_exons_to_validate:
     input:
         annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
@@ -238,12 +83,15 @@ rule figures_selection_exons_to_validate:
         spldep_stats = os.path.join(TCGA_DIR,'files','PANCAN','summary_splicing_dependency-EX.tsv.gz'),
         diff_result_subtypes = os.path.join(TCGA_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
         spldep_stats_subtypes = os.path.join(TCGA_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz'),
-        available_cells = os.path.join(SUPPORT_DIR,"available_cancer_cells.tsv")
+        available_cells = os.path.join(SUPPORT_DIR,"available_cancer_cells.tsv"),
+        inhouse_splicing = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
+        inhouse_genexpr = os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
+        inhouse_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'))
     shell:
         """
-        Rscript sripts/figures_selection_exons_to_validate.R \
+        Rscript scripts/figures_selection_exons_to_validate.R \
                     --annotation_file={input.annotation} \
                     --event_info_file={input.event_info} \
                     --protein_impact_file={input.protein_impact} \
@@ -258,6 +106,9 @@ rule figures_selection_exons_to_validate:
                     --diff_result_subtypes_file={input.diff_result_subtypes} \
                     --spldep_stats_subtypes_file={input.spldep_stats_subtypes} \
                     --available_cells_file={input.available_cells} \
+                    --inhouse_splicing_file={input.inhouse_splicing} \
+                    --inhouse_genexpr_file={input.inhouse_genexpr} \
+                    --inhouse_spldep_file={input.inhouse_spldep}/mean.tsv.gz \
                     --figs_dir={output}
         """
         
@@ -265,11 +116,10 @@ rule figures_validation:
     input:
         annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
         event_info = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-        validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso.tsv"),
-        splicing_ccle = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
-        genexpr_ccle = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
-        spldep_ccle = os.path.join(CCLE_DIR,'files','splicing_dependency-EX'),
-        validation_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX"),
+        splicing = os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX"),
+        validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20230206-psi-aso.tsv"),
         validation_od = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation'))
@@ -279,10 +129,10 @@ rule figures_validation:
                     --annotation_file={input.annotation} \
                     --event_info_file={input.event_info} \
                     --validation_splicing_file={input.validation_splicing} \
-                    --splicing_ccle_file={input.splicing_ccle} \
-                    --genexpr_ccle_file={input.genexpr_ccle} \
-                    --spldep_ccle_file={input.spldep_ccle}/mean.tsv.gz \
-                    --validation_spldep_file={input.validation_spldep}/mean.tsv.gz \
+                    --splicing_file={input.splicing} \
+                    --genexpr_file={input.genexpr} \
+                    --spldep_file={input.spldep}/mean.tsv.gz \
+                    --validation_splicing_file={input.validation_splicing} \
                     --validation_od_file={input.validation_od} \
                     --figs_dir={output}
         """

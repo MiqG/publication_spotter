@@ -47,14 +47,6 @@ SELECTED_CELL_LINES = c(
 )
 
 SELECTED_EXONS = c(
-    #"HsaEX0008092_BIN1",
-    #"HsaEX0022946_ERBIN",
-    #"HsaEX0066096_TMTC1",
-    #"HsaEX0044468_NVL",
-    #"HsaEX0043609_NPNT",
-    #"HsaEX0006970_ATP6V0A2",
-    #"HsaEX0056284_SATB2"
-    #"HsaEX0020455_DNM2",
     "HsaEX0034998_KRAS",
     "HsaEX0070392_VLDLR",
     "HsaEX0050345_PRPF18",
@@ -67,7 +59,7 @@ SELECTED_EXONS = c(
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
-PAL_SINGLE_LIGHT = "#efb300ff"#"#6AC2BF"
+PAL_SINGLE_LIGHT = "#efb300ff"
 PAL_SINGLE_DARK = "#007e67ff"
 PAL_SINGLE_NEUTRAL = "#716454"
 PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
@@ -221,10 +213,10 @@ plot_eda_transcriptome = function(ccle_stats, genes_oi, events_oi){
 }
 
 
-plot_selection_exons = function(ccle_harm_stats, ccle_harm, 
-                                ccle_splicing, ccle_genexpr,
+plot_selection_exons = function(ccle_metadata, ccle_harm_stats, ccle_harm, 
+                                ccle_splicing, ccle_genexpr, ccle_spldep,
                                 events_genes, events_oi, 
-                                protein_impact, available_cells){
+                                protein_impact, available_cells, annot, event_info){
     plts = list()
     
     # summarize the selection of exons for our experiment
@@ -608,13 +600,13 @@ plot_inhouse = function(
 }
 
 make_plots = function(ccle_stats, genes_oi, events_oi,
-                      ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
+                      ccle_metadata, ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr, ccle_spldep,
                       events_genes, protein_impact, available_cells,
-                      inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm){
+                      inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm, annot, event_info){
     plts = list(
         plot_eda_transcriptome(ccle_stats, genes_oi, events_oi),
-        plot_selection_exons(ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
-                             events_genes, events_oi, protein_impact, available_cells),
+        plot_selection_exons(ccle_metadata, ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr, ccle_spldep,
+                             events_genes, events_oi, protein_impact, available_cells, annot, event_info),
         plot_inhouse(events_oi, genes_oi, inhouse_splicing, inhouse_genexpr, 
                      inhouse_spldep, inhouse_harm, ccle_metadata)
     )
@@ -781,6 +773,9 @@ parseargs = function(){
         make_option("--diff_result_subtypes_file", type="character"),
         make_option("--spldep_stats_subtypes_file", type="character"),
         make_option("--available_cells_file", type="character"),
+        make_option("--inhouse_splicing_file", type="character"),
+        make_option("--inhouse_genexpr_file", type="character"),
+        make_option("--inhouse_spldep_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -792,8 +787,8 @@ parseargs = function(){
 main = function(){
     args = parseargs()
     
-    protein_impact_file = args[["annotation_file"]]
-    protein_impact_file = args[["event_info_file"]]
+    annotation_file = args[["annotation_file"]]
+    event_info_file = args[["event_info_file"]]
     protein_impact_file = args[["protein_impact_file"]]
     event_info_file = args[["event_info_file"]]
     selected_events_file = args[["selected_events_file"]]
@@ -806,6 +801,10 @@ main = function(){
     spldep_stats_file = args[["spldep_stats_file"]]
     diff_result_subtypes_file = args[["diff_result_subtypes_file"]]
     spldep_stats_subtypes_file = args[["spldep_stats_subtypes_file"]]
+    available_cells_file = args[["available_cells_file"]]
+    inhouse_splicing_file = args[["inhouse_splicing_file"]]
+    inhouse_genexpr_file = args[["inhouse_genexpr_file"]]
+    inhouse_spldep_file = args[["inhouse_spldep_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -959,9 +958,9 @@ main = function(){
     # plot
     plts = make_plots(
         ccle_stats, genes_oi, events_oi,
-        ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr,
+        ccle_metadata, ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr, ccle_spldep,
         events_genes, protein_impact, available_cells,
-        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm
+        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm, annot, event_info
     )
     
     # make figdata
