@@ -1,18 +1,16 @@
 """
 Author: Miquel Anglada Girotto
 Contact: miquelangladagirotto [at] gmail [dot] com
-Last Update: 2021-01-12
 
 Workflow purpose
 --------------
 Workflow to analyze putative associations between exons and cancer at single-exon level.
 
-
 Outline
 -------
-- infer splicing dependency
-- differential PSI tumor vs normal by cancer type
-
+- Spl. Dep. validation
+    1. select targets with therapeutic potential from TCGA
+    2. experimentally validate selected targets with therapeutic potential
 """
 
 import os
@@ -28,32 +26,19 @@ TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','tar
 
 EVENT_TYPES = ['EX']
 CANCER_TYPES = [
-    'BRCA',
-    'COAD',
-    'GBM',
-    'HNSC',
-    'KICH',
-    'KIRC',
-    'KIRP',
-    'LGG',
-    'LIHC',
-    'LUAD',
-    'LUSC',
-    'PRAD',
-    'READ',
-    'THCA',
-    'UCEC',
-    'UCS'
-]
-
-CANCER_TYPES = [
-    "UCS","UCEC", "LGG","GBM",
-    "LUAD","KICH","KIRP","KIRC",
-    "SKCM","TGCT","THCA","THYM","UVM",
-    "ACC","BLCA","CESC","CHOL","COAD",
-    "DLBC","HNSC","LIHC","MESO",
-    "LUSC","PAAD","PCPG","PRAD",
-    "READ","SARC","BRCA"
+    "BLCA",
+    "BRCA",
+    "COAD",
+    "HNSC",
+    "KICH",
+    "KIRC",
+    "KIRP",
+    "LIHC",
+    "LUAD",
+    "LUSC",
+    "PRAD",
+    "THCA",
+    "UCEC"
 ]
 
 CANCER_SUBTYPES = {
@@ -86,27 +71,26 @@ SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 ##### RULES #####
 rule all:
     input:
-        # compute splicing dependencies TCGA
+        # Splicing Dependencies TCGA
+        ## compute
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, cancer=CANCER_TYPES),
-        
-        # summarize splicing dependencies TCGA
+        ## summarize
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-        # differential sample type TCGA
-        ## PSI
+        # differential splicing analysis TCGA
+        ## by cancer type
         expand(os.path.join(RESULTS_DIR,'files','{cancer}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), cancer=CANCER_TYPES),
-        ## PSI (cancer subtype)
+        ## by cancer subtype
         expand(os.path.join(RESULTS_DIR,'files','{subtype}','mannwhitneyu-psi-PrimaryTumor_vs_SolidTissueNormal.tsv.gz'), subtype=CANCER_SUBTYPES.keys()),
-        
-        # combine differential analyses
-        ## cancer type
+        ## combine differential analyses
+        ### cancer type
         expand(os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        ## cancer subtype
+        ### cancer subtype
         expand(os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # figures
-        #os.path.join(RESULTS_DIR,"figures","targetable_events")
+        os.path.join(RESULTS_DIR,"figures","targetable_events")
         
         
 rule compute_splicing_dependency_tcga:
@@ -345,8 +329,7 @@ rule figures_targetable_events:
         spldep_stats_subtypes = os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz'),
         diff_result_sample = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
         diff_result_subtypes = os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
-        cancer_events = os.path.join(ROOT,"support","cancer_events.tsv"),
-        ascanceratlas = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
+        protein_impact = os.path.join(RAW_DIR,"VastDB","PROT_IMPACT-hg38-v3.tab.gz")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','targetable_events'))
     shell:
@@ -358,7 +341,6 @@ rule figures_targetable_events:
                     --spldep_stats_subtypes_file={input.spldep_stats_subtypes} \
                     --diff_result_sample_file={input.diff_result_sample} \
                     --diff_result_subtypes_file={input.diff_result_subtypes} \
-                    --cancer_events_file={input.cancer_events} \
-                    --ascanceratlas_file={input.ascanceratlas} \
+                    --protein_impact_file={input.protein_impact} \
                     --figs_dir={output}        
         """

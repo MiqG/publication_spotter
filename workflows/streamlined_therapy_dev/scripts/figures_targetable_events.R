@@ -62,8 +62,6 @@ FONT_FAMILY = "Arial"
 # spldep_stats_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz')
 # diff_result_sample_file = file.path(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
-# cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
-# ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
@@ -282,10 +280,9 @@ parseargs = function(){
         make_option("--selected_events_file", type="character"),
         make_option("--spldep_stats_file", type="character"),
         make_option("--spldep_stats_subtypes_file", type="character"),
+        make_option("--protein_impact_file", type="character"),
         make_option("--diff_result_sample_file", type="character"),
         make_option("--diff_result_subtypes_file", type="character"),
-        make_option("--cancer_events_file", type="character"),
-        make_option("--ascanceratlas_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -303,8 +300,7 @@ main = function(){
     spldep_stats_subtypes_file = args[["spldep_stats_subtypes_file"]]
     diff_result_sample_file = args[["diff_result_sample_file"]]
     diff_result_subtypes_file = args[["diff_result_subtypes_file"]]
-    cancer_events_file = args[["cancer_events_file"]]
-    ascanceratlas_file = args[["ascanceratlas_file"]]
+    protein_impact_file = args[["protein_impact_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -318,20 +314,11 @@ main = function(){
         filter(EVENT %in% selected_events)
     spldep_stats_subtypes = read_tsv(spldep_stats_subtypes_file) %>% 
         filter(EVENT %in% selected_events)
-    cancer_events = read_tsv(cancer_events_file)
-    ascanceratlas = read_tsv(ascanceratlas_file)
     protein_impact = read_tsv(protein_impact_file) %>%
         mutate(
             ONTO = gsub("ORF disruption upon sequence inclusion \\(Alt\\. Stop\\)",
                           "Alternative protein isoforms \\(Ref, Alt\\. Stop\\)", ONTO)
         )
-    
-    # prep cancer events
-    ascanceratlas = ascanceratlas %>%
-        dplyr::rename(EVENT = EVENT_perf)
-    
-    cancer_events = cancer_events %>%
-        bind_rows(ascanceratlas)
     
     # add event gene
     spldep_stats = spldep_stats %>%
