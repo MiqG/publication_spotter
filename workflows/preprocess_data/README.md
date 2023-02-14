@@ -4,8 +4,9 @@ Once obtained all files from the `obtain_data` workflow, this workflow will get 
 
 ## Important remarks
 
+None.
 
-## Recomendations
+## Recommendations
 Run the workflow in a machine with at least 20GB of RAM using
 ```
 snakemake --cores 6
