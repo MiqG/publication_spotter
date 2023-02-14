@@ -28,7 +28,7 @@ VAL_TREAT_RECOM_DIR = os.path.join(RESULTS_DIR,"splicing_dependency_treatments",
 ##### RULES #####
 rule all:
     input:
-        os.path.join(RESULTS_DIR,'prepare_publication','files','supplementary_tables')
+        os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_tables')
 
 rule supplementary_tables:
     input:
@@ -121,7 +121,7 @@ rule supplementary_tables:
         suptab38_pietilla_roc_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","roc_analysis.tsv.gz")
         
     output:
-        directory(os.path.join(RESULTS_DIR,'prepare_publication','files','supplementary_tables'))
+        directory(os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_tables'))
     run:
         import os
         import subprocess
