@@ -11,7 +11,10 @@ Outline
 - Spl. Dep. inference
     1. model fitting
     2. model selection
-    3. model validation
+
+- Spl. Dep. validation
+    1. model validation with exon-level CRISPR screens (Thomas2020, Gonatopoulos2020)
+    2. model validation  with combinatorial perturbations (ENCORE)
 """
 
 import os
