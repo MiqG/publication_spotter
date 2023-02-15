@@ -1,11 +1,14 @@
-# Structural Analysis Reproducibility
-- MDM2 structures
-    - with TP53: 4hfz
-    - with Nutlin: 4hg7
-- colors MDM2 structure
-    - MDM2 exon: 6AC2BF
-    - TP53: 444444
-    - MDM2: 9F8170
-    - nutlin: 161
-    
-- save command: RayTrace /home/miquel/Downloads/mdm2_nutlin.png,X=4024,Y=40561,Zoom=1.0,Atoms=Balls,LabelShadow=No,SecAlpha=100,Display=Yes,Outline=0.0,Background=No
+# Data preprocessing workflow
+
+Once obtained the models of splicing dependency from the `model_splicing_dependency` workflow, this workflow associates their predictions with drug sensitivities.
+
+## Important remarks
+
+Make sure to have all packages required to run the scripts.
+
+## Recommendations
+Run the workflow in a machine with at least 20GB of RAM using
+```
+snakemake --cores 6
+```
+In case you want to run the rules on your cluster, refer to [snakemake documentation](https://snakemake.readthedocs.io/en/stable/executing/cluster.html).

@@ -50,9 +50,6 @@ require(graphlayouts)
 
 require(statebins)
 
-ROOT = here::here()
-source(file.path(ROOT,"src","R","utils.R"))
-
 # variables
 THRESH_FDR = 0.1
 THRESH_PVALUE = 0.05
@@ -82,6 +79,7 @@ PAL_PROT_IMP = setNames(
 
 # Development
 # -----------
+# ROOT = here::here()
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","exon_drug_interactions")
@@ -105,8 +103,6 @@ PAL_PROT_IMP = setNames(
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # gene_info_file = file.path(RAW_DIR,"ENSEMBL","gene_annotation-hg38.tsv.gz")
 # figs_dir = file.path(RESULTS_DIR,"figures","model_drug_screens")
-
-# paths_random_file = file.path(RESULTS_DIR,"files","ppi","shortest_path_lengths_to_drug_targets-random.tsv.gz")
 
 ##### FUNCTIONS #####
 load_drug_screens = function(drug_screens_dir){
@@ -238,7 +234,7 @@ evaluate_reactome = function(models, drug_targets, ontology){
 }
 
 
-plot_eda_associations = function(models, drug_screen){
+plot_eda_associations = function(models, drug_screen, rnai){
     top_n = 25
     X = models %>% 
         left_join(drug_screen %>% distinct(DRUG_ID, DRUG_NAME) %>% drop_na(), by="DRUG_ID")
@@ -507,7 +503,7 @@ plot_ppi = function(models, shortest_paths){
 }
 
 
-plot_net_drug_target = function(x, drug_oi){
+plot_net_drug_target = function(x, drug_oi, ppi){
     
     # make networks
     events_sel = x %>% 
@@ -632,7 +628,7 @@ plot_gene_structure = function(gene, events, event_info, gene_info, prot_imp){
 }
 
 
-plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_targets){
+plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_targets, ppi, gene_info, event_info, ontologies, splicing){
     
     X = models %>%
         left_join(shortest_paths_simple, by=c("DRUG_ID","GENE"="source")) %>%
@@ -857,8 +853,8 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
 
     ## PPI MOA
     plts[["mediators-drugs_oi-top_assocs_ppi_pos"]] = list(
-            "NUTLIN-3A" = plot_net_drug_target(x, "NUTLIN-3A (-)"),
-            "AZD4547" = plot_net_drug_target(x, "AZD4547")
+            "NUTLIN-3A" = plot_net_drug_target(x, "NUTLIN-3A (-)", ppi),
+            "AZD4547" = plot_net_drug_target(x, "AZD4547", ppi)
         ) %>% ggarrange(plotlist = ., common.legend=TRUE)
     
     ## gene structures
@@ -876,7 +872,9 @@ plot_mediators = function(spldep_models, models, shortest_paths_simple, drug_tar
             ungroup() %>%
             filter(DRUG_NAME=="NUTLIN-3A (-)" & GENE==gene_sel) %>%
             pull(EVENT) %>% unique()
-        plt = plot_gene_structure(gene_sel, events_sel, event_info, gene_info, ontologies[["protein_impact"]])
+        plt = plot_gene_structure(
+            gene_sel, events_sel, event_info, gene_info, ontologies[["protein_impact"]]
+        )
         return(plt)
     }) %>% ggarrange(plotlist=., common.legend=TRUE)
     
@@ -1261,18 +1259,18 @@ plot_examples = function(examples){
 
 
 make_plots = function(
-    models, drug_screen,
-    drug_targets, shortest_paths, 
+    models, drug_screen, rnai,
+    drug_targets, ppi, gene_info, event_info, ontologies, splicing, shortest_paths, 
     spldep_models, shortest_paths_simple,
     estimated_response, 
     eval_reactome, 
     examples
 ){
     plts = list(
-        plot_eda_associations(models, drug_screen),
+        plot_eda_associations(models, drug_screen, rnai),
         plot_targets(models, drug_targets),
         plot_ppi(models, shortest_paths),
-        plot_mediators(spldep_models, models, shortest_paths_simple, drug_targets),
+        plot_mediators(spldep_models, models, shortest_paths_simple, drug_targets, ppi, gene_info, event_info, ontologies, splicing),
         plot_drug_rec(estimated_response, drug_screen, models),
         plot_reactome(eval_reactome),
         plot_examples(examples)
@@ -1283,7 +1281,7 @@ make_plots = function(
 
 
 make_figdata = function(
-    models, drug_screen,
+    models, drug_screen, rnai,
     drug_targets, shortest_paths, 
     spldep_models, shortest_paths_simple,
     estimated_response, 
@@ -1495,8 +1493,8 @@ main = function(){
     
     # make plots
     plts = make_plots(
-        models, drug_screen,
-        drug_targets, shortest_paths, 
+        models, drug_screen, rnai,
+        drug_targets, ppi, gene_info, event_info, ontologies, splicing, shortest_paths, 
         spldep_models, shortest_paths_simple,
         estimated_response, 
         eval_reactome, 
@@ -1505,7 +1503,7 @@ main = function(){
     
     # make figdata
     figdata = make_figdata(
-        models, drug_screen,
+        models, drug_screen, rnai,
         drug_targets, shortest_paths, 
         spldep_models, shortest_paths_simple,
         estimated_response, 

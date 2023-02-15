@@ -1,16 +1,18 @@
 """
 Author: Miquel Anglada Girotto
 Contact: miquelangladagirotto [at] gmail [dot] com
-Last Update: 2021-01-12
 
 Workflow purpose
 --------------
-Workflow to analyze putative associations between exons and cancer at single-exon level.
-
+Workflow to analyze putative associations between exons inclusion and drug sensitivity.
 
 Outline
 -------
-        
+- Drug-exon inference
+    1. Associations
+    2. Estimation
+    3. Shortest path lengths in STRINGDB network
+    
 """
 
 import os
@@ -27,67 +29,33 @@ SRC_DIR = os.path.join(ROOT,'src')
 SUPPORT_DIR = os.path.join(ROOT,'support')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 
-EVENT_TYPES = ['EX'] #['EX','ALTA','ALTD']
+EVENT_TYPES = ['EX']
 DRUG_SCREENS = {
     'GDSC1': pd.read_table(os.path.join(PREP_DIR,'drug_screens','train','GDSC1.tsv.gz'))["ID"].unique(),
     'GDSC2': pd.read_table(os.path.join(PREP_DIR,'drug_screens','train','GDSC2.tsv.gz'))["ID"].unique()
 }
 
-EVENT_GENES_OI = {
-    "HsaEX0038400": "MDM2",
-    "HsaEX0038402": "MDM2",
-    "HsaEX6035888": "KIF21B",
-    "HsaEX6091888": "TJP3"
-}
-
 ##### RULES #####
 rule all:
     input:
-        # predict structures
-        expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
-        expand(os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta'), zip, event=EVENT_GENES_OI.keys(), gene=EVENT_GENES_OI.values()),
-        os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz'),
-        
-        os.path.join(RESULTS_DIR,'figures','structure_inference','MDM2'),
-        
-        os.path.join(RESULTS_DIR,"files","nutlin_structure_analysis_stability"),
-        os.path.join(RESULTS_DIR,"files","nutlin_structure_analysis_complexes"),
-        
         # associations drug responses and splicing dependencies
-        #expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
-        #expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
+        expand(os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
+        expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
         
         # concatenate model summaries
-        #expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # concatenate drug rankings
-        #expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
         # write selected models
-        #expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
-        
-        # embed association coefficients
-        # expand(os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz'), event_type=EVENT_TYPES),
-        # expand(os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        
-        # split, embed and cluster estimated drug effects of significant associations
-        ## split
-        # expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices'), event_type=EVENT_TYPES, drug_screen=DRUG_SCREENS.keys()),
-        ## impute
-        # [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
-        ## embed
-        # [expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz'), drug=DRUG_SCREENS[drug_screen], drug_screen=drug_screen, event_type=EVENT_TYPES) for drug_screen in DRUG_SCREENS.keys()],
-        ## combine
-        # expand(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
+        expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}.txt'), event_type=EVENT_TYPES),
         
         # Shortest path lengths in PPIs between drug targets and associations
         ## real
-        #expand(os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
-        ## random
-        # os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz'),
+        expand(os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         
-
-        # plot models
+        # figures
         os.path.join(RESULTS_DIR,'figures','model_drug_screens')
 
         
@@ -157,35 +125,69 @@ rule list_selected_models:
             for drug_id in models['ID'].unique():
                 f.write("%s\n" % drug_id)
                 
-                
-rule pivot_drug_associations:
-    input:  
-        os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz')
-    output:
-        os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz')
-    run:
-        import pandas as pd
-        df = pd.read_table(input[0])
-        df = df.pivot_table(values='spldep_coefficient', index='EVENT', columns='ID')
-        df = df.fillna(0)
-        df.reset_index().to_csv(output[0], sep='\t', index=False, compression='gzip')
-        
-
-rule embed_drug_associations:
+rule predict_drug_response:
     input:
-        os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}-coefs_mat.tsv.gz')
+        spldep = os.path.join(MODELS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz'),
+        fitted_dir = os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}')
     output:
-        os.path.join(RESULTS_DIR,'files','embedded_drug_associations-{event_type}.tsv.gz')
+        directory(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'))
     params:
-        script_dir=os.path.join(SRC_DIR,'python')
+        script_dir = TS_DIR
     shell:
         """
-        python {params.script_dir}/embed_and_cluster.py \
-                    --matrix_file={input} \
-                    --output_file={output} 
+        python {params.script_dir}/target_spotter drugassoc_predict \
+                    --splicing_dependency_file={input.spldep} \
+                    --model_summaries_file={input.fitted_dir}/model_summaries.tsv.gz \
+                    --fitted_growth_rates_file={input.fitted_dir}/growth_rates.tsv.gz \
+                    --fitted_spldep_file={input.fitted_dir}/fitted_splicing_dependency.tsv.gz \
+                    --output_dir={output}
         """
-
         
+rule combine_drug_rankings:
+    input:
+        [os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}').format(drug_screen=drug_screen, event_type='{event_type}') for drug_screen in DRUG_SCREENS]
+    output:
+        os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz')
+    run:
+        import os
+        import pandas as pd
+        dfs = []
+        for d in input:
+            drug_screen = os.path.basename(d).replace('estimated_drug_response-','')[:5]
+            print(drug_screen)
+            filename = os.path.join(d,'estimated_drug_response_by_drug.tsv.gz')
+            df = pd.read_table(filename)
+            df["drug_screen"] = drug_screen
+            df["DRUG_ID"] = df["ID"].str.split("_").str[0]
+            dfs.append(df)
+            
+        dfs = pd.concat(dfs)    
+        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
+        
+
+rule shortest_paths_real:
+    input:
+        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
+        drug_targets = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz'),
+        drug_associations = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz')
+    output:
+        os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz')
+    params:
+        mode = 'real',
+        thresh_fdr = 0.1
+    threads: 8
+    shell:
+        """
+        nice python scripts/ppi_path_lengths.py \
+                    --mode={params.mode} \
+                    --ppi_file={input.ppi} \
+                    --drug_targets_file={input.drug_targets} \
+                    --drug_associations_file={input.drug_associations} \
+                    --output_file={output} \
+                    --thresh_fdr={params.thresh_fdr} \
+                    --n_jobs={threads}
+        """       
+                
 rule figures_model_drug_screens:
     input:
         metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
@@ -229,314 +231,4 @@ rule figures_model_drug_screens:
                     --gene_info_file={input.gene_info} \
                     --figs_dir={output}
         """
-        
-        
-rule predict_drug_response:
-    input:
-        spldep = os.path.join(MODELS_DIR,'files','splicing_dependency-{event_type}','mean.tsv.gz'),
-        fitted_dir = os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}')
-    output:
-        directory(os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}'))
-    params:
-        script_dir = TS_DIR
-    shell:
-        """
-        python {params.script_dir}/target_spotter drugassoc_predict \
-                    --splicing_dependency_file={input.spldep} \
-                    --model_summaries_file={input.fitted_dir}/model_summaries.tsv.gz \
-                    --fitted_growth_rates_file={input.fitted_dir}/growth_rates.tsv.gz \
-                    --fitted_spldep_file={input.fitted_dir}/fitted_splicing_dependency.tsv.gz \
-                    --output_dir={output}
-        """
-        
-rule combine_drug_rankings:
-    input:
-        [os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}').format(drug_screen=drug_screen, event_type='{event_type}') for drug_screen in DRUG_SCREENS]
-    output:
-        os.path.join(RESULTS_DIR,'files','estimated_drug_response_by_drug-{event_type}.tsv.gz')
-    run:
-        import os
-        import pandas as pd
-        dfs = []
-        for d in input:
-            drug_screen = os.path.basename(d).replace('estimated_drug_response-','')[:5]
-            print(drug_screen)
-            filename = os.path.join(d,'estimated_drug_response_by_drug.tsv.gz')
-            df = pd.read_table(filename)
-            df["drug_screen"] = drug_screen
-            df["DRUG_ID"] = df["ID"].str.split("_").str[0]
-            dfs.append(df)
-            
-        dfs = pd.concat(dfs)    
-        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
-        
-
-# cluster estimated drug profiles
-rule split_estimated_ic50:
-    input:
-        models_dir = os.path.join(RESULTS_DIR,'files','models_drug_response-{drug_screen}-{event_type}'),
-        preds_dir = os.path.join(RESULTS_DIR,'files','estimated_drug_response-{drug_screen}-{event_type}')
-    output:
-        directory(os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices'))
-    params:
-        thresh_fdr = 0.1
-    run:
-        import pandas as pd
-        
-        models = pd.read_table(os.path.join(input.models_dir,'model_summaries.tsv.gz')) 
-        preds = pd.read_table(os.path.join(input.preds_dir,'estimated_drug_response_by_drug_and_event.tsv.gz'))
-        outdir = output[0]
-        os.makedirs(outdir)
-        for drug in preds["ID"].unique():
-            print(drug)
-            tmp = preds.loc[preds["ID"]==drug]
-            tmp = tmp.drop(columns=["ID","ENSEMBL","GENE"]).set_index("EVENT")
-            
-            # only significant associations
-            idx = (models["lr_padj"]<params.thresh_fdr) & (models["ID"]==drug)
-            events_oi = models.loc[idx,"EVENT"].unique()
-            tmp.loc[~tmp.index.isin(events_oi),:] = 0
-            
-            tmp.reset_index().to_csv(
-                os.path.join(outdir,str(drug)+".tsv.gz"), sep="\t", index=False, compression="gzip"
-            )
-            
-            
-rule impute_estimated_ic50:
-    input:
-        pred = os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','splitted_matrices','{drug}.tsv.gz')
-    output:
-        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz')
-    params:
-        script_dir=os.path.join(SRC_DIR,'python'),
-        method = 'knn',
-        method_kws = '\'{"n_neighbors":5}\'',
-        features_as_rows = True
-    shell:
-        """
-        nice python {params.script_dir}/impute_nan.py \
-                    --input_file={input.pred} \
-                    --output_file={output} \
-                    --method={params.method} \
-                    --method_kws={params.method_kws} \
-                    --features_as_rows={params.features_as_rows}
-        """
-
-        
-rule embed_matrices:
-    input:
-        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','imputed_matrices','{drug}.tsv.gz')
-    output:
-        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz')
-    params:
-        script_dir=os.path.join(SRC_DIR,'python'),
-        no_std_replace = 0
-    shell:
-        """
-        nice python {params.script_dir}/embed_and_cluster.py \
-                    --matrix_file={input} \
-                    --output_file={output}  \
-                    --no_std_replace={params.no_std_replace}
-        """
-        
-        
-rule combine_embedded_matrices:
-    input:
-        [os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-{drug_screen}-{event_type}','embedded_matrices','{drug}.tsv.gz').format(drug_screen=drug_screen, drug=drug, event_type='{event_type}') for drug_screen in DRUG_SCREENS.keys() for drug in DRUG_SCREENS[drug_screen]]
-    output:
-        os.path.join(RESULTS_DIR,'files','cluster_estimated_drug_response-merged-{event_type}.tsv.gz')
-    run:
-        import os
-        import pandas as pd
-        
-        dfs = []
-        for f in input:
-            drug_id = os.path.basename(f).replace(".tsv.gz","")
-            _, drug_screen, event_type = os.path.basename(os.path.dirname(os.path.dirname(f))).split("-")
-            print(drug_id)
-            df = pd.read_table(f)
-            df["ID"] = drug_id
-            df["DRUG_ID"] = drug_id.split("_")[0]
-            df["drug_screen"] = drug_screen
-            df["event_type"] = event_type
-            dfs.append(df)
-        
-        dfs = pd.concat(dfs)
-        dfs.to_csv(output[0], sep="\t", index=False, compression="gzip")
-        
-        
-rule shortest_paths_real:
-    input:
-        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        drug_targets = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz'),
-        drug_associations = os.path.join(RESULTS_DIR,'files','model_summaries_drug_response-{event_type}.tsv.gz')
-    output:
-        os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-{event_type}.tsv.gz')
-    params:
-        mode = 'real',
-        thresh_fdr = 0.1
-    threads: 8
-    shell:
-        """
-        nice python scripts/ppi_path_lengths.py \
-                    --mode={params.mode} \
-                    --ppi_file={input.ppi} \
-                    --drug_targets_file={input.drug_targets} \
-                    --drug_associations_file={input.drug_associations} \
-                    --output_file={output} \
-                    --thresh_fdr={params.thresh_fdr} \
-                    --n_jobs={threads}
-        """
-        
-        
-rule shortest_paths_random:
-    input:
-        ppi = os.path.join(PREP_DIR,'ppi','STRINGDB.tsv.gz'),
-        drug_targets = os.path.join(PREP_DIR,'drug_screens','drug_targets.tsv.gz')
-    output:
-        os.path.join(RESULTS_DIR,'files','ppi','shortest_path_lengths_to_drug_targets-random.tsv.gz')
-    params:
-        mode = 'random',
-        n_random_sources = 1000
-    threads: 16
-    shell:
-        """
-        nice python scripts/ppi_path_lengths.py \
-                    --mode={params.mode} \
-                    --ppi_file={input.ppi} \
-                    --drug_targets_file={input.drug_targets} \
-                    --output_file={output} \
-                    --n_random_sources={params.n_random_sources} \
-                    --n_jobs={threads}
-        """
-        
-        
-        
-rule structure_inference_get_proteoforms:
-    input:
-        annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
-        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38.tab.gz")
-    output:
-        df = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz'),
-        fasta = os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.fasta')
-    params:
-        script_dir = os.path.join(SRC_DIR,"python"),
-        event_oi = "{event}",
-        gene_oi = "{gene}"
-    shell:
-        """
-        nice python {params.script_dir}/get_proteoforms.py \
-                    --event_oi={params.event_oi} \
-                    --gene_oi={params.gene_oi} \
-                    --annotation_file={input.annotation} \
-                    --event_info_file={input.event_info} \
-                    --output_df_file={output.df} \
-                    --output_fasta_file={output.fasta}
-        """
-        
-
-rule merge_proteoforms:
-    input:
-        dfs = [os.path.join(RESULTS_DIR,'files','structure_inference','{event}_{gene}','proteoforms.tsv.gz').format(event=e, gene=g) for e, g in EVENT_GENES_OI.items()]
-    output:
-        os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz')
-    run:
-        import pandas as pd
-        
-        merged = pd.concat([pd.read_table(df) for df in input.dfs])
-        merged.to_csv(output[0], sep="\t", compression="gzip", index=False)
-
-        print("Done!")
-        
-        
-rule figures_stuctures:
-    input:
-        pdb_inc = os.path.join(SUPPORT_DIR,"MDM2_HsaEX0038400-iso0-included_unrelaxed_rank_1_model_3.pdb"),
-        pdb_exc = os.path.join(SUPPORT_DIR,"MDM2_HsaEX0038400-iso0-excluded_unrelaxed_rank_1_model_3.pdb"),
-        metadata = os.path.join(RESULTS_DIR,'files','structure_inference','proteoforms_merged.tsv.gz')
-    output:
-        directory(os.path.join(RESULTS_DIR,'figures','structure_inference','MDM2'))
-    params:
-        gene_oi = "MDM2",
-        seq_id = "",
-        margin = 10,
-        yasara_path = "~/yasara/yasara"
-    shell:
-        """
-        nice python scripts/figures_drug-event_structures.py \
-                    --pdb_inc_file={input.pdb_inc} \
-                    --pdb_exc_file={input.pdb_exc} \
-                    --metadata_file={input.metadata} \
-                    --gene_oi={params.gene_oi} \
-                    --seq_id={params.seq_id} \
-                    --margin={params.margin} \
-                    --yasara_path={params.yasara_path} \
-                    --figs_dir={output}
-        """
-        
-        
-rule nutlin_structure_analysis_stability:
-    input:
-        pdbs_dir = SUPPORT_DIR
-    output:
-        directory(os.path.join(RESULTS_DIR,"files","nutlin_structure_analysis_stability"))
-    params:
-        bin_dir = "~/repositories/foldx5",
-        pdb_full = "MDM2_full",
-        pdb_exon = "MDM2_full_only_exon",
-        pdb_noexon = "MDM2_full_no_exon"
-    shell:
-        """
-        set -eo pipefail
-        
-        mkdir {output}
-        
-        # repair complexes
-        mkdir {output}/repaired_structures
-        cd {output}/repaired_structures
-        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdbs_dir} --pdb={params.pdb_full}.pdb
-        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdbs_dir} --pdb={params.pdb_exon}.pdb
-        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdbs_dir} --pdb={params.pdb_noexon}.pdb
-
-        # analyze complexes interactions of repaired complexes
-        mkdir {output}/stability
-        cd {output}/stability
-        {params.bin_dir}/foldx --command=Stability --pdb-dir={output}/repaired_structures --pdb={params.pdb_full}_Repair.pdb
-        {params.bin_dir}/foldx --command=Stability --pdb-dir={output}/repaired_structures --pdb={params.pdb_exon}_Repair.pdb
-        {params.bin_dir}/foldx --command=Stability --pdb-dir={output}/repaired_structures --pdb={params.pdb_noexon}_Repair.pdb
-        
-        echo "Done!"
-        """        
-        
-        
-rule nutlin_structure_analysis_complexes:
-    input:
-        pdb_dir = SUPPORT_DIR
-    output:
-        directory(os.path.join(RESULTS_DIR,"files","nutlin_structure_analysis_complexes"))
-    params:
-        bin_dir = "~/repositories/foldx5",
-        pdb_full = "MDM2_full_with_TP53",
-        pdb_short = "MDM2_short_with_TP53"
-    shell:
-        """
-        set -eo pipefail
-        
-        mkdir {output}
-        
-        # repair complexes
-        mkdir {output}/repaired_structures
-        cd {output}/repaired_structures
-        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdb_dir} --pdb={params.pdb_full}.pdb
-        {params.bin_dir}/foldx --command=RepairPDB --pdb-dir={input.pdb_dir} --pdb={params.pdb_short}.pdb
-
-        # analyze complexes interactions of repaired complexes
-        mkdir {output}/analyze_complexes
-        cd {output}/analyze_complexes
-        {params.bin_dir}/foldx --command=AnalyseComplex --pdb-dir={output}/repaired_structures --pdb={params.pdb_full}_Repair.pdb
-        {params.bin_dir}/foldx --command=AnalyseComplex --pdb-dir={output}/repaired_structures --pdb={params.pdb_short}_Repair.pdb
-        
-        echo "Done!"
-        """
-        
         
