@@ -1,17 +1,15 @@
 """
 Author: Miquel Anglada Girotto
 Contact: miquelangladagirotto [at] gmail [dot] com
-Last Update: 2021-01-12
 
 Workflow purpose
 --------------
-Workflow to analyze putative associations between exons and cancer at single-exon level.
-
+Workflow to validate how our drug-exon associations can be used to recommend treatments to patients.
 
 Outline
 -------
-- infer splicing dependency
-- differential PSI tumor vs normal by cancer type
+- Drug-exon validation
+    1. Pietila2021
 
 """
 
