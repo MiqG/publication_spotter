@@ -54,7 +54,7 @@ FONT_FAMILY = "Arial"
 # genexpr_file = file.path(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")
 # spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 
-# validation_splicing_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20230206-psi-aso.tsv")
+# validation_splicing_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20230215-psi-aso.tsv")
 # validation_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
 
 # figs_dir = file.path(RESULTS_DIR,'figures','validation')
@@ -128,19 +128,18 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         drop_na(psi) 
     
     plts[["validation-psi_effects"]] = X %>%
-        group_by(event_gene, condition_lab) %>%
+        group_by(CCLE_Name, event_gene, condition_lab) %>%
         mutate(avg_psi = mean(psi, na.rm=TRUE)) %>%
         ungroup() %>%
-        ggplot(aes(group=interaction(event_gene,condition_lab))) +
+        ggplot(aes(x=event_gene)) +
         geom_bar(
-            aes(x=event_gene, y=avg_psi, fill=condition_lab), 
-            . %>% distinct(event_gene, avg_psi, condition_lab),
+            aes(y=avg_psi, fill=condition_lab), 
+            . %>% distinct(CCLE_Name, event_gene, avg_psi, condition_lab),
             stat="identity", 
             color=NA, position=position_dodge(0.9)
         ) +
-        geom_point(aes(x=event_gene, y=psi, group=condition_lab), size=0.5,
-                   color="black", position=position_dodge(0.9)) +
-        #geom_boxplot(color="black", width=0.5, outlier.shape=NA, fill=NA, position=position_dodge(0.9)) +
+        geom_point(aes(y=psi, fill=condition_lab), size=0.5, color="black", 
+                   position=position_jitterdodge(jitter.width=0.2, dodge.width=0.9)) +
         fill_palette("nejm") + 
         theme_pubr(x.text.angle=70) +
         labs(x="Event & Gene", y="PSI", fill="Condition") +
