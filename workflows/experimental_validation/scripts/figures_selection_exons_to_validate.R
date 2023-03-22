@@ -42,8 +42,8 @@ THRESH_DRUGS_NOBS = 20
 
 SELECTED_CELL_LINES = c(
     "A549_LUNG",
-    #"HT29_LARGE_INTESTINE",
-    "MDAMB231_BREAST"
+    "MDAMB231_BREAST",
+    "HT29_LARGE_INTESTINE"
 )
 
 SELECTED_EXONS = c(
@@ -65,6 +65,11 @@ PAL_SINGLE_NEUTRAL = "#716454"
 PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
 PAL_FDR_DARK = "#005AB5"
 PAL_FDR_LIGHT = "#DC3220"
+PAL_CELLS = setNames(
+    get_palette("Accent", length(SELECTED_CELL_LINES)),
+    SELECTED_CELL_LINES
+)
+
 
 LINE_SIZE = 0.25
 
@@ -495,9 +500,12 @@ plot_selection_exons = function(ccle_metadata, ccle_harm_stats, ccle_harm,
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
         filter(event_gene %in% SELECTED_EXONS) %>%
-        mutate(event_gene = factor(event_gene, levels=SELECTED_EXONS)) %>%
+        mutate(
+            CCLE_Name = factor(CCLE_Name, levels=SELECTED_CELL_LINES),
+            event_gene = factor(event_gene, levels=SELECTED_EXONS) 
+        ) %>%
         ggbarplot(x="event_gene", y="spldep", fill="CCLE_Name", color=NA,
-                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
+                  palette=PAL_CELLS, position=position_dodge(0.7)) +
         theme_pubr(x.text.angle=70) +
         labs(x="Event & Gene", y="Spl. Dep.", fill="Cell Line")
     
@@ -508,9 +516,12 @@ plot_selection_exons = function(ccle_metadata, ccle_harm_stats, ccle_harm,
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
         filter(event_gene %in% SELECTED_EXONS) %>%
-        mutate(event_gene = factor(event_gene, levels=SELECTED_EXONS)) %>%
+        mutate(
+            CCLE_Name = factor(CCLE_Name, levels=SELECTED_CELL_LINES),
+            event_gene = factor(event_gene, levels=SELECTED_EXONS) 
+        ) %>%
         ggbarplot(x="event_gene", y="harm_score", fill="CCLE_Name", color=NA, 
-                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
+                  palette=PAL_CELLS, position=position_dodge(0.7)) +
         theme_pubr(x.text.angle=70) +
         labs(x="Event & Gene", y="Max. Harm Score", fill="Cell Line")
     
@@ -521,9 +532,12 @@ plot_selection_exons = function(ccle_metadata, ccle_harm_stats, ccle_harm,
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
         filter(event_gene %in% SELECTED_EXONS) %>%
-        mutate(event_gene = factor(event_gene, levels=SELECTED_EXONS)) %>%
+        mutate(
+            CCLE_Name = factor(CCLE_Name, levels=SELECTED_CELL_LINES),
+            event_gene = factor(event_gene, levels=SELECTED_EXONS) 
+        ) %>%
         ggbarplot(x="event_gene", y="psi", fill="CCLE_Name", color=NA, 
-                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
+                  palette=PAL_CELLS, position=position_dodge(0.7)) +
         theme_pubr(x.text.angle=70) +
         labs(x="Event & Gene", y="PSI", fill="Cell Line")
     
@@ -535,9 +549,12 @@ plot_selection_exons = function(ccle_metadata, ccle_harm_stats, ccle_harm,
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
         filter(GENE %in% selected_genes) %>%
-        mutate(GENE = factor(GENE, levels=selected_genes)) %>%
+        mutate(
+            CCLE_Name = factor(CCLE_Name, levels=SELECTED_CELL_LINES),
+            GENE = factor(GENE, levels=selected_genes)
+        ) %>%
         ggbarplot(x="GENE", y="genexpr", fill="CCLE_Name", color=NA, 
-                  palette=palette[SELECTED_CELL_LINES], position=position_dodge(0.7)) +
+                  palette=PAL_CELLS, position=position_dodge(0.7)) +
         theme_pubr(x.text.angle=70) +
         labs(x="Gene", y="log2(TPM+1)", fill="Cell Line")
     
@@ -572,26 +589,57 @@ plot_inhouse = function(
         filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
         drop_na(max_harm)
     
-    plts[["inhouse-psi-bar"]] = X %>%
+    plts[["inhouse-psi-bar-high_prolif"]] = X %>%
+        filter(CCLE_Name != "HT29_LARGE_INTESTINE") %>%
         ggbarplot(x='event_gene', y='psi', 
                   fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
-                  palette="Accent") + 
+                  palette=PAL_CELLS) + 
         geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
         labs(x='Event & Gene', y='PSI', fill='Cell Line') +
         coord_flip()
     
-    plts[["inhouse-spldep-bar"]] = X %>%
+    plts[["inhouse-spldep-bar-high_prolif"]] = X %>%
+        filter(CCLE_Name != "HT29_LARGE_INTESTINE") %>%
         ggbarplot(x='event_gene', y='spldep', 
                   fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
-                  palette="Accent") + 
+                  palette=PAL_CELLS) + 
         geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
         labs(x='Event & Gene', y='Spl. Dep.', fill='Cell Line') +
         coord_flip()
     
-    plts[["inhouse-max_harm-bar"]] = X %>%
+    plts[["inhouse-max_harm-bar-high_prolif"]] = X %>%
+        filter(CCLE_Name != "HT29_LARGE_INTESTINE") %>%
         ggbarplot(x='event_gene', y='max_harm', 
                   fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
-                  palette="Accent") + 
+                  palette=PAL_CELLS) + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        labs(x='Event & Gene', y='Max. Harm Score', fill='Cell Line') +
+        coord_flip()
+
+    
+    plts[["inhouse-psi-bar-low_prolif"]] = X %>%
+        filter(CCLE_Name == "HT29_LARGE_INTESTINE") %>%
+        ggbarplot(x='event_gene', y='psi', 
+                  fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
+                  palette=PAL_CELLS) + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        labs(x='Event & Gene', y='PSI', fill='Cell Line') +
+        coord_flip()
+    
+    plts[["inhouse-spldep-bar-low_prolif"]] = X %>%
+        filter(CCLE_Name == "HT29_LARGE_INTESTINE") %>%
+        ggbarplot(x='event_gene', y='spldep', 
+                  fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
+                  palette=PAL_CELLS) + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        labs(x='Event & Gene', y='Spl. Dep.', fill='Cell Line') +
+        coord_flip()
+    
+    plts[["inhouse-max_harm-bar-low_prolif"]] = X %>%
+        filter(CCLE_Name == "HT29_LARGE_INTESTINE") %>%
+        ggbarplot(x='event_gene', y='max_harm', 
+                  fill='CCLE_Name', position=position_dodge(0.9), color=FALSE, 
+                  palette=PAL_CELLS) + 
         geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
         labs(x='Event & Gene', y='Max. Harm Score', fill='Cell Line') +
         coord_flip()
@@ -736,9 +784,12 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "selection_exons-splicing-selected", '.pdf', figs_dir, width=3.75, height=6.9)
     save_plt(plts, "selection_exons-genexpr-selected", '.pdf', figs_dir, width=3.75, height=6.9)
     
-    save_plt(plts, 'inhouse-psi-bar', '.pdf', figs_dir, width=5.5, height=10)
-    save_plt(plts, 'inhouse-spldep-bar', '.pdf', figs_dir, width=5.5, height=10)
-    save_plt(plts, 'inhouse-max_harm-bar', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-psi-bar-high_prolif', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-spldep-bar-high_prolif', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-max_harm-bar-high_prolif', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-psi-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-spldep-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
+    save_plt(plts, 'inhouse-max_harm-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
 }
 
 

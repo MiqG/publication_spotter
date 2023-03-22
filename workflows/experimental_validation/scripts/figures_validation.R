@@ -8,8 +8,8 @@ require(extrafont)
 # variables
 SELECTED_CELL_LINES = c(
     "A549_LUNG",
-    #"HT29_LARGE_INTESTINE",
-    "MDAMB231_BREAST"
+    "MDAMB231_BREAST",
+    "HT29_LARGE_INTESTINE"
 )
 
 SELECTED_EXONS = c(
@@ -31,8 +31,11 @@ PAL_SINGLE_NEUTRAL = "#716454"
 PAL_DUAL = c(PAL_SINGLE_DARK, PAL_SINGLE_LIGHT)
 PAL_FDR_DARK = "#005AB5"
 PAL_FDR_LIGHT = "#DC3220"
-
-PAL_REPLICATES = setNames(get_palette("Accent",3), 1:3)
+PAL_CELLS = setNames(
+    get_palette("Accent", length(SELECTED_CELL_LINES)),
+    SELECTED_CELL_LINES
+)
+PAL_REPLICATES = setNames(get_palette("simpsons",3), 1:3)
 
 LINE_SIZE = 0.25
 
@@ -107,6 +110,8 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         geom_hline(yintercept=1, linetype='dashed', size=LINE_SIZE) +
         facet_wrap(~CCLE_Name, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
+    
+    # comparison of relative proliferation of untreated conditions
     
     # PSI changes upon treatment
     X = validation_harm_scores %>%
@@ -213,8 +218,8 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
             linetype="dashed", size=LINE_SIZE, se=TRUE
         ) +
         geom_point(aes(color=CCLE_Name)) +
-        color_palette("Accent") +
-        fill_palette("Accent") +
+        color_palette(PAL_CELLS) +
+        fill_palette(PAL_CELLS) +
         stat_cor(
             method="pearson", size=FONT_SIZE, family=FONT_FAMILY
         ) + 
@@ -237,8 +242,33 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
             linetype="dashed", size=LINE_SIZE, se=TRUE
         ) +
         geom_point(aes(color=CCLE_Name)) +
-        color_palette("Accent") +
-        fill_palette("Accent") +
+        color_palette(PAL_CELLS) +
+        fill_palette(PAL_CELLS) +
+        stat_cor(
+            method="pearson", size=FONT_SIZE, family=FONT_FAMILY
+        ) + 
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="Harm Score", y="Norm. Obs. Cell Prolif. Effect", color="Cell Line")
+
+    plts[["validation-od_vs_harm_combined_centered-high_prolif"]] = x %>%
+        group_by(CCLE_Name, event_gene, harm_score) %>%
+        summarize(od_fc = median(od_fc, na.rm=TRUE)) %>%
+        ungroup() %>%
+        group_by(CCLE_Name) %>%
+        mutate(
+            od_fc = od_fc - median(od_fc, na.rm=TRUE)
+        ) %>%
+        ungroup() %>%
+        filter(CCLE_Name != "HT29_LARGE_INTESTINE") %>%
+        ggplot(aes(x=harm_score, y=od_fc)) +
+        geom_smooth(
+            method="lm", color="black", fill="lightgray", 
+            linetype="dashed", size=LINE_SIZE, se=TRUE
+        ) +
+        geom_point(aes(color=CCLE_Name)) +
+        color_palette(PAL_CELLS) +
+        fill_palette(PAL_CELLS) +
         stat_cor(
             method="pearson", size=FONT_SIZE, family=FONT_FAMILY
         ) + 
@@ -283,14 +313,15 @@ save_plt = function(plts, plt_name, extension='.pdf',
 }
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "validation-od_raw", '.pdf', figs_dir, width=5, height=10)
-    save_plt(plts, "validation-od_norm", '.pdf', figs_dir, width=5, height=12)
-    save_plt(plts, "validation-od_norm_averaged", '.pdf', figs_dir, width=5, height=12)
-    save_plt(plts, "validation-psi_effects", '.pdf', figs_dir, width=4.5, height=12)
-    save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=15)
+    save_plt(plts, "validation-od_raw", '.pdf', figs_dir, width=5, height=16)
+    save_plt(plts, "validation-od_norm", '.pdf', figs_dir, width=5, height=16)
+    save_plt(plts, "validation-od_norm_averaged", '.pdf', figs_dir, width=5, height=16)
+    save_plt(plts, "validation-psi_effects", '.pdf', figs_dir, width=4.5, height=16)
+    save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=19)
     save_plt(plts, "validation-od_vs_harm_combined", '.pdf', figs_dir, width=8, height=9)
     save_plt(plts, "validation-od_vs_harm_combined_minmax", '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, "validation-od_vs_harm_combined_centered", '.pdf', figs_dir, width=5, height=6)
+    save_plt(plts, "validation-od_vs_harm_combined_centered-high_prolif", '.pdf', figs_dir, width=5, height=6)
 }
 
 
