@@ -60,6 +60,8 @@ FONT_FAMILY = "Arial"
 # validation_splicing_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20230215-psi-aso.tsv")
 # validation_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
 
+# prolif_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","resazurin_cell_proliferation-merged.tsv")
+
 # figs_dir = file.path(RESULTS_DIR,'figures','validation')
 
 
@@ -279,21 +281,43 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
     return(plts)
 }
 
+plot_prolif = function(prolif){
+    plts = list()
+    
+    X = prolif
+    
+    plts[["prolif-time_vs_od-scatter"]] = X %>%
+        ggplot(aes(x=timepoint)) +
+        geom_smooth(
+            aes(y=od_norm, color=CCLE_Name, fill=CCLE_Name), 
+            linetype="dashed", size=LINE_SIZE, alpha=0.2, span=0.5
+        ) +
+        geom_point(aes(y=od_norm, color=CCLE_Name), size=0.5) +
+        theme_pubr() +
+        theme(aspect.ratio = 1) + 
+        color_palette(PAL_CELLS) +
+        fill_palette(PAL_CELLS) +
+        labs(x="Time (h)", y="OD Fold Change", color="Cell Line", fill="Cell Line")
+    
+    return(plts)
+}
 
-make_plots = function(validation_clonogenic, validation_harm_scores){
+make_plots = function(validation_clonogenic, validation_harm_scores, prolif){
     plts = list(
-        plot_validation(validation_clonogenic, validation_harm_scores)
+        plot_validation(validation_clonogenic, validation_harm_scores),
+        plot_prolif(prolif)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
-make_figdata = function(validation_clonogenic, validation_harm_scores){
+make_figdata = function(validation_clonogenic, validation_harm_scores, prolif){
 
     figdata = list(
         "experiments" = list(
             "validation_clonogenic" = validation_clonogenic,
-            "validation_harm_scores" = validation_harm_scores
+            "validation_harm_scores" = validation_harm_scores,
+            "proliferation_assay" = prolif
         )
     )
 }
@@ -322,6 +346,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_vs_harm_combined_minmax", '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, "validation-od_vs_harm_combined_centered", '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, "validation-od_vs_harm_combined_centered-high_prolif", '.pdf', figs_dir, width=5, height=6)
+    save_plt(plts, "prolif-time_vs_od-scatter", '.pdf', figs_dir, width=5, height=6)
 }
 
 
@@ -350,6 +375,7 @@ parseargs = function(){
         make_option("--spldep_file", type="character"),
         make_option("--validation_spldep_file", type="character"),
         make_option("--validation_od_file", type="character"),
+        make_option("--prolif_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -369,6 +395,7 @@ main = function(){
     spldep_file = args[["spldep_file"]]
     validation_spldep_file = args[["validation_splicing_file"]]
     validation_od_file = args[["validation_od_file"]]
+    prolif_file = args[["prolif_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -392,6 +419,8 @@ main = function(){
         separate(event_gene, c("EVENT","GENE"), remove=FALSE)
     
     events_val = validation_psi %>% pull(EVENT) %>% unique()
+    
+    prolif = read_tsv(prolif_file)
     
     # compute harm scores
     ## using experimentally measured delta PSIs
@@ -440,11 +469,46 @@ main = function(){
             event_gene = factor(event_gene, levels=c(extras,SELECTED_EXONS)) 
         )
     
+    # average and normalize cell proliferation OD
+    prolif = prolif %>%
+        group_by(CCLE_Name, DepMap_ID, replicate_technical, replicate_biological, timepoint) %>%
+        # average measurements
+        summarize(
+            od = mean(od)
+        ) %>%
+        ungroup() %>%
+        group_by(CCLE_Name, DepMap_ID, replicate_biological, timepoint) %>%
+        # average technical replicates
+        mutate(
+            od_avg = mean(od)
+        ) %>%
+        ungroup()
+    
+    prolif_ctl = prolif %>%
+        filter(timepoint == 0) %>%
+        rename(od_avg_ctl = od_avg) %>%
+        dplyr::select(-c(od, timepoint, replicate_technical)) %>%
+        distinct()
+    
+    prolif = prolif %>%
+        left_join(
+            prolif_ctl, 
+            by=c("CCLE_Name","DepMap_ID","replicate_biological")
+        ) %>%
+        mutate(
+            od_norm = od / od_avg_ctl
+        ) %>%
+        group_by(CCLE_Name, replicate_biological, timepoint) %>%
+        mutate(
+            od_norm_avg = mean(od_norm)
+        ) %>%
+        ungroup()
+    
     # plot
-    plts = make_plots(validation_clonogenic, validation_harm_scores)
+    plts = make_plots(validation_clonogenic, validation_harm_scores, prolif)
     
     # make figdata
-    figdata = make_figdata(validation_clonogenic, validation_harm_scores)
+    figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif)
 
     # save
     save_plots(plts, figs_dir)

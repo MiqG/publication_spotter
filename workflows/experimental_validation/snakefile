@@ -120,7 +120,8 @@ rule figures_validation:
         genexpr = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX"),
         validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20230215-psi-aso.tsv"),
-        validation_od = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
+        validation_od = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv"),
+        prolif = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","resazurin_cell_proliferation-merged.tsv")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation'))
     shell:
@@ -134,5 +135,6 @@ rule figures_validation:
                     --spldep_file={input.spldep}/mean.tsv.gz \
                     --validation_splicing_file={input.validation_splicing} \
                     --validation_od_file={input.validation_od} \
+                    --prolif_file={input.prolif} \
                     --figs_dir={output}
         """
