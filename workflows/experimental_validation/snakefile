@@ -28,13 +28,26 @@ TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','tar
 CCLE_DIR = os.path.join(ROOT,"results","model_splicing_dependency")
 TCGA_DIR = os.path.join(ROOT,'results','streamlined_therapy_dev')
 
-EVENT_TYPES = ["EX"]
+PROLIF_TYPES = ["low_prolif","high_prolif"]
+SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
+
 
 ##### RULES #####
 rule all:
     input:
         # compute splicing dependencies inhouse dataset
-        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'), event_type=EVENT_TYPES),
+        os.path.join(RESULTS_DIR,'files','splicing_dependency-EX'),
+        
+        # create models for cell lines with low proliferation
+        ## subset
+        os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-low_prolif.tsv.gz'),
+        os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-low_prolif.tsv.gz"),
+        os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-high_prolif.tsv.gz'),
+        os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-high_prolif.tsv.gz"),
+        ## fit
+        expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{prolif_type}-EX'), prolif_type=PROLIF_TYPES),
+        ## predict on inhouse dataset
+        expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{prolif_type}-EX'), prolif_type=PROLIF_TYPES),
         
         # figures
         os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
@@ -47,7 +60,7 @@ rule compute_splicing_dependency:
         genexpr = os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
         coefs_dir = os.path.join(TS_DIR,"data","fitted","splicing_dependency")
     output:
-        directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{event_type}'))
+        directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-EX'))
     threads: 8
     resources:
         runtime = 86400, # seconds = 24h = 1 day
@@ -59,6 +72,143 @@ rule compute_splicing_dependency:
         nice python {params.script_dir}/target_spotter spldep_predict \
                     --splicing_file={input.psi} \
                     --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """
+
+        
+rule subset_by_prolif:
+    input:
+        splicing = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+        events_oi = os.path.join(SUPPORT_DIR,"exons_with_therapeutic_potential.txt"),
+        ghandi = os.path.join(SUPPORT_DIR,"Ghandi2019-suptab1-41586_2019_1186_MOESM4_ESM.xlsx"),
+        tsherniak = os.path.join(SUPPORT_DIR,"Tsherniak2017-suptab1-mmc1.xlsx"),
+        mapping = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        splicing_low_prolif = os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-low_prolif.tsv.gz'),
+        genexpr_low_prolif = os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-low_prolif.tsv.gz"),
+        splicing_high_prolif = os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-high_prolif.tsv.gz'),
+        genexpr_high_prolif = os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-high_prolif.tsv.gz"),
+        doublings = os.path.join(RESULTS_DIR,"files","CCLE-doubling_times.tsv.gz")
+    run:
+        import pandas as pd
+        import numpy as np
+        
+        # load
+        splicing = pd.read_table(input.splicing, index_col=0)
+        genexpr = pd.read_table(input.genexpr, index_col=0)
+        metadata = pd.read_table(input.metadata)
+        events_oi = list(pd.read_table(input.events_oi, header=None)[0])
+        tsherniak = pd.read_excel(input.tsherniak, sheet_name=0)
+        ghandi = pd.read_excel(input.ghandi, sheet_name=1)
+        mapping = pd.read_table(input.mapping)
+        
+        # prep
+        ghandi = ghandi[["CCLE_ID","Doubling.Time.Calculated.hrs"]].dropna().copy()
+        ghandi["CCLE_Name"] = ghandi["CCLE_ID"]
+        ghandi["doubling_time_ghandi"] = ghandi["Doubling.Time.Calculated.hrs"]
+        
+        tsherniak = tsherniak[["Name","Doubling time (hrs)"]].dropna().copy()
+        tsherniak["CCLE_Name"] = tsherniak["Name"]
+        tsherniak["doubling_time_tsherniak"] = tsherniak["Doubling time (hrs)"]
+        tsherniak.loc[tsherniak["doubling_time_tsherniak"].isin([">120hrs","> 100"]),"doubling_time_tsherniak"] = np.nan
+        tsherniak["doubling_time_tsherniak"] = tsherniak["doubling_time_tsherniak"].astype(float)
+        
+        doublings = pd.merge(ghandi[["CCLE_Name","doubling_time_ghandi"]], tsherniak[["CCLE_Name","doubling_time_tsherniak"]],
+                             on="CCLE_Name", how="outer")
+        doublings["doubling_time"] = doublings[["doubling_time_tsherniak","doubling_time_ghandi"]].min(axis=1)
+        
+        # subset cell lines
+        avail_cells_depmap = genexpr.columns
+        avail_cells_names = metadata.loc[metadata["DepMap_ID"].isin(avail_cells_depmap),"CCLE_Name"]
+        doublings = doublings.loc[
+            doublings["CCLE_Name"].isin(avail_cells_names) & ~doublings["doubling_time"].isnull()
+        ].copy()
+        
+        ## low proliferation
+        thresh = doublings["doubling_time"].quantile(0.75)
+        cell_names_oi = doublings.loc[doublings["doubling_time"] > thresh, "CCLE_Name"]
+        cells_oi_slow = metadata.loc[metadata["CCLE_Name"].isin(cell_names_oi),"DepMap_ID"]
+        
+        # high proliferation
+        thresh = doublings["doubling_time"].quantile(0.25)
+        cell_names_oi = doublings.loc[doublings["doubling_time"] < thresh, "CCLE_Name"]
+        cells_oi_fast = metadata.loc[metadata["CCLE_Name"].isin(cell_names_oi),"DepMap_ID"]
+        
+        # consider only prioritized exons
+        genes_oi = list(mapping.loc[mapping["EVENT"].isin(events_oi),"ENSEMBL"].unique())
+        splicing = splicing.loc[events_oi].copy()
+        genexpr = genexpr.loc[genes_oi].copy()
+        
+        # save
+        splicing[cells_oi_slow].reset_index().to_csv(output.splicing_low_prolif, **SAVE_PARAMS)
+        genexpr[cells_oi_slow].reset_index().to_csv(output.genexpr_low_prolif, **SAVE_PARAMS)
+        splicing[cells_oi_fast].reset_index().to_csv(output.splicing_high_prolif, **SAVE_PARAMS)
+        genexpr[cells_oi_fast].reset_index().to_csv(output.genexpr_high_prolif, **SAVE_PARAMS)
+        doublings.to_csv(output.doublings, **SAVE_PARAMS)
+        
+        print("Done!")
+        
+        
+rule model_gene_dependency_subsetted:
+    input:
+        splicing_file = os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-{prolif_type}.tsv.gz'),
+        genexpr_file = os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-{prolif_type}.tsv.gz"),
+        gene_dependency_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
+        isoform_stats = os.path.join(PREP_DIR,'stats','CCLE.tsv.gz'),
+        mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{prolif_type}-EX'))
+    threads: 10
+    resources:
+        runtime = 3600*12, # 12h
+        memory = 50
+    params:
+        script_dir = TS_DIR,
+        n_iterations = 1000
+    shell:
+        """
+        export MKL_NUM_THREADS="1"
+        export OMP_NUM_THREADS="1"
+        
+        nice python {params.script_dir}/target_spotter spldep_fit \
+                    --gene_dependency_file={input.gene_dependency_file} \
+                    --splicing_file={input.splicing_file} \
+                    --genexpr_file={input.genexpr_file} \
+                    --mapping_file={input.mapping_file} \
+                    --output_dir={output} \
+                    --n_iterations={params.n_iterations} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """
+        # --isoform_stats={input.isoform_stats} \
+        
+        
+rule compute_splicing_dependency_subsetted:
+    input:
+        psi = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
+        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-{prolif_type}-EX')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','splicing_dependency-{prolif_type}-EX'))
+    threads: 10
+    resources:
+        runtime = 3600*6, # h
+        memory = 20 # GB
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --isoform_stats={input.coefs_dir}/isoform_stats.tsv.gz \
                     --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
                     --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
                     --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
@@ -86,7 +236,9 @@ rule figures_selection_exons_to_validate:
         available_cells = os.path.join(SUPPORT_DIR,"available_cancer_cells.tsv"),
         inhouse_splicing = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
         inhouse_genexpr = os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
-        inhouse_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX")
+        inhouse_spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX"),
+        inhouse_spldep_low_prolif = os.path.join(RESULTS_DIR,"files","splicing_dependency-low_prolif-EX"),
+        inhouse_spldep_high_prolif = os.path.join(RESULTS_DIR,"files","splicing_dependency-high_prolif-EX")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'))
     shell:
@@ -109,6 +261,8 @@ rule figures_selection_exons_to_validate:
                     --inhouse_splicing_file={input.inhouse_splicing} \
                     --inhouse_genexpr_file={input.inhouse_genexpr} \
                     --inhouse_spldep_file={input.inhouse_spldep}/mean.tsv.gz \
+                    --inhouse_spldep_low_prolif_file={input.inhouse_spldep_low_prolif}/mean.tsv.gz \
+                    --inhouse_spldep_high_prolif_file={input.inhouse_spldep_high_prolif}/mean.tsv.gz \
                     --figs_dir={output}
         """
         

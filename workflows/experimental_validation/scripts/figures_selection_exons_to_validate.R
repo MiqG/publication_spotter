@@ -69,7 +69,10 @@ PAL_CELLS = setNames(
     get_palette("Accent", length(SELECTED_CELL_LINES)),
     SELECTED_CELL_LINES
 )
-
+PAL_PROLIFS = setNames(
+    c("#00468BFF","darkgray","#ED0000FF"),
+    c("low_prolif","all","high_prolif")
+)
 
 LINE_SIZE = 0.25
 
@@ -99,6 +102,9 @@ FONT_FAMILY = "Arial"
 # inhouse_splicing_file = file.path(PREP_DIR,"event_psi","inhouse-EX.tsv.gz")
 # inhouse_genexpr_file = file.path(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")
 # inhouse_spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
+
+# inhouse_spldep_low_prolif_file = file.path(RESULTS_DIR,"files","splicing_dependency-low_prolif-EX","mean.tsv.gz")
+# inhouse_spldep_high_prolif_file = file.path(RESULTS_DIR,"files","splicing_dependency-high_prolif-EX","mean.tsv.gz")
 
 # selected_events_file = file.path(CCLE_DIR,'files','selected_models-EX.txt')
 # diff_result_sample_file = file.path(TCGA_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
@@ -647,16 +653,98 @@ plot_inhouse = function(
     return(plts)
 }
 
-make_plots = function(ccle_stats, genes_oi, events_oi,
-                      ccle_metadata, ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr, ccle_spldep,
-                      events_genes, protein_impact, available_cells,
-                      inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm, annot, event_info){
+
+plot_prolif_comparison = function(
+    inhouse_spldep, inhouse_spldep_low_prolif, inhouse_spldep_high_prolif,
+    inhouse_harm, inhouse_harm_low_prolif, inhouse_harm_high_prolif,
+    ccle_metadata
+){
+    plts = list()
+    
+    # splicing dependency
+    X = inhouse_spldep %>%
+        filter(event_gene %in% SELECTED_EXONS) %>%
+        pivot_longer(-event_gene, names_to="DepMap_ID", values_to="spldep") %>%
+        mutate(sample_selection = "all") %>%
+        bind_rows(
+            inhouse_spldep_low_prolif %>%
+            filter(event_gene %in% SELECTED_EXONS) %>%
+            pivot_longer(-event_gene, names_to="DepMap_ID", values_to="spldep") %>%
+            mutate(sample_selection = "low_prolif")
+        ) %>%
+        bind_rows(
+            inhouse_spldep_high_prolif %>%
+            filter(event_gene %in% SELECTED_EXONS) %>%
+            pivot_longer(-event_gene, names_to="DepMap_ID", values_to="spldep") %>%
+            mutate(sample_selection = "high_prolif")
+        ) %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        mutate(
+            sample_selection = factor(sample_selection, levels=names(PAL_PROLIFS)),
+            event_gene = factor(event_gene, levels=SELECTED_EXONS)
+        )
+    
+    plts[["prolif_comp-spldep-bar"]] = X %>%
+        filter(CCLE_Name == "HT29_LARGE_INTESTINE") %>%
+        ggbarplot(x='event_gene', y='spldep', 
+                  fill='sample_selection', position=position_dodge(0.9), color=FALSE, palette=PAL_PROLIFS) + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        theme_pubr(x.text.angle = 70) +
+        labs(x='Event & Gene', y='Spl. Dep.', fill='Cell Line Selection')
+    
+    # harm scores
+    X = inhouse_harm %>%
+        filter(event_gene %in% SELECTED_EXONS) %>%
+        pivot_longer(-event_gene, names_to="DepMap_ID", values_to="max_harm") %>%
+        mutate(sample_selection = "all") %>%
+        bind_rows(
+            inhouse_harm_low_prolif %>%
+            filter(event_gene %in% SELECTED_EXONS) %>%
+            pivot_longer(-event_gene, names_to="DepMap_ID", values_to="max_harm") %>%
+            mutate(sample_selection = "low_prolif")
+        ) %>%
+        bind_rows(
+            inhouse_harm_high_prolif %>%
+            filter(event_gene %in% SELECTED_EXONS) %>%
+            pivot_longer(-event_gene, names_to="DepMap_ID", values_to="max_harm") %>%
+            mutate(sample_selection = "high_prolif")
+        ) %>%
+        left_join(ccle_metadata, by="DepMap_ID") %>%
+        mutate(
+            sample_selection = factor(sample_selection, levels=names(PAL_PROLIFS)),
+            event_gene = factor(event_gene, levels=SELECTED_EXONS)
+        )
+    
+    plts[["prolif_comp-harm_scores-bar"]] = X %>%
+        filter(CCLE_Name == "HT29_LARGE_INTESTINE") %>%
+        ggbarplot(x='event_gene', y='max_harm', 
+                  fill='sample_selection', position=position_dodge(0.9), color=FALSE, palette=PAL_PROLIFS) + 
+        geom_hline(yintercept=0, linetype='dashed', size=LINE_SIZE) +
+        theme_pubr(x.text.angle = 70) +
+        labs(x='Event & Gene', y='Harm Score', fill='Cell Line Selection')
+    
+    return(plts)
+}
+
+make_plots = function(
+    ccle_stats, genes_oi, events_oi,
+    ccle_metadata, ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr, ccle_spldep,
+    events_genes, protein_impact, available_cells,
+    inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm, annot, event_info,
+    inhouse_spldep_low_prolif, inhouse_spldep_high_prolif,
+    inhouse_harm_low_prolif, inhouse_harm_high_prolif
+){
     plts = list(
         plot_eda_transcriptome(ccle_stats, genes_oi, events_oi),
         plot_selection_exons(ccle_metadata, ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr, ccle_spldep,
                              events_genes, events_oi, protein_impact, available_cells, annot, event_info),
         plot_inhouse(events_oi, genes_oi, inhouse_splicing, inhouse_genexpr, 
-                     inhouse_spldep, inhouse_harm, ccle_metadata)
+                     inhouse_spldep, inhouse_harm, ccle_metadata),
+        plot_prolif_comparison(
+            inhouse_spldep, inhouse_spldep_low_prolif, inhouse_spldep_high_prolif,
+            inhouse_harm, inhouse_harm_low_prolif, inhouse_harm_high_prolif,
+            ccle_metadata
+        )
     )
     plts = do.call(c,plts)
     return(plts)
@@ -666,7 +754,9 @@ make_plots = function(ccle_stats, genes_oi, events_oi,
 make_figdata = function(
     events_oi,
     ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata,
-    inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm
+    inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm,
+    inhouse_spldep_low_prolif, inhouse_spldep_high_prolif,
+    inhouse_harm_low_prolif, inhouse_harm_high_prolif
 ){
     
     selected_events_ccle = ccle_harm %>%
@@ -700,7 +790,6 @@ make_figdata = function(
         left_join(ccle_metadata, by="DepMap_ID") %>%
         filter(CCLE_Name %in% SELECTED_CELL_LINES)
     
-    
     selected_events_inhouse = inhouse_harm %>%
         filter(event_gene %in% events_oi) %>%
         distinct(event_gene) %>%
@@ -730,8 +819,27 @@ make_figdata = function(
             by=c("GENE","DepMap_ID")
         ) %>%
         left_join(ccle_metadata, by="DepMap_ID") %>%
-        filter(CCLE_Name %in% SELECTED_CELL_LINES)
-    
+        filter(CCLE_Name %in% SELECTED_CELL_LINES) %>%
+        left_join(
+            inhouse_spldep_low_prolif %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="spldep_low_prolif"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%
+        left_join(
+            inhouse_spldep_high_prolif %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="spldep_high_prolif"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%
+        left_join(
+            inhouse_harm_low_prolif %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="harm_score_exclusion_low_prolif"),
+            by=c("event_gene","DepMap_ID")
+        ) %>%
+        left_join(
+            inhouse_spldep_high_prolif %>%
+            pivot_longer(cols= -event_gene, names_to="DepMap_ID", values_to="harm_score_exclusion_high_prolif"),
+            by=c("event_gene","DepMap_ID")
+        )    
     
     figdata = list(
         "selection_events" = list(
@@ -790,6 +898,9 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'inhouse-psi-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
     save_plt(plts, 'inhouse-spldep-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
     save_plt(plts, 'inhouse-max_harm-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
+    
+    save_plt(plts, 'prolif_comp-spldep-bar', '.pdf', figs_dir, width=5, height=8)
+    save_plt(plts, 'prolif_comp-harm_scores-bar', '.pdf', figs_dir, width=5, height=8)
 }
 
 
@@ -827,6 +938,8 @@ parseargs = function(){
         make_option("--inhouse_splicing_file", type="character"),
         make_option("--inhouse_genexpr_file", type="character"),
         make_option("--inhouse_spldep_file", type="character"),
+        make_option("--inhouse_spldep_low_prolif_file", type="character"),
+        make_option("--inhouse_spldep_high_prolif_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -856,6 +969,8 @@ main = function(){
     inhouse_splicing_file = args[["inhouse_splicing_file"]]
     inhouse_genexpr_file = args[["inhouse_genexpr_file"]]
     inhouse_spldep_file = args[["inhouse_spldep_file"]]
+    inhouse_spldep_low_prolif_file = args[["inhouse_spldep_low_prolif_file"]]
+    inhouse_spldep_high_prolif_file = args[["inhouse_spldep_high_prolif_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -935,6 +1050,15 @@ main = function(){
         left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
         dplyr::select(-index)
     
+    inhouse_spldep_low_prolif = read_tsv(inhouse_spldep_low_prolif_file) %>% 
+        filter(index %in% selected_events) %>%
+        left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
+        dplyr::select(-index)
+    inhouse_spldep_high_prolif = read_tsv(inhouse_spldep_high_prolif_file) %>% 
+        filter(index %in% selected_events) %>%
+        left_join(events_genes %>% distinct(EVENT,event_gene), by=c("index"="EVENT")) %>%
+        dplyr::select(-index)
+    
     # prep results differential analyses
     tcga_diff_result = prep_diff_result(tcga_diff_result, tcga_spldep_stats)
     tcga_diff_result_subtypes = prep_diff_result(tcga_diff_result_subtypes, tcga_spldep_stats_subtypes)
@@ -950,10 +1074,19 @@ main = function(){
     ccle_harm_stats = get_stats(ccle_harm, "event_gene")
     
     ## inhouse
-    inhouse_harm = compute_harm_score(inhouse_spldep %>% 
-                                        filter(event_gene %in% selected_event_genes), 
-                                      inhouse_splicing %>% 
-                                        filter(event_gene %in% selected_event_genes)) 
+    inhouse_harm = compute_harm_score(
+        inhouse_spldep %>% filter(event_gene %in% selected_event_genes), 
+        inhouse_splicing %>% filter(event_gene %in% selected_event_genes))
+    
+    inhouse_harm_low_prolif = compute_harm_score(
+        inhouse_spldep_low_prolif %>% filter(event_gene %in% selected_event_genes), 
+        inhouse_splicing %>% filter(event_gene %in% selected_event_genes)
+    )
+
+    inhouse_harm_high_prolif = compute_harm_score(
+        inhouse_spldep_high_prolif %>% filter(event_gene %in% selected_event_genes), 
+        inhouse_splicing %>% filter(event_gene %in% selected_event_genes)
+    )
     
     # events and genes differentially spliced and targetable
     protein_impact_events = protein_impact %>%
@@ -1011,14 +1144,18 @@ main = function(){
         ccle_stats, genes_oi, events_oi,
         ccle_metadata, ccle_harm_stats, ccle_harm, ccle_splicing, ccle_genexpr, ccle_spldep,
         events_genes, protein_impact, available_cells,
-        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm, annot, event_info
+        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm, annot, event_info,
+        inhouse_spldep_low_prolif, inhouse_spldep_high_prolif,
+        inhouse_harm_low_prolif, inhouse_harm_high_prolif
     )
     
     # make figdata
     figdata = make_figdata(
         events_oi,
         ccle_harm, ccle_spldep, ccle_splicing, ccle_genexpr, ccle_metadata,
-        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm
+        inhouse_splicing, inhouse_genexpr, inhouse_spldep, inhouse_harm,
+        inhouse_spldep_low_prolif, inhouse_spldep_high_prolif,
+        inhouse_harm_low_prolif, inhouse_harm_high_prolif
     )
 
     # save
