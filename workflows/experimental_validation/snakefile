@@ -187,8 +187,7 @@ rule model_gene_dependency_subsetted:
                     --n_jobs={threads} \
                     --log_transform
         """
-        # --isoform_stats={input.isoform_stats} \
-        
+
         
 rule compute_splicing_dependency_subsetted:
     input:
@@ -265,6 +264,7 @@ rule figures_selection_exons_to_validate:
                     --inhouse_spldep_high_prolif_file={input.inhouse_spldep_high_prolif}/mean.tsv.gz \
                     --figs_dir={output}
         """
+        
         
 rule figures_validation:
     input:
