@@ -899,8 +899,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, 'inhouse-spldep-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
     save_plt(plts, 'inhouse-max_harm-bar-low_prolif', '.pdf', figs_dir, width=5.5, height=10)
     
-    save_plt(plts, 'prolif_comp-spldep-bar', '.pdf', figs_dir, width=5, height=8)
-    save_plt(plts, 'prolif_comp-harm_scores-bar', '.pdf', figs_dir, width=5, height=8)
+    save_plt(plts, 'prolif_comp-spldep-bar', '.pdf', figs_dir, width=5, height=6.5)
+    save_plt(plts, 'prolif_comp-harm_scores-bar', '.pdf', figs_dir, width=5, height=6.5)
 }
 
 

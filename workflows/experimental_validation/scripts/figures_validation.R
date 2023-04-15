@@ -284,20 +284,21 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
 plot_prolif = function(prolif){
     plts = list()
     
-    X = prolif
+    X = prolif %>% 
+        mutate(timepoint = factor(timepoint, levels=c(0,24,48,72,96)))
     
     plts[["prolif-time_vs_od-scatter"]] = X %>%
-        ggplot(aes(x=timepoint)) +
+        ggplot() +
+        geom_point(aes(x=timepoint, y=od_norm, color=CCLE_Name), size=0.5) +
         geom_smooth(
-            aes(y=od_norm, color=CCLE_Name, fill=CCLE_Name), 
+            aes(x=as.numeric(timepoint), y=od_norm, color=CCLE_Name, fill=CCLE_Name), 
             linetype="dashed", size=LINE_SIZE, alpha=0.2, span=0.5
         ) +
-        geom_point(aes(y=od_norm, color=CCLE_Name), size=0.5) +
         theme_pubr() +
         theme(aspect.ratio = 1) + 
         color_palette(PAL_CELLS) +
         fill_palette(PAL_CELLS) +
-        labs(x="Time (h)", y="OD Fold Change", color="Cell Line", fill="Cell Line")
+        labs(x="Time (h)", y="Relative FLuorescence", color="Cell Line", fill="Cell Line")
     
     return(plts)
 }
