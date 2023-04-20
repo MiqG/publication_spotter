@@ -164,7 +164,7 @@ rule download_and_align_ccle:
     threads: 24
     shell:
         """
-        snakemake -f download_and_align_ccle.smk --cores {threads} 
+        snakemake -s download_and_align_ccle.smk --cores {threads} 
         """
 
         
@@ -243,7 +243,7 @@ rule download_and_align_Thomas2020:
     threads: 24
     shell:
         """
-        snakemake -f download_and_align_thomas2020.smk --cores {threads} 
+        snakemake -s download_and_align_thomas2020.smk --cores {threads} 
         """
     
     
@@ -275,7 +275,7 @@ rule download_and_align_Hart2015:
     threads: 24
     shell:
         """
-        snakemake -f download_and_align_hart2015.smk --cores {threads} 
+        snakemake -s download_and_align_hart2015.smk --cores {threads} 
         """   
         
         
@@ -286,7 +286,7 @@ rule download_and_align_encore:
     threads: 24
     shell:
         """
-        snakemake -f download_and_align_encore.smk --cores {threads} 
+        snakemake -s download_and_align_encore.smk --cores {threads} 
         """
         
         
@@ -296,7 +296,7 @@ rule download_and_align_tcga:
     threads: 24
     shell:
         """
-        snakemake -f download_and_align_tcga.smk --cores {threads} 
+        snakemake -s download_and_align_tcga.smk --cores {threads} 
         """        
         
     
@@ -364,5 +364,5 @@ rule download_and_align_Pietila2021:
     threads: 24
     shell:
         """
-        snakemake -f download_and_align_pietila2021.smk --cores {threads} 
+        snakemake -s download_and_align_pietila2021.smk --cores {threads} 
         """ 

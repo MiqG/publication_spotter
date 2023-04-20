@@ -26,8 +26,47 @@ After running all workflows (indicated below), the figures used in the manuscrip
 
 ## Requirements
 - command-line tools
-- Python
-- R
+    - conda==23.3.1
+    - snakemake==6.10.0
+    - vast-tools==2.5.1
+    - csvkit==1.0.5
+    - fastq-dump==2.9.1
+    - gdc-client==1.6.1
+    - ascp==4.1.1.73
+    - axel==2.17.10
+    
+- Python==3.8.3
+    - joblib==1.1.0
+    - tqdm==4.65.0
+    - pandas==1.3.0
+    - networkx==2.8.4
+    - numpy==1.20.3
+
+- R==4.1.0
+    - cluster==2.1.2
+    - clusterProfiler==4.0.5
+    - ComplexHeatmap==2.9.3
+    - cowplot==1.1.1
+    - extrafont==0.17
+    - ggnewscale==0.4.5
+    - ggplotify==0.1.0
+    - ggpubr==0.4.0
+    - ggraph==2.0.5
+    - ggrepel==0.9.1
+    - ggtext==0.1.1
+    - graphlayouts==0.8.0
+    - gridExtra==2.3
+    - gtools==3.9.2
+    - igraph==1.3.1
+    - optparse==1.7.1
+    - pROC==1.18.0
+    - readxl==1.3.1
+    - scattermore==0.7
+    - statebins==2.0.0
+    - SummarizedExperiment==1.22.0
+    - TCGAbiolinks==2.25.3
+    - tidytext==0.3.2
+    - tidyverse==1.3.1
 
 ## Usage
 Refer to each `workflow/*/README.md` file to run each workflow. Note that `obtain_data` and `preprocess_data` are the most computationally demanding workflows. 

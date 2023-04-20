@@ -40,7 +40,6 @@ require(ComplexHeatmap)
 require(ggplotify)
 require(gridExtra)
 require(clusterProfiler)
-require(writexl)
 require(ggtext)
 require(ggnewscale)
 
