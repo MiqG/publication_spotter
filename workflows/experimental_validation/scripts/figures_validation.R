@@ -113,7 +113,68 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         facet_wrap(~CCLE_Name, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
-    # comparison of relative proliferation of untreated conditions
+    # comparison of all conditions FCs across cell lines
+    X = validation_clonogenic %>%
+        distinct(CCLE_Name, replicate_biological, event_gene, od_norm_avg) %>%
+        group_by(CCLE_Name, event_gene) %>%
+        summarize(
+            od_norm_avg_avg = mean(od_norm_avg)
+        ) %>%
+        ungroup()
+    
+    plts[["validation-od_norm_averaged-a549_vs_mdamb231"]] = X %>%
+        pivot_wider(names_from=CCLE_Name, values_from=od_norm_avg_avg) %>%
+        ggplot(aes(x=A549_LUNG, y=MDAMB231_BREAST)) +
+        geom_hline(yintercept = 1, linetype="dashed", size=LINE_SIZE, color="black") +
+        geom_vline(xintercept = 1, linetype="dashed", size=LINE_SIZE, color="black") +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
+        geom_point(aes(color=event_gene), size=1) +
+        geom_text_repel(
+            aes(label=event_gene, color=event_gene), 
+            size=FONT_SIZE, family=FONT_FAMILY, segment.size=0.1,
+            max.overlaps=50
+        ) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        color_palette(get_palette("uchicago",12)) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(color="Condition")
+    
+    plts[["validation-od_norm_averaged-a549_vs_ht29"]] = X %>%
+        pivot_wider(names_from=CCLE_Name, values_from=od_norm_avg_avg) %>%
+        ggplot(aes(x=A549_LUNG, y=HT29_LARGE_INTESTINE)) +
+        geom_hline(yintercept = 1, linetype="dashed", size=LINE_SIZE, color="black") +
+        geom_vline(xintercept = 1, linetype="dashed", size=LINE_SIZE, color="black") +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
+        geom_point(aes(color=event_gene), size=1) +
+        geom_text_repel(
+            aes(label=event_gene, color=event_gene), 
+            size=FONT_SIZE, family=FONT_FAMILY, segment.size=0.1,
+            max.overlaps=50
+        ) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        color_palette(get_palette("uchicago",12)) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(color="Condition")
+    
+    plts[["validation-od_norm_averaged-mdamb231_vs_ht29"]] = X %>%
+        pivot_wider(names_from=CCLE_Name, values_from=od_norm_avg_avg) %>%
+        ggplot(aes(x=MDAMB231_BREAST, y=HT29_LARGE_INTESTINE)) +
+        geom_hline(yintercept = 1, linetype="dashed", size=LINE_SIZE, color="black") +
+        geom_vline(xintercept = 1, linetype="dashed", size=LINE_SIZE, color="black") +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
+        geom_point(aes(color=event_gene), size=1) +
+        geom_text_repel(
+            aes(label=event_gene, color=event_gene), 
+            size=FONT_SIZE, family=FONT_FAMILY, segment.size=0.1,
+            max.overlaps=50
+        ) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        color_palette(get_palette("uchicago",12)) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(color="Condition")
     
     # PSI changes upon treatment
     X = validation_harm_scores %>%
@@ -341,6 +402,11 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_raw", '.pdf', figs_dir, width=5, height=16)
     save_plt(plts, "validation-od_norm", '.pdf', figs_dir, width=5, height=16)
     save_plt(plts, "validation-od_norm_averaged", '.pdf', figs_dir, width=5, height=16)
+    
+    save_plt(plts, "validation-od_norm_averaged-a549_vs_mdamb231", '.pdf', figs_dir, width=9, height=10)
+    save_plt(plts, "validation-od_norm_averaged-a549_vs_ht29", '.pdf', figs_dir, width=9, height=10)
+    save_plt(plts, "validation-od_norm_averaged-mdamb231_vs_ht29", '.pdf', figs_dir, width=9, height=10)
+    
     save_plt(plts, "validation-psi_effects", '.pdf', figs_dir, width=4.5, height=16)
     save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=19)
     save_plt(plts, "validation-od_vs_harm_combined", '.pdf', figs_dir, width=8, height=9)

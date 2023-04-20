@@ -48,6 +48,7 @@ FONT_FAMILY = "Arial"
 # tpm_file = file.path(RAW_DIR,'articles','Hart2015','vast_out','TPM-hg38-12.tab.gz')
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # spldep_file = file.path(RESULTS_DIR,'files','Hart2015','splicing_dependency-EX','mean.tsv.gz')
+
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020')
 
 

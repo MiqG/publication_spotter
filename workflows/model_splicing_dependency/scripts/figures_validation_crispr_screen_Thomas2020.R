@@ -17,9 +17,6 @@ require(ggpubr)
 require(cowplot)
 require(extrafont)
 
-ROOT = here::here()
-source(file.path(ROOT,'src','R','utils.R'))
-
 CELL_TYPES = data.frame(
     cell_line = c("HeLa", "PC9"),
     sampleID = c("SRR7946515_1", "SRR7946516_1")
@@ -39,6 +36,7 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
+# ROOT = here::here()
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
@@ -51,6 +49,8 @@ FONT_FAMILY = "Arial"
 # figs_dir = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020')
 # ccle_splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # ccle_spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
+# figdata_gonato_spotter_file = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020','figdata','model_validation','spotter_results.tsv.gz')
+# figdata_gonato_crispr_file = file.path(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020','figdata','model_validation','crispr_screen.tsv.gz')
 
 
 ##### FUNCTIONS #####
@@ -77,7 +77,7 @@ plot_summary = function(crispr, selected_events){
 }
 
 
-plot_predictions = function(crispr, selected_events, harm){
+plot_predictions = function(crispr, selected_events, harm, figdata_gonato){
     X = crispr %>% 
         filter(EVENT %in% selected_events) %>% 
         left_join(harm, by=c("EVENT"="index","cell_line")) %>%
@@ -97,6 +97,27 @@ plot_predictions = function(crispr, selected_events, harm){
         guides(color="none") + 
         labs(x="Harm Score", y="Obs. Delta Cell Prolif.") +
         geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE)
+    
+    # highlight the low dynamic range of HeLa
+    plts[["predictions-scatters-low_dynrange"]] = X %>%
+        #bind_rows(figdata_gonato) %>%
+#         group_by(cell_line) %>%
+#         mutate(
+#             fitness_score = (fitness_score - mean(fitness_score)) / sd(fitness_score),
+#             #sign_harm = (sign_harm - mean(sign_harm)) / sd(sign_harm)
+#         ) %>%
+#         ungroup() %>%
+        ggplot(aes(x=sign_harm, y=fitness_score)) +
+        geom_smooth(aes(color=cell_line), method="lm", linetype="dashed", size=LINE_SIZE, alpha=0.1) +
+        geom_point(aes(color=cell_line), . %>% filter(!str_detect(cell_line, "HeLa")), size=1) +
+        geom_point(aes(color=cell_line), . %>% filter(str_detect(cell_line, "HeLa")), size=1) +
+        stat_cor(aes(color=cell_line), method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        color_palette(PAL_DUAL) + 
+        theme_pubr() +
+        facet_wrap(~comparison) + 
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
+        labs(x="Harm Score", y="Obs. Delta Cell Prolif.", color="Cell Line")
+
     
     return(plts)
 }
@@ -174,6 +195,7 @@ save_plt = function(plts, plt_name, extension=".pdf",
 save_plots = function(plts, figs_dir){
     save_plt(plts, "summary-scatters", ".pdf", figs_dir, width=5.75, height=7.5)
     save_plt(plts, "predictions-scatters", ".pdf", figs_dir, width=6, height=6)
+    save_plt(plts, "predictions-scatters-low_dynrange", ".pdf", figs_dir, width=3, height=6)
     save_plt(plts, "predictions_ccle-scatters", ".pdf", figs_dir, width=6, height=6)
 }
 
@@ -239,6 +261,9 @@ main = function(){
     ccle_spldep = read_tsv(ccle_spldep_file)
     ccle_splicing = read_tsv(ccle_splicing_file)
     
+    #figdata_gonato_spotter = read_tsv(figdata_gonato_spotter_file)
+    #figdata_gonato_crispr = read_tsv(figdata_gonato_crispr_file)
+    
     # subset experiments of interest
     crispr = crispr %>% filter(comparison %in% COMPARISONS_OI)
     
@@ -284,6 +309,14 @@ main = function(){
         crispr %>% filter(EVENT %in% selected_events) %>% drop_na(fitness_score) %>% pull(EVENT),
         harm %>% filter(index %in% selected_events) %>% drop_na(sign_harm, cell_line) %>% pull(index)
     )
+    
+    # prepare figdata Gonatopoulos
+    #     figdata_gonato = figdata_gonato_crispr %>%
+    #         distinct(EVENT, GENE, event_gene, cell_line, fitness_score) %>%
+    #         left_join(
+    #             figdata_gonato_spotter %>% 
+    #                 distinct(index, sign_harm, cell_line), by=c("EVENT"="index", "cell_line")
+    #         )
     
     # plot
     plts = make_plots(crispr, selected_events, harm, ccle_harm)

@@ -64,6 +64,8 @@ FONT_FAMILY = "Arial"
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 
+# figdata_cancer_events_file = file.path(ROOT,'results','model_splicing_dependency','figures','model_selection',"figdata","model_selection","cancer_events.tsv.gz")
+
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
 
 ##### FUNCTIONS #####
@@ -83,7 +85,7 @@ prep_diff_result = function(diff_result, spldep_stats){
 }
 
 
-plot_top_candidates_sample_type = function(diff_result, patt=''){
+plot_top_candidates_sample_type = function(diff_result, figdata_cancer_events, patt=''){
     
     plts = list()
 
@@ -105,10 +107,18 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
     
     # ranking with differential analyses
     X = diff_result %>%
-        mutate(sign_dpsi = sign(psi__median_diff),
-               sign_spldep = sign(mean),
-               event_gene = ifelse(event_gene %in% VALIDATED_EXONS, 
-                                   paste0("*",event_gene), event_gene)) 
+        mutate(
+           sign_dpsi = sign(psi__median_diff),
+           sign_spldep = sign(mean),
+           event_gene = ifelse(
+                event_gene %in% VALIDATED_EXONS, 
+                paste0("*",event_gene), event_gene
+           ),
+           event_gene = ifelse(
+                EVENT %in% figdata_cancer_events[["EVENT"]],
+                paste0(event_gene,"*"), event_gene
+           )
+        ) 
     
     plts[['top_samples-dpsi_vs_spldep-scatter']] = X %>%
         ggplot(aes(x=psi__median_diff, 
@@ -203,10 +213,10 @@ plot_top_candidates_sample_type = function(diff_result, patt=''){
 }
 
 
-make_plots = function(diff_result_sample, diff_result_subtypes){
+make_plots = function(diff_result_sample, diff_result_subtypes, figdata_cancer_events){
     plts = list(
-        plot_top_candidates_sample_type(diff_result_sample),
-        plot_top_candidates_sample_type(diff_result_subtypes, 'subtypes-')
+        plot_top_candidates_sample_type(diff_result_sample, figdata_cancer_events),
+        plot_top_candidates_sample_type(diff_result_subtypes, figdata_cancer_events, 'subtypes-')
     )
     plts = do.call(c,plts)
     return(plts)
@@ -319,6 +329,7 @@ main = function(){
             ONTO = gsub("ORF disruption upon sequence inclusion \\(Alt\\. Stop\\)",
                           "Alternative protein isoforms \\(Ref, Alt\\. Stop\\)", ONTO)
         )
+    figdata_cancer_events = read_tsv(figdata_cancer_events_file)
     
     # add event gene
     spldep_stats = spldep_stats %>%
@@ -369,7 +380,7 @@ main = function(){
         filter(str_detect(ONTO,"Alternative protein"))
     
     # plot
-    plts = make_plots(diff_result_sample, diff_result_subtypes)
+    plts = make_plots(diff_result_sample, diff_result_subtypes, figdata_cancer_events)
     
     # make figdata
     figdata = make_figdata(diff_result_sample, diff_result_subtypes)
