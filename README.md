@@ -25,6 +25,7 @@ The were made available as part of a Python package called [target_spotter](http
 After running all workflows (indicated below), the figures used in the manuscript and their accompaining data will be in the subdirectory `results/*/figures`.    
 
 ## Requirements
+- command-line tools
 - Python
 - R
 
