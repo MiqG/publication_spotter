@@ -18,9 +18,6 @@ require(ggpubr)
 require(cowplot)
 require(extrafont)
 
-ROOT = here::here()
-source(file.path(ROOT,'src','R','utils.R'))
-
 CELL_TYPES = data.frame(
     cell_line = c("RPE1"),
     sampleID = c("SRR2925168")
@@ -39,6 +36,7 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
+# ROOT = here::here()
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")

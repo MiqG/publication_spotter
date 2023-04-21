@@ -24,9 +24,6 @@ require(ComplexHeatmap)
 require(ggplotify)
 require(gridExtra)
 
-ROOT = here::here()
-source(file.path(ROOT,"src","R","utils.R"))
-
 # vaiables 
 # THRESH_DPSI = 5
 RANDOM_SEED = 1234
@@ -48,6 +45,7 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
+# ROOT = here::here()
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")

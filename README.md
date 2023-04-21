@@ -57,6 +57,7 @@ After running all workflows (indicated below), the figures used in the manuscrip
     - graphlayouts==0.8.0
     - gridExtra==2.3
     - gtools==3.9.2
+    - here==1.0.1
     - igraph==1.3.1
     - optparse==1.7.1
     - pROC==1.18.0

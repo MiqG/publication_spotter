@@ -21,9 +21,6 @@ require(extrafont)
 require(gtools)
 require(tidytext)
 
-ROOT = here::here()
-source(file.path(ROOT,"src","R","utils.R"))
-
 # variables
 #MIN_N_OBS = 20
 THRESH_LR_PVALUE = 0.025
@@ -46,6 +43,7 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
+# ROOT = here::here()
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RAW_DIR = file.path(ROOT,"data","raw")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
@@ -987,7 +985,7 @@ main = function(){
     cancer_events = cancer_events %>%
         mutate(source="HandCurated") %>%
         bind_rows(ascanceratlas) %>%
-        dplyr::select(cols_oi) %>%
+        dplyr::select(all_of(cols_oi)) %>%
         distinct()
     
     # log normalize gene expression
