@@ -34,7 +34,7 @@ def load_data(raw_ppi_file, raw_aliases_file):
 
 def preprocess_stringdb(ppi, aliases):
     # map ENSP to gene symbol
-    gmap = ( 
+    gmap = (
         aliases.loc[aliases["source"] == "BioMart_HUGO"]
         .set_index("#string_protein_id")["alias"]
         .to_dict()

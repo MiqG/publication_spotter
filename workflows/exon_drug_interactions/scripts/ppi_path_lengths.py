@@ -165,11 +165,11 @@ def main():
     n_random_sources = args.n_random_sources
     mode = args.mode
     output_file = args.output_file
-    
+
     print(args)
-    
+
     assert mode is not None
-    
+
     # load
     print("Loading data...")
     ppi, drug_targets, drug_associations = load_data(
