@@ -20,6 +20,7 @@ require(grid)
 require(extrafont)
 require(gtools)
 require(tidytext)
+require(ggvenn)
 
 # variables
 #MIN_N_OBS = 20
@@ -67,6 +68,7 @@ FONT_FAMILY = "Arial"
 ##### FUNCTIONS #####
 load_ontologies = function(msigdb_dir, protein_impact_file, cosmic_genes_file){
     ontologies = list(
+        "reactome" = read.gmt(file.path(msigdb_dir,"c2.cp.reactome.v7.4.symbols.gmt")),
         "hallmarks" = read.gmt(file.path(msigdb_dir,"h.all.v7.4.symbols.gmt")),
         "oncogenic_signatures" = read.gmt(file.path(msigdb_dir,"c6.all.v7.4.symbols.gmt")),
         "GO_BP" = read.gmt(file.path(msigdb_dir,"c5.go.bp.v7.4.symbols.gmt")),
@@ -107,7 +109,8 @@ run_enrichment = function(genes, events, universe, ontologies){
     enrichments[["GO_BP"]] = enricher(genes, TERM2GENE=ontologies[["GO_BP"]], universe=universe[["genes"]])
     enrichments[["GO_CC"]] = enricher(genes, TERM2GENE=ontologies[["GO_CC"]], universe=universe[["genes"]])
     enrichments[["protein_impact"]] = enricher(events, TERM2GENE=ontologies[["protein_impact"]] %>% dplyr::select(term_clean, EVENT), universe=universe[["events"]], maxGSSize=1e6)
-    enrichments[["cosmic"]] = enricher(genes, TERM2GENE=ontologies[["cosmic"]], universe=universe[["genes"]], maxGSSize=1000)
+    enrichments[["cosmic"]] = enricher(genes, TERM2GENE=ontologies[["cosmic"]], universe=universe[["genes"]])
+    enrichments[["reactome"]] = enricher(genes, TERM2GENE=ontologies[["reactome"]], universe=universe[["genes"]])
     
     return(enrichments)
 }
@@ -764,17 +767,81 @@ plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr
 }
 
 
+plot_cosmic_comparison = function(cosmic_comparison){
+    plts = list()
+    
+    X = cosmic_comparison
+    
+    x = sapply(c("is_cancer_driver", "has_cancer_driver_exon"), function(col){
+            genes_oi = X %>%
+                distinct(gene, is_cancer_driver, has_cancer_driver_exon) %>%
+                filter(get(col)) %>%
+                pull(gene)
+            return(genes_oi)
+    }, simplify=FALSE)
+    plts[["cosmic_comparison-overlap-venn"]] = x %>%
+        ggvenn(
+            fill_color = c("purple","orange"),
+            stroke_color = NA,
+            set_name_size = FONT_SIZE+0.5,
+            text_size = FONT_SIZE
+        )
+    
+    
+    x = X %>%
+        pivot_longer(
+            c(has_cancer_driver_exon, is_cancer_driver), 
+            names_to="gene_set", values_to="in_gene_set"
+        ) %>%
+        filter(in_gene_set) %>%
+        drop_na(term) %>%
+        group_by(gene_set) %>%
+        count(term) %>%
+        mutate(perc = n / sum(n)) %>%
+        ungroup()
+    terms_oi = x %>%
+        group_by(gene_set) %>%
+        slice_max(perc, n=10) %>%
+        ungroup() %>%
+        pull(term) %>%
+        unique()
+    terms_order = x %>%
+        filter(term %in% terms_oi) %>%
+        pivot_wider(id_cols=term, names_from=gene_set, values_from=perc) %>%
+        mutate(perc_diff = has_cancer_driver_exon - is_cancer_driver) %>%
+        arrange(-has_cancer_driver_exon) %>%
+        pull(term)
+        
+    plts[["cosmic_comparison-reactome-bar"]] = x %>%
+        filter(term %in% terms_oi) %>%
+        mutate(term = factor(term, levels=terms_order)) %>%
+        ggplot(aes(x=term, y=perc)) +
+        geom_col(aes(fill=gene_set), color=NA, position="dodge") + 
+        geom_text(
+            aes(label=n), position=position_dodge(width=0.9),
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
+        fill_palette(c("purple","orange")) +
+        theme_pubr(x.text.angle = 70) +
+        labs(x="Reactome Pathway", y="% Overlap", fill="Gene Set")
+    
+    return(plts)
+}
+
+
 make_plots = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
                       enrichment, spldep_stats, harm_stats, 
                       gene_mut_freq, 
-                      rnai, spldep, splicing, genexpr, metadata){
+                      rnai, spldep, splicing, genexpr, metadata, 
+                      cosmic_comparison){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
         plot_model_properties(models, enrichment,
                               spldep_stats, harm_stats),
         plot_model_validation(models, gene_mut_freq),
-        plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata)
+        plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata),
+        plot_cosmic_comparison(cosmic_comparison)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -785,7 +852,8 @@ make_figdata = function(models, rnai_stats, cancer_events,
                       eval_pvalue, eval_corr, 
                       enrichment, spldep_stats, harm_stats,
                       gene_mut_freq, 
-                      rnai, spldep, splicing, genexpr, metadata){
+                      rnai, spldep, splicing, genexpr, metadata, 
+                      cosmic_comparison){
     # prep enrichments
     df_enrichs = do.call(rbind,
         lapply(names(enrichment), function(e){
@@ -811,7 +879,8 @@ make_figdata = function(models, rnai_stats, cancer_events,
         ),
         "model_properties" = list(
             "gsoa_selected" = df_enrichs,
-            "splicing_dependecy_stats" = spldep_stats
+            "splicing_dependecy_stats" = spldep_stats,
+            "cosmic_comparison" = cosmic_comparison
         ),
         "model_validation" = list(
             "gene_mutation_frequency" = gene_mut_freq
@@ -891,6 +960,10 @@ save_plots = function(plts, figs_dir){
             save_plt(plts, plt_name, ".pdf", figs_dir, width=4, height=4)            
         })
     })
+    
+    # comparison cosmic
+    save_plt(plts, "cosmic_comparison-overlap-venn", ".pdf", figs_dir, width=4, height=4)
+    save_plt(plts, "cosmic_comparison-reactome-bar", ".pdf", figs_dir, width=8, height=18)
 }
 
 
@@ -1068,11 +1141,14 @@ main = function(){
     # number of selected genes in COSMIC
     available_genes = models %>% pull(GENE) %>% unique() 
     selected_genes = models %>% filter(is_selected) %>% pull(GENE) %>% unique()
-    cosmic_test = data.frame(gene = available_genes) %>%
+    cosmic_comparison = data.frame(gene = available_genes) %>%
         mutate(
             has_cancer_driver_exon = gene %in% selected_genes,
             is_cancer_driver = gene %in% ontologies[["cosmic"]][["gene"]]
-        ) %>%
+        ) %>% 
+        left_join(ontologies[["reactome"]], by="gene")
+    cosmic_test = cosmic_comparison %>%
+        distinct(gene, has_cancer_driver_exon, is_cancer_driver) %>%
         with(table(has_cancer_driver_exon, is_cancer_driver)) %>%
         fisher.test()
     # 74 cancer driver genes have cancer-driver exons
@@ -1083,7 +1159,8 @@ main = function(){
         eval_pvalue, eval_corr, 
         enrichment, spldep_stats, harm_stats, 
         gene_mut_freq,
-        rnai, spldep, splicing, genexpr, metadata
+        rnai, spldep, splicing, genexpr, metadata,
+        cosmic_comparison
     )
 
     # make figdata
@@ -1092,7 +1169,8 @@ main = function(){
         eval_pvalue, eval_corr, 
         enrichment, spldep_stats, harm_stats,
         gene_mut_freq,
-        rnai, spldep, splicing, genexpr, metadata
+        rnai, spldep, splicing, genexpr, metadata,
+        cosmic_comparison
     )
     
     # save
