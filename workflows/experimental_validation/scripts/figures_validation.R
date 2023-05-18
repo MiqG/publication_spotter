@@ -62,6 +62,10 @@ FONT_FAMILY = "Arial"
 
 # prolif_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","resazurin_cell_proliferation-merged.tsv")
 
+# exon_info_file = file.path(ROOT,"support","exon_mapping_validated_exons.tsv")
+# domains_file = file.path(RESULTS_DIR,'files','proteoform_info',"domains.tsv.gz")
+
+
 # figs_dir = file.path(RESULTS_DIR,'figures','validation')
 
 
@@ -364,22 +368,61 @@ plot_prolif = function(prolif){
     return(plts)
 }
 
-make_plots = function(validation_clonogenic, validation_harm_scores, prolif){
+
+plot_protein_domains = function(exon_info){
+    
+    plts = list()
+    X = exon_info
+    
+    palette = get_palette("rickandmorty", length(unique(X[["description"]])))
+    plts[["protein_domains-sequence-rect"]] = X %>%
+        ggplot() +
+        # main proteoform
+        geom_rect(aes(xmin=1, xmax=main_inclusion_proteoform_length, ymin=-0.25, ymax=0.25), fill="darkgrey") +
+        # mapped exon
+        geom_rect(aes(xmin=exon_proteoform_start, xmax=exon_proteoform_end, ymin=-0.25, ymax=0.25), fill="orange") +
+        # mapped domains
+        geom_rect(aes(xmin=start, xmax=end, ymin=(-0.45*index)-0.15, ymax=-0.45*index, fill=description)) +
+        # add domain labels 
+        geom_text(
+            aes(x=main_inclusion_proteoform_length+25, y=(-0.45*index)-0.075, label=description),
+            size=FONT_SIZE, family=FONT_FAMILY, hjust=0
+        ) +
+        fill_palette(palette) +
+        facet_wrap(~proteoform_lab, ncol=1) +
+        theme_pubr() +
+        theme(
+            strip.text.x = element_text(size=6, family=FONT_FAMILY),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank()
+        ) +
+        xlim(1,2000) +
+        ylim(NA,2) +
+        guides(fill="none") +
+        labs(x="Protein Position", y="")
+    
+    return(plts)
+}
+
+make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exon_info){
     plts = list(
         plot_validation(validation_clonogenic, validation_harm_scores),
-        plot_prolif(prolif)
+        plot_prolif(prolif),
+        plot_protein_domains(exon_info)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
-make_figdata = function(validation_clonogenic, validation_harm_scores, prolif){
+make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, exon_info){
 
     figdata = list(
         "experiments" = list(
             "validation_clonogenic" = validation_clonogenic,
             "validation_harm_scores" = validation_harm_scores,
-            "proliferation_assay" = prolif
+            "proliferation_assay" = prolif,
+            "exon_info" = exon_info
         )
     )
 }
@@ -414,6 +457,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_vs_harm_combined_centered", '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, "validation-od_vs_harm_combined_centered-high_prolif", '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, "prolif-time_vs_od-scatter", '.pdf', figs_dir, width=5, height=6)
+    
+    save_plt(plts, "protein_domains-sequence-rect", '.pdf', figs_dir, width=10, height=65)
 }
 
 
@@ -484,10 +529,12 @@ main = function(){
         summarize(od = mean(od)) %>% # summarize OD replicates
         ungroup() %>%
         separate(event_gene, c("EVENT","GENE"), remove=FALSE)
+    prolif = read_tsv(prolif_file)
+
+    exon_info = read_tsv(exon_info_file)
+    domains = read_tsv(domains_file)
     
     events_val = validation_psi %>% pull(EVENT) %>% unique()
-    
-    prolif = read_tsv(prolif_file)
     
     # compute harm scores
     ## using experimentally measured delta PSIs
@@ -571,11 +618,37 @@ main = function(){
         ) %>%
         ungroup()
     
+    ## prepare annotated proteoform domains
+    domains = domains %>%
+        drop_na(description) %>% 
+        mutate(
+            width = end - start,
+            description = sprintf("%s (%s)", description, type) 
+        ) %>%
+        filter(width>0) %>%
+        group_by(seq_region_name, description) %>%
+        slice_max(width, n=1) %>%
+        ungroup() %>%
+        distinct(seq_region_name, start, end, description)
+    
+    exon_info = exon_info %>%
+        mutate(
+            proteoform_lab = sprintf("%s_%s | %s", exon_vastdb, gene, main_inclusion_proteoform_ensembl)
+        ) %>%
+        left_join(
+            domains,
+            by=c("main_inclusion_proteoform_ensembl"="seq_region_name")
+        ) %>% 
+        drop_na(description) %>%
+        group_by(proteoform_lab) %>%
+        mutate(index = row_number()) %>%
+        ungroup()
+    
     # plot
-    plts = make_plots(validation_clonogenic, validation_harm_scores, prolif)
+    plts = make_plots(validation_clonogenic, validation_harm_scores, prolif, exon_info)
     
     # make figdata
-    figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif)
+    figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif, exon_info)
 
     # save
     save_plots(plts, figs_dir)

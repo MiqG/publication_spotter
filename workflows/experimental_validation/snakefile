@@ -49,6 +49,10 @@ rule all:
         ## predict on inhouse dataset
         expand(os.path.join(RESULTS_DIR,'files','splicing_dependency-{prolif_type}-EX'), prolif_type=PROLIF_TYPES),
         
+        # proteoform info
+        os.path.join(RESULTS_DIR,'files','proteoform_info',"domains.tsv.gz"),
+        os.path.join(RESULTS_DIR,'files','proteoform_info',"exons.tsv.gz"),
+        
         # figures
         os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
         os.path.join(RESULTS_DIR,"figures","validation")
@@ -216,7 +220,57 @@ rule compute_splicing_dependency_subsetted:
                     --log_transform
         """
         
+rule download_ensembl_proteoform_info:
+    output:
+        domains = os.path.join(RESULTS_DIR,'files','proteoform_info',"domains.tsv.gz"),
+        exons = os.path.join(RESULTS_DIR,'files','proteoform_info',"exons.tsv.gz")
+    run:
+        import pandas as pd
         
+        proteins_oi = [
+            "ENSP00000446855",
+            "ENSP00000256078",
+            "ENSP00000392142",
+            "ENSP00000282441",
+            "ENSP00000413625",
+            "ENSP00000371532",
+            "ENSP00000413644",
+            "ENSP00000245544"
+        ]
+        
+        # get protein domain info
+        print("Downloading domain info...")
+        domains = []
+        for p in proteins_oi:
+            print(p)
+            try:
+                info = pd.read_json("https://rest.ensembl.org/overlap/translation/{p}?content-type=application/json;feature=protein_feature".format(p=p))
+                domains.append(info)
+            except:
+                print("Skipping")
+                continue
+        domains = pd.concat(domains)
+        
+        # get exon coordinates on proteoform
+        print("Downloading exon info...")
+        exons = []
+        for p in proteins_oi:
+            print(p)
+            try:
+                info = pd.read_json("https://rest.ensembl.org/overlap/translation/{p}?content-type=application/json;feature=translation_exon".format(p=p))
+                exons.append(info)
+            except:
+                print("Skipping")
+                continue
+        exons = pd.concat(exons)
+        
+        # save
+        domains.to_csv(output.domains, **SAVE_PARAMS)
+        exons.to_csv(output.exons, **SAVE_PARAMS)
+        
+        print("Done!")
+    
+    
 rule figures_selection_exons_to_validate:
     input:
         annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
