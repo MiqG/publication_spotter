@@ -42,6 +42,8 @@ LINE_SIZE = 0.25
 FONT_SIZE = 2 # for additional labels
 FONT_FAMILY = "Arial"
 
+PAL_COSMIC_COMP = setNames(c("#d5b1d8ff","orange"),c("is_cancer_driver","has_cancer_driver_exon"))
+
 # Development
 # -----------
 # ROOT = here::here()
@@ -781,7 +783,7 @@ plot_cosmic_comparison = function(cosmic_comparison){
     }, simplify=FALSE)
     plts[["cosmic_comparison-overlap-venn"]] = x %>%
         ggvenn(
-            fill_color = c("purple","orange"),
+            fill_color = as.character(PAL_COSMIC_COMP),
             stroke_color = NA,
             set_name_size = FONT_SIZE+0.5,
             text_size = FONT_SIZE
@@ -815,13 +817,13 @@ plot_cosmic_comparison = function(cosmic_comparison){
     plts[["cosmic_comparison-reactome-bar"]] = x %>%
         filter(term %in% terms_oi) %>%
         mutate(term = factor(term, levels=terms_order)) %>%
-        ggplot(aes(x=term, y=perc)) +
+        ggplot(aes(x=term, y=perc, group=gene_set)) +
         geom_col(aes(fill=gene_set), color=NA, position="dodge") + 
         geom_text(
             aes(label=n), position=position_dodge(width=0.9),
-            size=FONT_SIZE, family=FONT_FAMILY
+            size=FONT_SIZE, family=FONT_FAMILY, hjust=0, vjust=0, angle=45
         ) +
-        fill_palette(c("purple","orange")) +
+        fill_palette(PAL_COSMIC_COMP) +
         theme_pubr(x.text.angle = 70) +
         labs(x="Reactome Pathway", y="% Overlap", fill="Gene Set")
     
