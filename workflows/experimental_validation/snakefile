@@ -27,11 +27,21 @@ RESULTS_DIR = os.path.join(ROOT,'results','experimental_validation')
 TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','target_spotter')
 CCLE_DIR = os.path.join(ROOT,"results","model_splicing_dependency")
 TCGA_DIR = os.path.join(ROOT,'results','streamlined_therapy_dev')
+YASARA_PATH = "~/yasara/yasara"
 
 PROLIF_TYPES = ["low_prolif","high_prolif"]
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
-
+PDB_FILES = {
+    "FNBP1": os.path.join(SUPPORT_DIR,"structures","ESMfold","FNBP1includedENSP00000413625.pdb"),
+    "PPP1R12A": os.path.join(SUPPORT_DIR,"structures","ESMfold","PPP1R12AincludedENSP00000446855.pdb"),
+    "KRAS": os.path.join(SUPPORT_DIR,"structures","ESMfold","KRASincludedENSP00000256078.pdb"),
+    "PRPF18": os.path.join(SUPPORT_DIR,"structures","ESMfold","PRPF18includedENSP00000392142.pdb"),
+    "YAP1": os.path.join(SUPPORT_DIR,"structures","ESMfold","YAP1includedENSP00000282441.pdb"),
+    "VLDLR": os.path.join(SUPPORT_DIR,"structures","ESMfold","VLDLRincludedENSP00000371532.pdb"),
+    "RCC1": os.path.join(SUPPORT_DIR,"structures","ESMfold","RCC1includedENSP00000413644.pdb"),
+    "NUP85": os.path.join(SUPPORT_DIR,"structures","ESMfold","NUP85includedENSP00000245544.pdb"),
+}
 ##### RULES #####
 rule all:
     input:
@@ -55,7 +65,8 @@ rule all:
         
         # figures
         os.path.join(RESULTS_DIR,'figures','selection_exons_to_validate'),
-        os.path.join(RESULTS_DIR,"figures","validation")
+        os.path.join(RESULTS_DIR,"figures","validation"),
+        expand(os.path.join(RESULTS_DIR,"figures","structures_validated_exons","{gene_oi}"), gene_oi=PDB_FILES.keys())
 
         
 rule compute_splicing_dependency:
@@ -346,3 +357,24 @@ rule figures_validation:
                     --prolif_file={input.prolif} \
                     --figs_dir={output}
         """
+
+        
+rule figures_structures_validated_exons:
+    input:
+        pdb = lambda wildcards: PDB_FILES[wildcards.gene_oi],
+        exon_info = os.path.join(SUPPORT_DIR,"exon_mapping_validated_exons.tsv"),
+    params:
+        gene_oi = "{gene_oi}",
+        yasara_path = YASARA_PATH
+    output:
+        directory(os.path.join(RESULTS_DIR,"figures","structures_validated_exons","{gene_oi}"))
+    shell:
+        """
+        python scripts/figure_structure_validated_exon.py \
+                    --pdb_file={input.pdb} \
+                    --exon_info_file={input.exon_info} \
+                    --gene_oi={params.gene_oi} \
+                    --yasara_path={params.yasara_path} \
+                    --figs_dir={output}
+        """
+        
