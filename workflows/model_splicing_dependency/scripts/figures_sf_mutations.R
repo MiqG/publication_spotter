@@ -217,6 +217,7 @@ parseargs = function(){
         make_option("--selected_exons_file", type="character"),
         make_option("--cancer_events_file", type="character"),
         make_option("--ascanceratlas_file", type="character"),
+        make_option("--event_info_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -233,6 +234,7 @@ main = function(){
     selected_exons_file = args[["selected_exons_file"]]
     cancer_events_file = args[["cancer_events_file"]]
     ascanceratlas_file = args[["ascanceratlas_file"]]
+    event_info_file = args[["event_info_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)

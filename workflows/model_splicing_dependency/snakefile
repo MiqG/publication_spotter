@@ -54,6 +54,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','selected_models-{event_type}-genes.txt'), event_type=EVENT_TYPES),
         ## make figures
         os.path.join(RESULTS_DIR,'figures','model_selection'),
+        os.path.join(RESULTS_DIR,"figures","sf_mutations"),
         
         # MODEL VALIDATION
         ## EXON-LEVEL CRISPR SCREENS
@@ -203,6 +204,29 @@ rule figures_model_selection:
         """
     
     
+rule figures_sf_mutations:
+    input:
+        snv = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
+        max_harm = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","max_harm_score-mean.tsv.gz"),
+        selected_exons = os.path.join(RESULTS_DIR,'files','selected_models-EX.txt'),
+        event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
+        cancer_events = os.path.join(ROOT,"support","cancer_events.tsv"),
+        ascanceratlas = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
+    output:
+        directory(os.path.join(RESULTS_DIR,"figures","sf_mutations"))
+    shell:
+        """
+        Rscript scripts/figures_sf_mutations.R \
+                     --snv_file={input.snv} \
+                     --max_harm_file={input.max_harm} \
+                     --selected_exons_file={input.selected_exons} \
+                     --event_info_file={input.event_info} \
+                     --cancer_events_file={input.cancer_events} \
+                     --ascanceratlas_file={input.ascanceratlas} \
+                     --figs_dir={output}
+        """
+        
+        
 ##### MODEL VALIDATION #####        
 rule compute_splicing_dependency_exon_crispr_screen_datsets:
     input:
