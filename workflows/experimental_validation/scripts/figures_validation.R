@@ -1,4 +1,8 @@
 require(optparse)
+require(ensembldb)
+require(EnsDb.Hsapiens.v86)
+require(BSgenome.Hsapiens.UCSC.hg38)
+require(Biostrings)
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
@@ -65,6 +69,7 @@ FONT_FAMILY = "Arial"
 # exon_info_file = file.path(ROOT,"support","exon_mapping_validated_exons.tsv")
 # domains_file = file.path(RESULTS_DIR,'files','proteoform_info',"domains.tsv.gz")
 
+# sso_seqs_file = file.path(SUPPORT_DIR,"sso_sequences.tsv")
 
 # figs_dir = file.path(RESULTS_DIR,'figures','validation')
 
@@ -405,6 +410,99 @@ plot_protein_domains = function(exon_info){
     return(plts)
 }
 
+
+plot_sso_seqs = function(sso_seqs){
+    
+    EDB = EnsDb.Hsapiens.v86
+    dna = BSgenome.Hsapiens.UCSC.hg38
+    
+    df = sso_seqs %>%
+        mutate(
+            chromosome = as.integer(gsub("chr","",gsub(":.*","",COORD_o))),
+            event_start = as.integer(gsub(".*:","",gsub("-.*","",COORD_o))),
+            event_end = as.integer(gsub(".*-","",COORD_o)),
+            event_strand = gsub(".*:","",REF_CO)
+        ) %>% as.data.frame()
+    
+    plts_tmp = list()
+    for (i in 1:nrow(df)) {
+        # unpack
+        gene_oi = df[i, "GENE"]
+        event_gene = df[i, "event_gene"]
+        aso_id = df[i, "aso_id"]
+        sso_seq = df[i, "sequence"]
+        event_start = df[i, "event_start"]
+        event_end = df[i, "event_end"]
+        event_strand = df[i, "event_strand"]
+        margin = 25
+        
+        # get sequence
+        gene_position = genes(EDB, filter = GeneNameFilter(gene_oi))
+        gene_position = GRanges(
+            seqnames = paste0("chr", as.character(seqnames(gene_position))), 
+            ranges = ranges(gene_position)
+        )
+        gene_sequence = getSeq(dna, gene_position)[[1]]
+
+        if (event_strand=="+"){
+            sequence_to_find = reverseComplement(RNAString(sso_seq))
+        }else{
+            sequence_to_find = RNAString(sso_seq)
+        }
+
+        matches = matchPattern(pattern=sequence_to_find, subject=gene_sequence)
+        target = subseq(gene_sequence, start=start(matches)-margin, end=end(matches)+margin)
+        
+        # plot
+        X = data.frame(
+                nt = target %>% as.character() %>% strsplit(split="") %>% unlist()
+            ) %>%
+            mutate(
+                position = row_number(),
+                genomic_position = position + start(matches) + start(gene_position) - margin,
+                sso_target = (position >= margin) & (position <= (length(target)-margin)),
+                feature = ifelse(
+                    (genomic_position >= event_start) & (genomic_position <= event_end),
+                    "exon",
+                    "intron"
+                )
+            )
+        
+        title = sprintf("%s-%s", event_gene, aso_id)
+        plts_tmp[[sprintf("sso_seqs-target_region-%s-%s", event_gene, aso_id)]] = X %>%
+            ggplot(aes(x=genomic_position)) +
+            geom_rect(aes(xmin=min(genomic_position)-0.5, xmax=max(genomic_position)+0.5, 
+                          ymin=-1, ymax=1),
+                      . %>% filter(sso_target), 
+                      fill="lightgray", alpha=0.5) + 
+            geom_text(aes(y=0, label=nt, color=feature), size=FONT_SIZE, family=FONT_FAMILY) +
+            geom_text_repel(
+                aes(y=0, label=genomic_position),
+                . %>% filter(sso_target) %>% slice_min(genomic_position),
+                min.segment.length=0, nudge_y=4, segment.size=0.1,
+                size=FONT_SIZE, family=FONT_FAMILY
+            ) +
+            geom_text_repel(
+                aes(y=0, label=genomic_position),
+                . %>% filter(sso_target) %>% slice_max(genomic_position),
+                min.segment.length=0, nudge_y=4, segment.size=0.1,
+                size=FONT_SIZE, family=FONT_FAMILY
+            ) +
+            color_palette("Dark2") + 
+            theme_pubr() +
+            theme(axis.line.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+            ylim(-5,5) +
+            labs(x="Genomic Position", y="", subtitle=title)        
+    }
+    
+    plts = list(
+        "sso_seqs-target_regions" = ggarrange(plotlist=plts_tmp, ncol=2, nrow=5, common.legend=TRUE)
+    )
+    
+    return(plts)
+}
+
+
 make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exon_info){
     plts = list(
         plot_validation(validation_clonogenic, validation_harm_scores),
@@ -414,6 +512,7 @@ make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exo
     plts = do.call(c,plts)
     return(plts)
 }
+
 
 make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, exon_info){
 
@@ -426,6 +525,7 @@ make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, e
         )
     )
 }
+
 
 save_plt = function(plts, plt_name, extension='.pdf', 
                     directory='', dpi=350, format=TRUE,
@@ -440,6 +540,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm')
 }
+
 
 save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_raw", '.pdf', figs_dir, width=5, height=16)
@@ -459,6 +560,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "prolif-time_vs_od-scatter", '.pdf', figs_dir, width=5, height=6)
     
     save_plt(plts, "protein_domains-sequence-rect", '.pdf', figs_dir, width=10, height=65)
+    save_plt(plts, "sso_seqs-target_regions", '.pdf', figs_dir, width=25, height=20)
 }
 
 
@@ -533,6 +635,10 @@ main = function(){
 
     exon_info = read_tsv(exon_info_file)
     domains = read_tsv(domains_file)
+    
+    sso_seqs = read_tsv(sso_seqs_file) %>%
+        left_join(exon_info, by=c("EVENT"="exon_vastdb","GENE"="gene")) %>%
+        left_join(event_info %>% distinct(EVENT,COORD_o,REF_CO), by="EVENT")
     
     events_val = validation_psi %>% pull(EVENT) %>% unique()
     

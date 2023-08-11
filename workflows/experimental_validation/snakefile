@@ -340,7 +340,10 @@ rule figures_validation:
         spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX"),
         validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20230215-psi-aso.tsv"),
         validation_od = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv"),
-        prolif = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","resazurin_cell_proliferation-merged.tsv")
+        prolif = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","resazurin_cell_proliferation-merged.tsv"),
+        exon_info_file = os.path.join(SUPPORT_DIR,"exon_mapping_validated_exons.tsv"),
+        domains_file = os.path.join(RESULTS_DIR,'files','proteoform_info',"domains.tsv.gz"),
+        sso_seqs_file = os.path.join(SUPPORT_DIR,"sso_sequences.tsv")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation'))
     shell:
@@ -355,6 +358,9 @@ rule figures_validation:
                     --validation_splicing_file={input.validation_splicing} \
                     --validation_od_file={input.validation_od} \
                     --prolif_file={input.prolif} \
+                    --exon_info_file={input.exon_info} \
+                    --domains_file={input.domains} \
+                    --sso_seqs_file={input.sso_seqs} \
                     --figs_dir={output}
         """
 
