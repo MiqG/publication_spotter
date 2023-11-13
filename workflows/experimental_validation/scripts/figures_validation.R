@@ -222,7 +222,23 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         labs(x="Event & Gene", y="PSI", fill="Condition") +
         facet_wrap(~CCLE_Name, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
-
+    
+    # PSI RT-PCR vs PSI RNAseq
+    X = validation_harm_scores %>%
+        distinct(CCLE_Name, EVENT, psi_untreated, psi_untreated_rnaseq)
+    
+    plts[["validation-psi_rtpcr_vs_psi_rnaseq"]] = X %>%
+        ggplot(aes(x=psi_untreated, y=psi_untreated_rnaseq)) +
+        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
+        geom_point(aes(color=CCLE_Name)) +
+        color_palette(PAL_CELLS) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        facet_wrap(~CCLE_Name, nrow=1) +
+        theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        guides(color="none") +
+        labs(x="PSI RT-PCR", y="PSI RNAseq")
+    
     # spotter predictions
     od_ctl = validation_clonogenic %>%
         filter(event_gene=="CONTROL_NEG") %>%
@@ -350,6 +366,7 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
     
     return(plts)
 }
+
 
 plot_prolif = function(prolif){
     plts = list()
@@ -552,6 +569,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_norm_averaged-mdamb231_vs_ht29", '.pdf', figs_dir, width=9, height=10)
     
     save_plt(plts, "validation-psi_effects", '.pdf', figs_dir, width=4.5, height=16)
+    save_plt(plts, "validation-psi_rtpcr_vs_psi_rnaseq", '.pdf', figs_dir, width=8, height=4.5)
     save_plt(plts, "validation-od_vs_harm", '.pdf', figs_dir, width=12, height=19)
     save_plt(plts, "validation-od_vs_harm_combined", '.pdf', figs_dir, width=8, height=9)
     save_plt(plts, "validation-od_vs_harm_combined_minmax", '.pdf', figs_dir, width=5, height=6)
@@ -643,7 +661,7 @@ main = function(){
     events_val = validation_psi %>% pull(EVENT) %>% unique()
     
     # compute harm scores
-    ## using experimentally measured delta PSIs
+    ## using experimentally measured (RT-PCR) delta PSIs
     validation_harm_scores = spldep %>%
         filter(EVENT %in% events_val) %>%
         pivot_longer(-EVENT, names_to="DepMap_ID", values_to="spldep") %>%
@@ -652,6 +670,11 @@ main = function(){
         mutate(
             delta_psi = psi_treated - psi_untreated,
             harm_score = (-1) * delta_psi * spldep
+        ) %>%
+        left_join(
+            splicing %>%
+                pivot_longer(-EVENT, names_to="DepMap_ID", values_to="psi_untreated_rnaseq"),
+            by = c("EVENT","DepMap_ID")
         )
     
     # normalize OD by biological replicate
