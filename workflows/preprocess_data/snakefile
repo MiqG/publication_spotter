@@ -62,7 +62,8 @@ CANCER_TYPES = [
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
 DEPMAP_RAW = {
-    "demeter2": os.path.join(RAW_DIR,"DepMap","demeter2","D2_combined_gene_dep_scores.csv")
+    "demeter2": os.path.join(RAW_DIR,"DepMap","demeter2","D2_combined_gene_dep_scores.csv"),
+    "achilles": os.path.join(RAW_DIR,"DepMap","achilles_ccle","Achilles_gene_effect_transposed.tsv.gz")
 }
 
 tcga_metadata = pd.read_table(os.path.join(RAW_DIR,"TCGA","metadata","PANCAN.tsv.gz"))
@@ -71,74 +72,78 @@ TCGA_N_SAMPLES = tcga_metadata["cancer_type"].value_counts().to_dict()
 ##### RULES #####
 rule all:
     input:
-        # preprocess CCLE
-        ## metadata
-        os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
-        ## PSI
-        expand(os.path.join(PREP_DIR,"event_psi","CCLE-{event_type}.tsv.gz"), event_type=EVENT_TYPES),
-        ## gene expression
-        os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
-        ## mutations
-        os.path.join(PREP_DIR,"mutations","CCLE.tsv.gz"),
+        os.path.join(PREP_DIR,"demeter2","shRNA-mapping_coords.tsv.gz"),
+        os.path.join(PREP_DIR,"shRNA-mapping_to_vastdb_exons.tsv.gz")
+#         # preprocess CCLE
+#         ## metadata
+#         os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+#         ## PSI
+#         expand(os.path.join(PREP_DIR,"event_psi","CCLE-{event_type}.tsv.gz"), event_type=EVENT_TYPES),
+#         ## gene expression
+#         os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
 
-        # preprocess DepMap data
-        expand(os.path.join(PREP_DIR,"{dataset}","CCLE.tsv.gz"), dataset=DEPMAP_RAW.keys()),
-
-        # preprocess Thomas 2020
-        os.path.join(PREP_DIR,"Thomas2020","crispr_screen.tsv.gz"),
-
-        # preprocess ENCORE
-        os.path.join(PREP_DIR,"metadata","ENCORE.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","ENCORE-EX.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","ENCORE-ALTA.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","ENCORE-ALTD.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","ENCORE-INT.tsv.gz"),
-        os.path.join(PREP_DIR,"genexpr_tpm","ENCORE.tsv.gz"),
+#         # preprocess DepMap data
+#         expand(os.path.join(PREP_DIR,"{dataset}","CCLE.tsv.gz"), dataset=DEPMAP_RAW.keys()),
+#         # map shRNAs to exons
+#         os.path.join(PREP_DIR,"demeter2","shRNA-mapping_coords.tsv.gz"),
+#         # make Achilles comparable to Demeter2
+#         os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz"),
         
-        # make COSMIC gene set
-        os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt"),
+#         # preprocess Thomas 2020
+#         os.path.join(PREP_DIR,"Thomas2020","crispr_screen.tsv.gz"),
+
+#         # preprocess ENCORE
+#         os.path.join(PREP_DIR,"metadata","ENCORE.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","ENCORE-EX.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","ENCORE-ALTA.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","ENCORE-ALTD.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","ENCORE-INT.tsv.gz"),
+#         os.path.join(PREP_DIR,"genexpr_tpm","ENCORE.tsv.gz"),
+        
+#         # make COSMIC gene set
+#         os.path.join(PREP_DIR,"gene_sets","cancer_gene_census.txt"),
                 
-        # preprocess TCGA
-        expand(os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        expand(os.path.join(PREP_DIR,"genexpr_counts","{cancer}.tsv.gz"), cancer=TCGA_N_SAMPLES.keys()),
-        ## merge metadata TCGA
-        os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
-        ## clinically relevant subtypes
-        expand(os.path.join(PREP_DIR,"metadata","{cancer}_subtypes.tsv.gz"), cancer=CANCER_TYPES),
-        ## merge metadata TCGA subtypes
-        os.path.join(PREP_DIR,"metadata","PANCAN_subtypes.tsv.gz"),
+#         # preprocess TCGA
+#         expand(os.path.join(PREP_DIR,"metadata","{cancer}.tsv.gz"), cancer=CANCER_TYPES),
+#         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-EX.tsv.gz"), cancer=CANCER_TYPES),
+#         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTA.tsv.gz"), cancer=CANCER_TYPES),
+#         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-ALTD.tsv.gz"), cancer=CANCER_TYPES),
+#         expand(os.path.join(PREP_DIR,"event_psi","{cancer}-INT.tsv.gz"), cancer=CANCER_TYPES),
+#         expand(os.path.join(PREP_DIR,"genexpr_counts","{cancer}.tsv.gz"), cancer=CANCER_TYPES),
+#         ## merge metadata TCGA
+#         os.path.join(PREP_DIR,"metadata","PANCAN.tsv.gz"),
+#         ## clinically relevant subtypes
+#         expand(os.path.join(PREP_DIR,"metadata","{cancer}_subtypes.tsv.gz"), cancer=CANCER_TYPES),
+#         ## merge metadata TCGA subtypes
+#         os.path.join(PREP_DIR,"metadata","PANCAN_subtypes.tsv.gz"),
         
-        # preprocess inhouse RNA-seq
-        os.path.join(PREP_DIR,"metadata","inhouse.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-ALTA.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-ALTD.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","inhouse-INT.tsv.gz"),
-        os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")        
+#         # preprocess inhouse RNA-seq
+#         os.path.join(PREP_DIR,"metadata","inhouse.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","inhouse-ALTA.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","inhouse-ALTD.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","inhouse-INT.tsv.gz"),
+#         os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),        
 
-        # preprocess STRINGDB
-        os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
+#         # preprocess STRINGDB
+#         os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
 
-        # preprocess drug screens GDSC
-        ## split datasets GDSC platforms
-        os.path.join(PREP_DIR,"drug_screens","train","GDSC1.tsv.gz"),
-        os.path.join(PREP_DIR,"drug_screens","train","GDSC2.tsv.gz"),
-        os.path.join(PREP_DIR,"drug_screens","test","GDSC1.tsv.gz"),
-        os.path.join(PREP_DIR,"drug_screens","test","GDSC2.tsv.gz"),
-        ## clean names
-        os.path.join(PREP_DIR,"drug_screens","drug_targets.tsv.gz"),
+#         # preprocess drug screens GDSC
+#         ## split datasets GDSC platforms
+#         os.path.join(PREP_DIR,"drug_screens","train","GDSC1.tsv.gz"),
+#         os.path.join(PREP_DIR,"drug_screens","train","GDSC2.tsv.gz"),
+#         os.path.join(PREP_DIR,"drug_screens","test","GDSC1.tsv.gz"),
+#         os.path.join(PREP_DIR,"drug_screens","test","GDSC2.tsv.gz"),
+#         ## clean names
+#         os.path.join(PREP_DIR,"drug_screens","drug_targets.tsv.gz"),
         
-        # preprocess Pietila2021
-        os.path.join(PREP_DIR,"metadata","Pietila2021.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Pietila2021-EX.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Pietila2021-ALTA.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Pietila2021-ALTD.tsv.gz"),
-        os.path.join(PREP_DIR,"event_psi","Pietila2021-INT.tsv.gz"),
-        os.path.join(PREP_DIR,"genexpr_tpm","Pietila2021.tsv.gz"),
+#         # preprocess Pietila2021
+#         os.path.join(PREP_DIR,"metadata","Pietila2021.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","Pietila2021-EX.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","Pietila2021-ALTA.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","Pietila2021-ALTD.tsv.gz"),
+#         os.path.join(PREP_DIR,"event_psi","Pietila2021-INT.tsv.gz"),
+#         os.path.join(PREP_DIR,"genexpr_tpm","Pietila2021.tsv.gz"),
         
         
 rule prepare_metadata_ccle:
@@ -198,23 +203,121 @@ rule preprocess_genexpr_ccle:
                     --output_file={output.genexpr}
         """
 
+        
+rule get_shrna_coordinates:
+    input:
+        mapping = os.path.join(RAW_DIR,"DepMap","demeter2","shRNA-mapping.csv"),
+        genome_fasta = os.path.join(RAW_DIR,"GENCODE","GRCh38.p13.genome.fa.gz"),
+        genome_annot = os.path.join(RAW_DIR,"ENSEMBL","Homo_sapiens.GRCh38.110.sqlite")
+    output:
+        os.path.join(PREP_DIR,"demeter2","shRNA-mapping_coords.tsv.gz")
+    shell:
+        """
+        Rscript scripts/get_shRNA_coordinates.R \
+                    --mapping_file={input.mapping} \
+                    --genome_fasta_file={input.genome_fasta} \
+                    --genome_annot_file={input.genome_annot} \
+                    --output_file={output}
+        """
 
+        
+rule shrnas_mapping_exons:
+    input:
+        shrnas = os.path.join(RAW_DIR,"DepMap","demeter2","shRNA-mapping.csv"),
+        exon_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38.tab.gz")
+    output:
+        mapping = os.path.join(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz")
+    run:
+        import pandas as pd
+        import pyranges as pr
+        from tqdm import tqdm
+        import numpy as np
+        
+        # load
+        shrnas = pd.read_csv(input.shrnas)
+        exon_info = pd.read_table(input.exon_info)
+        
+        # subset
+        ## only exons
+        exon_info = exon_info.loc[exon_info["EVENT"].str.contains("EX")].copy()
+        
+        ## same shRNA targets
+        common_genes = set(shrnas["Gene Symbol"]).intersection(exon_info["GENE"])
+        shrnas = shrnas.loc[shrnas["Gene Symbol"].isin(common_genes)].copy()
+        exon_info = exon_info.loc[exon_info["GENE"].isin(common_genes)].copy()
+        
+        # prep
+        # find to which exon(s) within the gene each shRNA maps
+        mapping = []
+        for gene_oi in tqdm(list(common_genes)):
+            gene_shrnas = shrnas.loc[shrnas["Gene Symbol"] == gene_oi]
+            gene_exon_info = exon_info.loc[exon_info["GENE"] == gene_oi]
+            
+            mapping_shrnas = []
+            for shrna_oi in gene_shrnas["Barcode Sequence"]:
+                idx = gene_exon_info["Seq_A"].str.contains(shrna_oi)
+                events = gene_exon_info.loc[idx,"EVENT"].tolist()
+                mapping_shrna = pd.DataFrame({
+                    "shrna_barcode": shrna_oi, 
+                    "GENE": gene_oi,
+                    "EVENT": events if len(events)>0 else [np.nan]
+                })
+                mapping_shrnas.append(mapping_shrna)
+                
+            mapping.append(pd.concat(mapping_shrnas))
+            
+        mapping = pd.concat(mapping)        
+        
+        # save
+        mapping.to_csv(output.mapping, **SAVE_PARAMS)
+        
+        print("Done!")
+    
+    
 rule preprocess_depmap:
     input:
-        lambda wildcards: DEPMAP_RAW[wildcards.dataset]
+        depmap = lambda wildcards: DEPMAP_RAW[wildcards.dataset],
+        metadata = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv')
     output:
         os.path.join(PREP_DIR,'{dataset}','CCLE.tsv.gz')
-    params:
-        metadata_file = os.path.join(RAW_DIR,'DepMap','achilles_ccle','sample_info.csv')
     shell:
         """
         python scripts/preprocess_depmap.py \
-                    --raw_depmap_file={input} \
-                    --raw_metadata_file={params.metadata_file} \
+                    --raw_depmap_file={input.depmap} \
+                    --raw_metadata_file={input.metadata} \
                     --prep_depmap_file={output}
         """
         
-
+        
+rule make_achilles_comparable_to_demeter2:
+    input:
+        demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        achilles = os.path.join(PREP_DIR,"achilles","CCLE.tsv.gz")
+    output:
+        achilles = os.path.join(PREP_DIR,"achilles","CCLE_comparable.tsv.gz")
+    run:
+        import numpy as np
+        import pandas as pd
+        
+        demeter2 = pd.read_table(input.demeter2, index_col=0)
+        achilles = pd.read_table(input.achilles, index_col=0)
+        
+        # subset samples and genes
+        common_samples = set(demeter2.columns).intersection(achilles.columns)
+        common_genes = set(demeter2.index).intersection(achilles.index)
+        demeter2 = demeter2.loc[common_genes,common_samples].copy()
+        achilles = achilles.loc[common_genes,common_samples].copy()
+        
+        # replicate missing values
+        is_missing = demeter2.isnull().values
+        achilles.values[is_missing] = np.nan
+        
+        # save 
+        achilles.reset_index().to_csv(output.achilles, sep="\t", index=False, compression="gzip")
+        
+        print("Done!")
+        
+        
 rule mutation_frequency:
     input:
         snv = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
@@ -235,7 +338,6 @@ rule mutation_frequency:
                     --effect_col={params.effect_col} \
                     --output_file={output}
         """
-
         
 rule make_cosmic_gene_set:
     input:

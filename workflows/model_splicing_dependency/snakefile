@@ -56,6 +56,10 @@ rule all:
         os.path.join(RESULTS_DIR,'figures','model_selection'),
         os.path.join(RESULTS_DIR,"figures","sf_mutations"),
         
+        ## CRISPR KO SCREENS - Achilles KO gene dependencies rather than KD gene dependencies
+        expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES),
+        
+        
         # MODEL VALIDATION
         ## EXON-LEVEL CRISPR SCREENS
         ### compute splicing dependencies
@@ -81,7 +85,7 @@ rule all:
         os.path.join(RESULTS_DIR,'figures','validation_encore')
         
         
-##### MODEL SELECTION #####        
+##### MODEL SELECTION #####
 rule model_gene_dependency:
     input:
         splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
@@ -94,6 +98,35 @@ rule model_gene_dependency:
     resources:
         runtime = 3600*12, # 12h
         memory = 50
+    params:
+        script_dir = TS_DIR,
+        n_iterations = 1000
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_fit \
+                    --gene_dependency_file={input.gene_dependency_file} \
+                    --splicing_file={input.splicing_file} \
+                    --genexpr_file={input.genexpr_file} \
+                    --mapping_file={input.mapping_file} \
+                    --output_dir={output} \
+                    --n_iterations={params.n_iterations} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """
+        
+        
+rule model_gene_dependency_achilles:
+    input:
+        splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
+        genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        gene_dependency_file = os.path.join(PREP_DIR,'achilles','CCLE_comparable.tsv.gz'),
+        mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'))
+    threads: 24
+    resources:
+        runtime = 604800, # seconds = 168h = 7 days
+        memory = 30
     params:
         script_dir = TS_DIR,
         n_iterations = 1000
