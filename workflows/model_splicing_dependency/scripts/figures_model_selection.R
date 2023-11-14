@@ -1098,6 +1098,7 @@ plot_rnai_qc = function(models, shrna_mapping, rnai_stats){
     X = models %>%
         left_join(shrna_mapping %>% distinct(shrna_barcode, GENE) %>% count(GENE, name="n_shrna_gene"), by="GENE") %>%
         left_join(shrna_mapping %>% drop_na() %>% distinct(shrna_barcode, EVENT) %>% count(EVENT, name="n_shrna_event"), by="EVENT") %>%
+        mutate(is_targeted = ifelse(!is.na(n_shrna_event), "Targeted", "Not Targeted")) %>% 
         left_join(
             shrna_mapping %>%
             mutate(EVENT = replace_na(EVENT, "NOT_IN_VASTDB")) %>%
@@ -1181,6 +1182,27 @@ plot_rnai_qc = function(models, shrna_mapping, rnai_stats){
         theme_pubr() +
         theme(aspect.ratio=1) +
         labs(x="N Different Exons targeted by shRNA per Gene", y="Max. Pearson Correlation per Gene")
+
+    ## are targeted exons constitutive?
+    plts[["rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter"]] = X %>% 
+        mutate(is_targeted = ifelse(!is.na(n_shrna_event), "Targeted", "Not Targeted") ) %>% 
+        ggplot(aes(x=event_median, y=event_std)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
+        geom_vline(xintercept=seq(0,100,10), linetype="dashed", size=LINE_SIZE, color="black") +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        facet_wrap(~is_targeted) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        labs(x="Exon PSI Median", y="Exon PSI Std")
+
+    plts[["rnai_qc-exon_psi_median_vs_shrna_targeted-bar"]] = X %>% 
+        mutate(event_psi_bins = cut(event_median, breaks=seq(0,100,10), include.lowest=TRUE)) %>%
+        count(is_targeted, event_psi_bins) %>%
+        ggbarplot(x="event_psi_bins", y="n", color=NA, fill=PAL_SINGLE_NEUTRAL) +    
+        facet_wrap(~is_targeted) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        labs(x="Exon PSI Median Bin", y="N Exons")
+    
     
     return(plts)
 }
@@ -1343,6 +1365,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_demeter2_std-scatter", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_lr_pvalue-scatter", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_pearson-scatter", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter", ".pdf", figs_dir, width=7, height=5)
+    save_plt(plts, "rnai_qc-exon_psi_median_vs_shrna_targeted-bar", ".pdf", figs_dir, width=7, height=3)
 }
 
 
@@ -1496,7 +1520,7 @@ main = function(){
     # prep for plotting
     ## model selection
     rnai_stats = get_rnai_stats(rnai, models)
-    spldep_stats = get_spldep_stats(spldep, models)
+    spldep_stats. = get_spldep_stats(spldep, models)
     splicing_stats = get_spldep_stats(splicing %>% rename(index=EVENT), models)
     
     ### get controls
