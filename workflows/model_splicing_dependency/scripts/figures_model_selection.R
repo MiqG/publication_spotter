@@ -75,8 +75,8 @@ PAL_DRIVER_COMP = c(
 # shrna_mapping_file = file.path(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz")
 # models_achilles_file = file.path(RESULTS_DIR,'files','achilles','models_gene_dependency-EX','model_summaries.tsv.gz')
 # crispr_essentials_file = file.path(SUPPORT_DIR,"CRISPRInferredCommonEssentials.csv")
+# ccle_info_file = file.path(SUPPORT_DIR,"ENA_filereport-PRJNA523380-CCLE.tsv")
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
-
 
 ##### FUNCTIONS #####
 load_ontologies = function(msigdb_dir, protein_impact_file, cosmic_genes_file){
@@ -1208,6 +1208,22 @@ plot_rnai_qc = function(models, shrna_mapping, rnai_stats){
 }
 
 
+plot_rnaseq_qc = function(metadata, rnai){
+    plts = list()
+
+    X = metadata %>%
+        filter(DepMap_ID %in% colnames(rnai))
+    
+    plts[["rnaseq_qc-read_count_vs_n_detected_events-scatter"]] = X %>% 
+        ggscatter(x="read_count", y="n_detected_events", alpha=0.5, size=1) + 
+        geom_smooth(linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
+        theme(aspect.ratio=1) +
+        labs(x="Read Count", y="N Different Exons Detected")
+    
+    return(plts)
+}
+
+
 make_plots = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
                       enrichment, spldep_stats, harm_stats, 
@@ -1220,7 +1236,8 @@ make_plots = function(models, rnai_stats, cancer_events,
         plot_model_validation(models, gene_mut_freq),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata),
         plot_cosmic_comparison(cosmic_comparison),
-        plot_rnai_qc(models, shrna_mapping, rnai_stats)
+        plot_rnai_qc(models, shrna_mapping, rnai_stats),
+        plot_rnaseq_qc(metadata, rnai)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -1367,6 +1384,9 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_pearson-scatter", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter", ".pdf", figs_dir, width=7, height=5)
     save_plt(plts, "rnai_qc-exon_psi_median_vs_shrna_targeted-bar", ".pdf", figs_dir, width=7, height=3)
+
+    # RNAseq QC
+    save_plt(plts, "rnaseq_qc-read_count_vs_n_detected_events-scatter", ".pdf", figs_dir, width=5, height=5)
 }
 
 
@@ -1447,6 +1467,7 @@ main = function(){
     shrna_mapping = read_tsv(shrna_mapping_file)
     models_achilles = read_tsv(models_achilles_file)
     crispr_essentials = read_csv(crispr_essentials_file)
+    ccle_info = read_tsv(ccle_info_file)
     
     gc()
     
@@ -1498,7 +1519,22 @@ main = function(){
     
     # log normalize gene expression
     genexpr = genexpr %>% mutate_at(vars(-("ID")), function(x){ log2(x+1) })
-    
+
+    # prep ccle info
+    metadata = metadata %>%
+        left_join(
+            ccle_info %>% 
+            filter(library_strategy=="RNA-Seq") %>%
+            distinct(run_accession, read_count),
+            by="run_accession"
+        ) %>%
+        left_join(
+            splicing %>%
+            summarize_if(is.numeric, ~ sum(is.finite(.))) %>%
+            pivot_longer(everything(), names_to="DepMap_ID", values_to="n_detected_events"),
+            by="DepMap_ID"
+        )
+        
     # add info to models
     models = models %>% 
         mutate(event_gene = paste0(EVENT,"_",GENE),
@@ -1520,7 +1556,7 @@ main = function(){
     # prep for plotting
     ## model selection
     rnai_stats = get_rnai_stats(rnai, models)
-    spldep_stats. = get_spldep_stats(spldep, models)
+    spldep_stats = get_spldep_stats(spldep, models)
     splicing_stats = get_spldep_stats(splicing %>% rename(index=EVENT), models)
     
     ### get controls
