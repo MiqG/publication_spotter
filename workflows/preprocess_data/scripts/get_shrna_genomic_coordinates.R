@@ -67,7 +67,7 @@ main = function(){
                    "transcript_name","gene_name","entrez_id","gene_type","empty"),
             sep="\\|"
         ) %>%
-        separate(shrna_id, into=c("barcode_sequence","gene_name"), sep="\\|") %>%
+        separate(shrna_id, into=c("barcode_sequence","gene_name_prevmap"), sep="\\|") %>%
         mutate(
             tx_id = gsub("\\..*","",transcript_id),
             alignment_index = row_number()
@@ -105,6 +105,7 @@ main = function(){
     
     registerDoParallel(cores=n_jobs)
     
+    #chunks = split(1:length(alignment_ranges[1:100]), ceiling(1:length(alignment_ranges[1:100]) / chunk_size))
     chunks = split(1:length(alignment_ranges), ceiling(1:length(alignment_ranges) / chunk_size))
     
     result = foreach(chunk = chunks) %dopar% {
@@ -130,6 +131,11 @@ main = function(){
     end_time = Sys.time()
     execution_time <- end_time - start_time
     print(execution_time)
+    
+    # add exon info
+    exons_info = exons(transcripts_annot) %>% data.frame() %>% distinct()
+    result = result %>%
+        left_join(exons_info, by=c("exon_id","seqnames","strand"), suffix=c("","_exon"))
     
     # save
     write_tsv(result, output_file)

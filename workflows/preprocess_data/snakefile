@@ -69,15 +69,17 @@ DEPMAP_RAW = {
 tcga_metadata = pd.read_table(os.path.join(RAW_DIR,"TCGA","metadata","PANCAN.tsv.gz"))
 TCGA_N_SAMPLES = tcga_metadata["cancer_type"].value_counts().to_dict()
 
+TRANSCRIPTS_DATASETS = ["gencode.v44.transcripts","gencode.v26.transcripts"]
+
 ##### RULES #####
 rule all:
     input:
         os.path.join(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz"),
-        os.path.join(PREP_DIR,"bowtie_indices","gencode.v44.transcripts"),
+        expand(os.path.join(PREP_DIR,"bowtie_indices","{transcripts_dataset}"), transcripts_dataset=TRANSCRIPTS_DATASETS),
         os.path.join(RAW_DIR,"DepMap","demeter2","shRNA-mapping.fasta"),
-        os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts.bam"),
-        os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts.bed"),
-        os.path.join(PREP_DIR,"demeter2","shRNA-mapping_coords.tsv.gz")
+        expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bam"), transcripts_dataset=TRANSCRIPTS_DATASETS),
+        expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bed"), transcripts_dataset=TRANSCRIPTS_DATASETS),
+        expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}-mapping_coords.tsv.gz"), transcripts_dataset=TRANSCRIPTS_DATASETS)
 #         # preprocess CCLE
 #         ## metadata
 #         os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
@@ -263,9 +265,9 @@ rule shrnas_mapping_exons:
 
 rule build_index_bowtie_human_transcriptome:
     input:
-        reference = os.path.join(RAW_DIR,"GENCODE","gencode.v44.transcripts.fa.gz")
+        reference = os.path.join(RAW_DIR,"GENCODE","{transcripts_dataset}.fa.gz")
     output:
-        index_dir = directory(os.path.join(PREP_DIR,"bowtie_indices","gencode.v44.transcripts"))
+        index_dir = directory(os.path.join(PREP_DIR,"bowtie_indices","{transcripts_dataset}"))
     threads: 24
     shell:
         """
@@ -309,11 +311,11 @@ rule shRNAs_to_fasta:
 rule align_shRNAs_to_human_transcriptome:
     input:
         shRNA_fasta = os.path.join(RAW_DIR,"DepMap","demeter2","shRNA-mapping.fasta"),
-        index_dir = os.path.join(PREP_DIR,"bowtie_indices","gencode.v44.transcripts")
+        index_dir = os.path.join(PREP_DIR,"bowtie_indices","{transcripts_dataset}")
     output:
-        alignment = os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts.bam")
+        alignment = os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bam")
     params:
-        alignment_sam = os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts.sam")
+        alignment_sam = os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.sam")
     threads: 24
     shell:
         """
@@ -336,9 +338,9 @@ rule align_shRNAs_to_human_transcriptome:
 
 rule convert_alignment_to_bed:
     input:
-        sam = os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts.bam")
+        sam = os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bam")
     output:
-        bed = os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts.bed")
+        bed = os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bed")
     shell:
         """
         set -eo pipefail
@@ -383,10 +385,10 @@ rule convert_alignment_to_bed:
 
 rule get_shrna_genomic_coordinates:
     input:
-        alignment = os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts.bed"),
+        alignment = os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bed"),
         genome_annot = os.path.join(RAW_DIR,"ENSEMBL","Homo_sapiens.GRCh38.110.sqlite")
     output:
-        os.path.join(PREP_DIR,"demeter2","shRNA-mapping_coords.tsv.gz")
+        os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}-mapping_coords.tsv.gz")
     params:
         chunk_size = 500
     threads: 24

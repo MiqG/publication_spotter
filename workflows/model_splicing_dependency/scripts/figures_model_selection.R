@@ -8,6 +8,7 @@
 # 
 
 require(optparse)
+require(ensembldb)
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
@@ -28,6 +29,7 @@ require(pROC)
 THRESH_LR_PVALUE = 0.025
 THRESH_CORR = 0.2
 SIZE_CTL = 100
+RANDOM_SEED = 1234
 
 # formatting
 PAL_SINGLE_ACCENT = "orange"
@@ -71,11 +73,15 @@ PAL_DRIVER_COMP = c(
 # ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
-# shrna_mapping_file = file.path(RAW_DIR,"DepMap","demeter2","shRNA-mapping.csv")
-# shrna_mapping_file = file.path(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz")
+# #(TODO: preprocessing)shrna_raw_file = file.path(RAW_DIR,"DepMap","demeter2","")
+# shrna_seqs_file = file.path(RAW_DIR,"DepMap","demeter2","shRNA-mapping.csv")
+# shrna_mapping_ensembl_file = file.path(PREP_DIR,"demeter2","shRNA-mapping_coords.tsv.gz")
+# shrna_mapping_vastdb_file = file.path(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz")
 # models_achilles_file = file.path(RESULTS_DIR,'files','achilles','models_gene_dependency-EX','model_summaries.tsv.gz')
 # crispr_essentials_file = file.path(SUPPORT_DIR,"CRISPRInferredCommonEssentials.csv")
 # ccle_info_file = file.path(SUPPORT_DIR,"ENA_filereport-PRJNA523380-CCLE.tsv")
+# gencode_annot_file = file.path(RAW_DIR,"GENCODE","gencode.v44.annotation.gtf.gz")
+# genome_annot_file = file.path(RAW_DIR,"ENSEMBL","Homo_sapiens.Gh38.110.sqlite")
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
 ##### FUNCTIONS #####
@@ -339,14 +345,54 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
         theme(aspect.ratio=1)
 
     ctl_pos_events = cancer_events %>% pull(EVENT) %>% unique()
-    plts[["model_sel-lr_pvalue_ctl_pos"]] = models %>%
-        mutate(is_ctl_pos = EVENT %in% ctl_pos_events) %>%
-        ggviolin(x="is_ctl_pos", y="lr_pvalue", trim = TRUE, 
-                 fill="is_ctl_pos", color=NA, palette = PAL_DUAL) + 
-        geom_boxplot(width=0.1) +
+    
+    set.seed(RANDOM_SEED)
+    X = models %>%
+        distinct(EVENT, GENE, lr_pvalue, is_known_driver) %>%
+        pivot_longer(-c(EVENT, GENE, lr_pvalue), names_to="class_type", values_to="in_class") %>%
+        bind_rows(
+            models %>%
+            distinct(GENE, lr_pvalue, is_pan_essential, in_cosmic) %>%
+            pivot_longer(-c(GENE,lr_pvalue), names_to="class_type", values_to="in_class") %>%
+            group_by(GENE, class_type) %>%
+            slice_sample(n=1) %>%
+            ungroup()
+        ) %>%
+        mutate(class_type=factor(class_type, levels=c("is_known_driver","is_pan_essential","in_cosmic")))
+    counts = X %>% group_by(class_type) %>% count(in_class) %>% mutate(label=sprintf("n=%s",n))
+    plts[["model_sel-gt_lists_vs_lr_pvalue-random"]] = X %>%
+        ggviolin(x="in_class", y="lr_pvalue", fill="in_class", color=NA, palette=PAL_DUAL, trim=TRUE) +
+        geom_boxplot(width=0.1, outlier.size=0.1) +
+        geom_text(aes(label=label, y=-0.05), counts, family=FONT_FAMILY, size=FONT_SIZE)+
         stat_compare_means(method="wilcox.test", family=FONT_FAMILY, size=FONT_SIZE) +
+        facet_wrap(~class_type, scales="free") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         guides(fill="none") + 
-        labs(x="Is Positive Control", y="LR Test p-value")
+        labs(x="", y="LR Test p-value")
+
+    set.seed(RANDOM_SEED)
+    X = models %>%
+        distinct(EVENT, GENE, lr_pvalue, is_known_driver) %>%
+        pivot_longer(-c(EVENT, GENE, lr_pvalue), names_to="class_type", values_to="in_class") %>%
+        bind_rows(
+            models %>%
+            distinct(GENE, lr_pvalue, is_pan_essential, in_cosmic) %>%
+            pivot_longer(-c(GENE,lr_pvalue), names_to="class_type", values_to="in_class") %>%
+            group_by(GENE, class_type) %>%
+            slice_min(lr_pvalue, n=1) %>%
+            ungroup()
+        ) %>%
+        mutate(class_type=factor(class_type, levels=c("is_known_driver","is_pan_essential","in_cosmic")))
+    counts = X %>% group_by(class_type) %>% count(in_class) %>% mutate(label=sprintf("n=%s",n))
+    plts[["model_sel-gt_lists_vs_lr_pvalue-lowest"]] = X %>%
+        ggviolin(x="in_class", y="lr_pvalue", fill="in_class", color=NA, palette=PAL_DUAL, trim=TRUE) +
+        geom_boxplot(width=0.1, outlier.size=0.1) +
+        geom_text(aes(label=label, y=-0.05), counts, family=FONT_FAMILY, size=FONT_SIZE)+
+        stat_compare_means(method="wilcox.test", family=FONT_FAMILY, size=FONT_SIZE) +
+        facet_wrap(~class_type, scales="free") +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        guides(fill="none") + 
+        labs(x="", y="LR Test p-value")
     
     ## ROC analysis - LR p-value
     ### to detect cancer-driver exons
@@ -1092,118 +1138,88 @@ plot_cosmic_comparison = function(cosmic_comparison){
 }
 
 
-plot_rnai_qc = function(models, shrna_mapping, rnai_stats){
+plot_rnai_qc = function(shrna_mapping_ensembl, event_info, models){
     plts = list()
+
+    # add VastDB annotations to mapped shRNAs
+    event_coords = event_info %>%
+        filter(str_detect(EVENT,"EX")) %>%
+        mutate(
+            seqnames = gsub("chr","",gsub(":.*","",COORD_o)),
+            start_exon = gsub("-.*","",gsub(".*:","",COORD_o)) %>% as.integer(),
+            end_exon = gsub(".*-","",gsub(".*:","",COORD_o)) %>% as.integer(),
+            strand = gsub(".*:","",REF_CO)
+        ) %>%
+        distinct(EVENT, seqnames, start_exon, end_exon, strand, GENE) %>%
+        drop_na()
     
+    shrna_mapping = shrna_mapping_ensembl %>%
+        left_join(event_coords, by=c("seqnames","start_exon","end_exon","strand")) %>%
+        left_join(models %>% distinct(EVENT,ENSEMBL, event_median, event_std), by="EVENT") %>%
+        mutate(
+            exon_id_coords = sprintf("%s:%s-%s:%s",seqnames,start_exon,end_exon,strand),
+            in_vastdb = !is.na(EVENT),
+            gene_id_clean = gsub("\\..*","",gene_id),
+            in_models = gene_id_clean %in% models[["ENSEMBL"]]
+        )
+
+    # how many different exons are targeted by shRNAs in each gene
+    n_targeted_exons_per_gene = shrna_mapping %>%
+        distinct(gene_name, exon_id_coords) %>%
+        count(gene_name, name="n_targeted_exons_per_gene")
+    shrna_mapping = shrna_mapping %>%
+        left_join(n_targeted_exons_per_gene, by="gene_name")
+    
+    # how many exons are targeted for each gene?
+    plts[["rnai_qc-n_targeted_exons_per_gene-hist"]] = shrna_mapping %>%
+        # filter out those shRNAs mapped to the wrong genes
+        filter(in_models) %>%
+        distinct(gene_name, n_targeted_exons_per_gene) %>%
+        count(n_targeted_exons_per_gene) %>%
+        arrange(n_targeted_exons_per_gene) %>%
+        ggbarplot(
+            x="n_targeted_exons_per_gene", y="n", fill=PAL_SINGLE_NEUTRAL, color=NA,
+            label=TRUE, lab.family=FONT_FAMILY, lab.size=FONT_SIZE
+        ) +
+        labs(x="N Exons targeted by shRNA per Gene", y="Count")
+    
+    # are targeted exons constitutive?
+    singletons = shrna_mapping %>% 
+        filter(in_models) %>%
+        filter(n_targeted_exons_per_gene==1) %>% 
+        distinct(EVENT) %>%
+        pull(EVENT)
     X = models %>%
-        left_join(shrna_mapping %>% distinct(shrna_barcode, GENE) %>% count(GENE, name="n_shrna_gene"), by="GENE") %>%
-        left_join(shrna_mapping %>% drop_na() %>% distinct(shrna_barcode, EVENT) %>% count(EVENT, name="n_shrna_event"), by="EVENT") %>%
-        mutate(is_targeted = ifelse(!is.na(n_shrna_event), "Targeted", "Not Targeted")) %>% 
-        left_join(
-            shrna_mapping %>%
-            mutate(EVENT = replace_na(EVENT, "NOT_IN_VASTDB")) %>%
-            count(GENE, name="n_shrna_targeting_diff_exons_in_gene"),
-            by="GENE"
+        mutate(
+            is_targeted = ifelse(
+                EVENT %in% shrna_mapping[["EVENT"]], "Targeted", "Not Targeted"
+            ),
+            is_singleton = EVENT %in% singletons
         ) %>%
-        left_join(
-            shrna_mapping %>%
-            drop_na(EVENT) %>%
-            count(GENE, name="n_shrna_targeting_diff_vastdb_exons_in_gene"),
-            by="GENE"
-        ) %>%
-        left_join(rnai_stats, by="GENE")
+        group_by(is_targeted) %>%
+        mutate(is_targeted_lab = sprintf("%s (n=%s)",is_targeted,n())) %>%
+        ungroup()
     
-    # shRNAs per gene targeting different exons
-    ## how many shRNAs per gene vs shRNAs per exon in gene?
-    plts[["rnai_qc-shrna_per_gene_vs_shrna_exon_diversity-scatter"]] = X %>%
-        distinct(GENE, n_shrna_gene, n_shrna_targeting_diff_exons_in_gene) %>%
-        ggplot(aes(x=n_shrna_gene, y=n_shrna_targeting_diff_exons_in_gene)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
-        theme_pubr() +
-        theme(aspect.ratio=1) +
-        labs(x="N shRNA per Gene", y="N Different Exons targeted by shRNA per Gene")    
-
-    ## how many different exons per gene do we target with shRNAs?
-    plts[["rnai_qc-shrna_exon_diversity_per_gene-bar"]] = X %>%
-        distinct(GENE, n_shrna_targeting_diff_exons_in_gene) %>%
-        count(n_shrna_targeting_diff_exons_in_gene) %>%
-        ggbarplot(x="n_shrna_targeting_diff_exons_in_gene", y="n", fill=PAL_SINGLE_NEUTRAL, color=NA) +
-        labs(x="N Different Exons targeted by shRNA per Gene", y="Count")
-
-    ## vs Demeter2 median
-    plts[["rnai_qc-shrna_exon_diversity_per_gene_vs_demeter2_median-scatter"]] = X %>%
-        distinct(GENE, n_shrna_targeting_diff_exons_in_gene, rnai_med) %>%
-        ggplot(aes(x=n_shrna_targeting_diff_exons_in_gene, y=rnai_med)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
-        #geom_hline(yintercept=0, linetype="dashed", color="black", size=LINE_SIZE) +
-        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
-        stat_cor(method="spearman", size=FONT_SIZE, family=FONT_FAMILY) +
-        theme_pubr() +
-        theme(aspect.ratio=1) +
-        labs(x="N Different Exons targeted by shRNA per Gene", y="median(Demeter2)")
-    
-    ## vs Demeter2 std
-    plts[["rnai_qc-shrna_exon_diversity_per_gene_vs_demeter2_std-scatter"]] = X %>%
-        distinct(GENE, n_shrna_targeting_diff_exons_in_gene, rnai_std) %>%
-        ggplot(aes(x=n_shrna_targeting_diff_exons_in_gene, y=rnai_std)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
-        geom_smooth(method="lm", linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
-        stat_cor(method="spearman", size=FONT_SIZE, family=FONT_FAMILY) +
-        theme_pubr() +
-        theme(aspect.ratio=1) +
-        labs(x="N Different Exons targeted by shRNA per Gene", y="std(Demeter2)")    
-    
-    ## vs LR-pvalue
-    plts[["rnai_qc-shrna_exon_diversity_per_gene_vs_lr_pvalue-scatter"]] = X %>%
-        distinct(GENE, n_shrna_targeting_diff_exons_in_gene, lr_pvalue) %>%
-        drop_na() %>%
-        group_by(GENE, n_shrna_targeting_diff_exons_in_gene) %>%
-        slice_min(lr_pvalue, n=1) %>%
-        ungroup() %>%
-        ggplot(aes(x=n_shrna_targeting_diff_exons_in_gene, y=lr_pvalue)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
-        geom_hline(yintercept=THRESH_LR_PVALUE, linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2 ) +
-        stat_cor(method="spearman", size=FONT_SIZE, family=FONT_FAMILY) +
-        theme_pubr() +
-        theme(aspect.ratio=1) +
-        labs(x="N Different Exons targeted by shRNA per Gene", y="Min. LR p-value per Gene")
-    
-    ## vs Pearson
-    plts[["rnai_qc-shrna_exon_diversity_per_gene_vs_pearson-scatter"]] = X %>%
-        filter(lr_pvalue < THRESH_LR_PVALUE) %>%
-        distinct(GENE, n_shrna_targeting_diff_exons_in_gene, pearson_correlation_mean) %>%
-        group_by(GENE, n_shrna_targeting_diff_exons_in_gene) %>%
-        slice_max(abs(pearson_correlation_mean), n=1) %>%
-        ungroup() %>%
-        ggplot(aes(x=n_shrna_targeting_diff_exons_in_gene, y=pearson_correlation_mean)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
-        geom_hline(yintercept=THRESH_CORR, linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2 ) +
-        stat_cor(method="spearman", size=FONT_SIZE, family=FONT_FAMILY) +
-        theme_pubr() +
-        theme(aspect.ratio=1) +
-        labs(x="N Different Exons targeted by shRNA per Gene", y="Max. Pearson Correlation per Gene")
-
-    ## are targeted exons constitutive?
-    plts[["rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter"]] = X %>% 
-        mutate(is_targeted = ifelse(!is.na(n_shrna_event), "Targeted", "Not Targeted") ) %>% 
+    plts[["rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter"]] = X %>%
         ggplot(aes(x=event_median, y=event_std)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
+        geom_scattermore(aes(color=is_singleton), . %>% filter(!is_singleton), pixels = c(1000,1000), pointsize=5, alpha=0.5) +
+        geom_scattermore(aes(color=is_singleton), . %>% filter(is_singleton), pixels = c(1000,1000), pointsize=8, alpha=0.5) +
         geom_vline(xintercept=seq(0,100,10), linetype="dashed", size=LINE_SIZE, color="black") +
+        color_palette(c(PAL_SINGLE_NEUTRAL, PAL_SINGLE_LIGHT)) +
         theme_pubr() +
         theme(aspect.ratio=1) +
-        facet_wrap(~is_targeted) +
+        facet_wrap(~is_targeted_lab) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="Exon PSI Median", y="Exon PSI Std")
+        labs(x="Exon PSI Median", y="Exon PSI Std", color="Is Singleton")
 
     plts[["rnai_qc-exon_psi_median_vs_shrna_targeted-bar"]] = X %>% 
         mutate(event_psi_bins = cut(event_median, breaks=seq(0,100,10), include.lowest=TRUE)) %>%
-        count(is_targeted, event_psi_bins) %>%
+        count(is_targeted_lab, event_psi_bins) %>%
         ggbarplot(x="event_psi_bins", y="n", color=NA, fill=PAL_SINGLE_NEUTRAL) +    
-        facet_wrap(~is_targeted) +
+        facet_wrap(~is_targeted_lab) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         labs(x="Exon PSI Median Bin", y="N Exons")
-    
-    
+
     return(plts)
 }
 
@@ -1312,7 +1328,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_sel-deps_sorted_vs_std_ctl_pos", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_sel-deps_med_vs_std_ctl_pos", ".pdf", figs_dir, width=5, height=5)
     ## p-value selection
-    save_plt(plts, "model_sel-lr_pvalue_ctl_pos", ".pdf", figs_dir, width=4, height=4)
+    save_plt(plts, "model_sel-gt_lists_vs_lr_pvalue-random", ".pdf", figs_dir, width=8.5, height=5)
+    save_plt(plts, "model_sel-gt_lists_vs_lr_pvalue-lowest", ".pdf", figs_dir, width=8.5, height=5)
     save_plt(plts, "model_sel-lr_pvalue", ".pdf", figs_dir, width=4, height=4)
     save_plt(plts, "model_sel-tpr_vs_fpr", ".pdf", figs_dir, width=5, height=5)
     ## pearson selection
@@ -1376,13 +1393,8 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "cosmic_comparison-reactome-bar", ".pdf", figs_dir, width=8, height=18)
     
     # RNAi (shRNA) QC
-    save_plt(plts, "rnai_qc-shrna_per_gene_vs_shrna_exon_diversity-scatter", ".pdf", figs_dir, width=5, height=2.5)
-    save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene-bar", ".pdf", figs_dir, width=5, height=2.5)
-    save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_demeter2_median-scatter", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_demeter2_std-scatter", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_lr_pvalue-scatter", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "rnai_qc-shrna_exon_diversity_per_gene_vs_pearson-scatter", ".pdf", figs_dir, width=5, height=5)
-    save_plt(plts, "rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter", ".pdf", figs_dir, width=7, height=5)
+    save_plt(plts, "rnai_qc-n_targeted_exons_per_gene-hist", ".pdf", figs_dir, width=5, height=2.5)
+    save_plt(plts, "rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter", ".pdf", figs_dir, width=7, height=7)
     save_plt(plts, "rnai_qc-exon_psi_median_vs_shrna_targeted-bar", ".pdf", figs_dir, width=7, height=3)
 
     # RNAseq QC
@@ -1464,7 +1476,10 @@ main = function(){
     ascanceratlas = read_tsv(ascanceratlas_file)
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
-    shrna_mapping = read_tsv(shrna_mapping_file)
+    shrna_seqs = read_csv(shrna_seqs_file)
+    shrna_mapping_ensembl = read_tsv(shrna_mapping_ensembl_file)
+    shrna_mapping_vastdb = read_tsv(shrna_mapping_vastdb_file)
+    #genome_annot = ensembldb::EnsDb(genome_annot_file)
     models_achilles = read_tsv(models_achilles_file)
     crispr_essentials = read_csv(crispr_essentials_file)
     ccle_info = read_tsv(ccle_info_file)
