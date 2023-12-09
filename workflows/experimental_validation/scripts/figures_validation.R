@@ -61,6 +61,7 @@ FONT_FAMILY = "Arial"
 # genexpr_file = file.path(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz")
 # spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
 
+# sso_optimization_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso-optimization.tsv")
 # validation_splicing_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","20230215-psi-aso.tsv")
 # validation_od_file = file.path(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv")
 

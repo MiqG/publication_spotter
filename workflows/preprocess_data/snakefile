@@ -69,7 +69,7 @@ DEPMAP_RAW = {
 tcga_metadata = pd.read_table(os.path.join(RAW_DIR,"TCGA","metadata","PANCAN.tsv.gz"))
 TCGA_N_SAMPLES = tcga_metadata["cancer_type"].value_counts().to_dict()
 
-TRANSCRIPTS_DATASETS = ["gencode.v44.transcripts","gencode.v26.transcripts"]
+TRANSCRIPTS_DATASETS = ["gencode.v44.transcripts"] # ,"gencode.v26.transcripts","human.all.rna"]
 
 ##### RULES #####
 rule all:
@@ -218,7 +218,6 @@ rule shrnas_mapping_exons:
         mapping = os.path.join(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz")
     run:
         import pandas as pd
-        import pyranges as pr
         from tqdm import tqdm
         import numpy as np
         
@@ -234,8 +233,8 @@ rule shrnas_mapping_exons:
         common_genes = set(shrnas["Gene Symbol"]).intersection(exon_info["GENE"])
         shrnas = shrnas.loc[shrnas["Gene Symbol"].isin(common_genes)].copy()
         exon_info = exon_info.loc[exon_info["GENE"].isin(common_genes)].copy()
+        exon_info["full_sequence"] = exon_info["Seq_C1"]+exon_info["Seq_A"]+exon_info["Seq_C2"]
         
-        # prep
         # find to which exon(s) within the gene each shRNA maps
         mapping = []
         for gene_oi in tqdm(list(common_genes)):
@@ -244,7 +243,8 @@ rule shrnas_mapping_exons:
             
             mapping_shrnas = []
             for shrna_oi in gene_shrnas["Barcode Sequence"]:
-                idx = gene_exon_info["Seq_A"].str.contains(shrna_oi)
+                # consider only first 19 nucleotides of shRNAs (like in McFarland 2018)
+                idx = gene_exon_info["full_sequence"].str.contains(shrna_oi[:19])
                 events = gene_exon_info.loc[idx,"EVENT"].tolist()
                 mapping_shrna = pd.DataFrame({
                     "shrna_barcode": shrna_oi, 
@@ -386,7 +386,7 @@ rule convert_alignment_to_bed:
 rule get_shrna_genomic_coordinates:
     input:
         alignment = os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bed"),
-        genome_annot = os.path.join(RAW_DIR,"ENSEMBL","Homo_sapiens.GRCh38.110.sqlite")
+        genome_annot = os.path.join(RAW_DIR,"GENCODE","Homo_sapiens.GRCh38.gencode_v44.sqlite")
     output:
         os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}-mapping_coords.tsv.gz")
     params:

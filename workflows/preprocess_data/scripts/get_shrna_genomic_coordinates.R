@@ -26,6 +26,7 @@ CHR_OI = c(as.character(1:22),c("X","Y","MT"))
 # genome_annot_file = file.path(RAW_DIR,"GENCODE","gencode.v39.annotation.gtf.gz")
 # genome_annot_file = "https://ftp.ensembl.org/pub/release-110/gtf/homo_sapiens/Homo_sapiens.GRCh38.110.gtf.gz"
 # genome_annot_file = file.path(RAW_DIR,"ENSEMBL","Homo_sapiens.GRCh38.110.sqlite")
+# genome_annot_file = file.path(RAW_DIR,"GENCODE","Homo_sapiens.GRCh38.gencode_v44.sqlite")
 # gene_oi = "RPS6KA1"
 # seq_oi = "AAAAATGGCATCAACCACCAT"
 
@@ -70,6 +71,7 @@ main = function(){
         separate(shrna_id, into=c("barcode_sequence","gene_name_prevmap"), sep="\\|") %>%
         mutate(
             tx_id = gsub("\\..*","",transcript_id),
+            tx_id = transcript_id,
             alignment_index = row_number()
         ) %>%
         dplyr::select(-strand) 
