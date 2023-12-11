@@ -233,7 +233,8 @@ rule shrnas_mapping_exons:
         common_genes = set(shrnas["Gene Symbol"]).intersection(exon_info["GENE"])
         shrnas = shrnas.loc[shrnas["Gene Symbol"].isin(common_genes)].copy()
         exon_info = exon_info.loc[exon_info["GENE"].isin(common_genes)].copy()
-        exon_info["full_sequence"] = exon_info["Seq_C1"]+exon_info["Seq_A"]+exon_info["Seq_C2"]
+        # 7 because it is the shRNA seed sequence length
+        exon_info["full_sequence"] = exon_info["Seq_C1"].str[-7:]+exon_info["Seq_A"]+exon_info["Seq_C2"].str[:7]
         
         # find to which exon(s) within the gene each shRNA maps
         mapping = []

@@ -961,6 +961,20 @@ plot_model_validation = function(models, gene_mut_freq){
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
     
+    genes_to_drop = models %>% filter(is_pan_essential|in_cosmic|is_known_driver) %>% pull(GENE)
+    plts[["model_val-mutation_gene_frequency_without_known_genes"]] = X %>%
+        filter(Variant_Classification%in%variants_oi & !(GENE%in%genes_to_drop)) %>%
+        ggplot(aes(x=Variant_Classification, y=mut_freq_per_kb, 
+                   group=interaction(Variant_Classification,is_selected))) +
+        geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
+                     position=position_dodge(0.7)) +
+        stat_compare_means(aes(group=is_selected), method="wilcox.test", 
+                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
+        yscale("log10", .format=TRUE) + 
+        fill_palette(PAL_DUAL) +
+        labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", fill="Selected Model") +
+        theme_pubr(x.text.angle=70)
+
     # normalize with respect to silent mutations
     gene_mut_freq_null = X %>%
         distinct(GENE, Variant_Classification, is_selected, mut_freq_per_kb) %>%
@@ -1140,89 +1154,48 @@ plot_cosmic_comparison = function(cosmic_comparison){
 
 plot_rnai_qc = function(shrna_mapping_ensembl, event_info, models){
     plts = list()
-
-    # add VastDB annotations to mapped shRNAs
-    # event_coords = event_info %>%
-    #     filter(str_detect(EVENT,"EX")) %>%
-    #     mutate(
-    #         seqnames = gsub("chr","",gsub(":.*","",COORD_o)),
-    #         start_exon = gsub("-.*","",gsub(".*:","",COORD_o)) %>% as.integer(),
-    #         end_exon = gsub(".*-","",gsub(".*:","",COORD_o)) %>% as.integer(),
-    #         strand = gsub(".*:","",REF_CO)
-    #     ) %>%
-    #     distinct(EVENT, seqnames, start_exon, end_exon, strand, GENE) %>%
-    #     drop_na()
     
-    shrna_mapping = shrna_seqs %>%
-        left_join(
-            shrna_mapping_vastdb, 
-            by=c("Barcode Sequence"="shrna_barcode", "Gene Symbol"="GENE")
-        ) %>%
-        dplyr::rename(barcode_sequence=`Barcode Sequence`, gene_name_prevmap=`Gene Symbol`) %>%
-        distinct(barcode_sequence, gene_name_prevmap, EVENT) %>%
+    # how many different exons are targeted per gene?
+    n_targeted_exons_per_gene = models %>% 
+        distinct(GENE, ENSEMBL) %>%
         left_join(
             shrna_mapping_ensembl %>%
-                mutate(
-                    exon_id_coords = sprintf("%s:%s-%s:%s",seqnames,start_exon,end_exon,strand),
-                    gene_id_clean = gsub("\\..*","",gene_id)
-                ) %>% distinct(barcode_sequence, gene_name_prevmap, exon_id_coords),
-            by=c("barcode_sequence", "gene_name_prevmap")
+            mutate(
+                exon_id_coords = sprintf("%s:%s-%s:%s",seqnames,start_exon,end_exon,strand),
+                ENSEMBL = gsub("\\..*","",gene_id)
+            ) %>%
+            distinct(barcode_sequence, ENSEMBL, exon_id_coords), 
+            by="ENSEMBL"
         ) %>%
-        mutate(
-            in_models = gene_name_prevmap %in% models[["GENE"]]
-        ) %>%
-        left_join(models %>% distinct(EVENT, GENE, ENSEMBL, event_median, event_std, lr_pvalue), by="EVENT")
-    
-    # how many different exons are targeted by shRNAs in each gene
-    n_targeted_exons_per_gene = shrna_mapping %>%
-        distinct(gene_name_prevmap, exon_id_coords) %>%
+        distinct(GENE,ENSEMBL,exon_id_coords) %>%
         drop_na() %>%
-        count(gene_name_prevmap, name="n_targeted_exons_per_gene") %>%
-        mutate(mapping_type="ensembl") %>%
-        bind_rows(
-            shrna_mapping %>%
-            distinct(gene_name_prevmap, EVENT) %>%
-            drop_na() %>%
-            count(gene_name_prevmap, name="n_targeted_exons_per_gene") %>%
-            mutate(mapping_type="vastdb")
-        ) %>%
-        group_by(gene_name_prevmap) %>%
-        slice_max(n_targeted_exons_per_gene, n=1) %>%
-        ungroup() %>%
-        distinct(gene_name_prevmap, n_targeted_exons_per_gene)
+        count(GENE, ENSEMBL, name="n_targeted_exons_per_gene")
     
-    shrna_mapping = shrna_mapping %>%
-        left_join(n_targeted_exons_per_gene, by="gene_name_prevmap")
+    # which ones are in VastDB?
+    shrna_mapping = n_targeted_exons_per_gene %>%
+        left_join(shrna_mapping_vastdb, by="GENE")
     
     # how many exons are targeted for each gene?
     plts[["rnai_qc-n_targeted_exons_per_gene-hist"]] = shrna_mapping %>%
-        # filter out those shRNAs mapped to the wrong genes
-        # all genes in models should have been mapped!!
-        filter(in_models) %>%
-        distinct(gene_name_prevmap, n_targeted_exons_per_gene) %>%
+        distinct(GENE, ENSEMBL, n_targeted_exons_per_gene) %>%
         count(n_targeted_exons_per_gene) %>%
         arrange(n_targeted_exons_per_gene) %>%
         ggbarplot(
             x="n_targeted_exons_per_gene", y="n", fill=PAL_SINGLE_NEUTRAL, color=NA,
-            label=TRUE, lab.family=FONT_FAMILY, lab.size=FONT_SIZE+2
+            label=TRUE, lab.family=FONT_FAMILY, lab.size=FONT_SIZE
         ) +
-        labs(x="N Exons targeted by shRNA per Gene", y="Count")
+        labs(x="N GENCODE Exons Targeted by shRNA per Gene", y="Count")
     
     # are targeted exons constitutive?
-    singletons = shrna_mapping %>% 
-        filter(in_models) %>%
-        distinct(EVENT, gene_name_prevmap, n_targeted_exons_per_gene) %>%
-        filter(n_targeted_exons_per_gene==1) %>%
-        count(EVENT, gene_name_prevmap) %>% 
-        drop_na() %>%
-        pull(EVENT)
     X = models %>%
-        left_join(n_targeted_exons_per_gene, by=c("GENE"="gene_name_prevmap")) %>%
+        left_join(
+            shrna_mapping %>% distinct(GENE,ENSEMBL,n_targeted_exons_per_gene), 
+            by=c("GENE","ENSEMBL")
+        ) %>%
         mutate(
             is_targeted = ifelse(
                 EVENT %in% shrna_mapping[["EVENT"]], "Targeted", "Not Targeted"
-            ),
-            is_singleton = EVENT %in% singletons
+            )
         ) %>%
         group_by(is_targeted) %>%
         mutate(is_targeted_lab = sprintf("%s (n=%s)",is_targeted,n())) %>%
@@ -1230,36 +1203,49 @@ plot_rnai_qc = function(shrna_mapping_ensembl, event_info, models){
     
     plts[["rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter"]] = X %>%
         ggplot(aes(x=event_median, y=event_std)) +
-        geom_scattermore(aes(color=is_singleton), . %>% filter(!is_singleton), pixels = c(1000,1000), pointsize=5, alpha=0.5) +
-        geom_scattermore(aes(color=is_singleton), . %>% filter(is_singleton), pixels = c(1000,1000), pointsize=8, alpha=0.5) +
+        geom_scattermore(aes(color=is_targeted), pixels = c(1000,1000), pointsize=5, alpha=0.5) +
         geom_vline(xintercept=seq(0,100,10), linetype="dashed", size=LINE_SIZE, color="black") +
         color_palette(c(PAL_SINGLE_NEUTRAL, PAL_SINGLE_LIGHT)) +
         theme_pubr() +
         theme(aspect.ratio=1) +
-        facet_wrap(~is_targeted_lab) +
+        facet_wrap(~is_targeted_lab, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="Exon PSI Median", y="Exon PSI Std", color="Is Singleton")
+        guides(color="none") +
+        labs(x="Exon PSI Median", y="Exon PSI Std")
 
     plts[["rnai_qc-exon_psi_median_vs_shrna_targeted-bar"]] = X %>% 
         mutate(event_psi_bins = cut(event_median, breaks=seq(0,100,10), include.lowest=TRUE)) %>%
-        count(is_targeted_lab, is_singleton, event_psi_bins) %>%
-        ggbarplot(x="event_psi_bins", y="n", color=NA, fill="is_singleton", 
-                  palette=c(PAL_SINGLE_NEUTRAL, PAL_SINGLE_LIGHT)) +    
-        facet_wrap(~is_targeted_lab+is_singleton, scales="free_y") +
+        count(is_targeted_lab, is_targeted, event_psi_bins) %>%
+        ggbarplot(x="event_psi_bins", y="n", color=NA, fill="is_targeted", 
+                  position=position_dodge(0.9), palette=c(PAL_SINGLE_NEUTRAL, PAL_SINGLE_LIGHT)) +    
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        guides(fill="none") +
-        labs(x="Exon PSI Median Bin", y="N Exons")
+        labs(x="Exon PSI Median Bin", y="N Exons", fill="")
     
     # impact of number of exons targeted per gene on our analysis
+    plts[["rnai_qc-n_targeted_exons_per_gene_per_vastdb_exon-hist"]] = X %>%
+        drop_na(n_targeted_exons_per_gene,lr_pvalue) %>%
+        count(n_targeted_exons_per_gene, is_targeted) %>%
+        arrange(n_targeted_exons_per_gene) %>%
+        ggbarplot(
+            x="n_targeted_exons_per_gene", y="n", fill="is_targeted", color=NA,
+            label=FALSE, lab.family=FONT_FAMILY, lab.size=FONT_SIZE+1
+        ) +
+        fill_palette(c(PAL_SINGLE_NEUTRAL, PAL_SINGLE_LIGHT)) +
+        labs(x="N GENCODE Exons Targeted by shRNA per Gene", y="N VastDB Exons per Gene", fill="")
+    
     plts[["rnai_qc-n_targeted_exons_per_gene_vs_lr_pvalue-box"]] = X %>%
-        ggboxplot(x="n_targeted_exons_per_gene", y="lr_pvalue", fill=NA, color=PAL_SINGLE_NEUTRAL, width=0.5, outlier.size=0.1) +
-        labs(x="N Exons Targeted by shRNA per Gene", y="LR p-value")
+        drop_na(n_targeted_exons_per_gene,lr_pvalue) %>%
+        ggboxplot(x="n_targeted_exons_per_gene", y="lr_pvalue", fill=NA, color="is_targeted", width=0.5, outlier.size=0.1, numeric.x.axis=TRUE) +
+        color_palette(c(PAL_SINGLE_NEUTRAL, PAL_SINGLE_LIGHT)) +
+        labs(x="N GENCODE Exons Targeted by shRNA per Gene", y="LR p-value", color="")
     
     plts[["rnai_qc-n_targeted_exons_per_gene_vs_abs_event_coef-box"]] = X %>% 
+        drop_na(n_targeted_exons_per_gene,event_coefficient_mean) %>%
         mutate(abs_coef = abs(event_coefficient_mean)) %>%
-        ggboxplot(x="n_targeted_exons_per_gene", y="abs_coef", fill=NA, color=PAL_SINGLE_NEUTRAL, width=0.5, outlier.size=0.1) +
+        ggboxplot(x="n_targeted_exons_per_gene", y="abs_coef", fill=NA, color="is_targeted", width=0.5, outlier.size=0.1) +
+        color_palette(c(PAL_SINGLE_NEUTRAL, PAL_SINGLE_LIGHT)) +
         yscale("log10", .format=TRUE) +
-        labs(x="N Exons Targeted by shRNA per Gene", y="abs(Event Coeff.)")
+        labs(x="N GENCODE Exons Targeted by shRNA per Gene", y="abs(Event Coeff.)", color="")
 
     return(plts)
 }
@@ -1417,6 +1403,7 @@ save_plots = function(plts, figs_dir){
     # model validation
     save_plt(plts, "model_val-mutation_gene_count", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_gene_frequency", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "model_val-mutation_gene_frequency_without_known_genes", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_gene_frequency_silent_norm", ".pdf", figs_dir, width=8, height=8)
     
     # events oi
@@ -1435,8 +1422,11 @@ save_plots = function(plts, figs_dir){
     
     # RNAi (shRNA) QC
     save_plt(plts, "rnai_qc-n_targeted_exons_per_gene-hist", ".pdf", figs_dir, width=5, height=2.5)
-    save_plt(plts, "rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter", ".pdf", figs_dir, width=7, height=7)
-    save_plt(plts, "rnai_qc-exon_psi_median_vs_shrna_targeted-bar", ".pdf", figs_dir, width=7, height=3)
+    save_plt(plts, "rnai_qc-exon_psi_median_vs_std_vs_shrna_targeted-scatter", ".pdf", figs_dir, width=5, height=6)
+    save_plt(plts, "rnai_qc-exon_psi_median_vs_shrna_targeted-bar", ".pdf", figs_dir, width=5, height=4)
+    save_plt(plts, "rnai_qc-n_targeted_exons_per_gene_per_vastdb_exon-hist", ".pdf", figs_dir, width=5, height=4)
+    save_plt(plts, "rnai_qc-n_targeted_exons_per_gene_vs_lr_pvalue-box", ".pdf", figs_dir, width=12, height=5)
+    save_plt(plts, "rnai_qc-n_targeted_exons_per_gene_vs_abs_event_coef-box", ".pdf", figs_dir, width=12, height=5)
 
     # RNAseq QC
     save_plt(plts, "rnaseq_qc-read_count_vs_n_detected_events-scatter", ".pdf", figs_dir, width=5, height=5)
