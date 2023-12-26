@@ -79,7 +79,9 @@ rule all:
         os.path.join(RAW_DIR,"DepMap","demeter2","shRNA-mapping.fasta"),
         expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bam"), transcripts_dataset=TRANSCRIPTS_DATASETS),
         expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bed"), transcripts_dataset=TRANSCRIPTS_DATASETS),
-        expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}-mapping_coords.tsv.gz"), transcripts_dataset=TRANSCRIPTS_DATASETS)
+        expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}-mapping_coords.tsv.gz"), transcripts_dataset=TRANSCRIPTS_DATASETS),
+        
+        expand(os.path.join(PREP_DIR,"{dataset}","panessential_genes.tsv.gz"), dataset=DEPMAP_RAW.keys())
 #         # preprocess CCLE
 #         ## metadata
 #         os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
@@ -418,7 +420,49 @@ rule preprocess_depmap:
                     --prep_depmap_file={output}
         """
         
+rule list_panessential_genes:
+    input:
+        rnai = os.path.join(PREP_DIR,"{dataset}","CCLE.tsv.gz")
+    output:
+        panessential_genes = os.path.join(PREP_DIR,"{dataset}","panessential_genes.tsv.gz")
+    run:
+        import pandas as pd
+        import numpy as np
+
+        # load
+        rnai = pd.read_table(input.rnai)
         
+        # Pivot the DataFrame
+        rnai_essentials = rnai.melt(id_vars='index', var_name='DepMap_ID', value_name='demeter2')
+
+        # Drop rows with NaN values
+        rnai_essentials = rnai_essentials.dropna()
+
+        # Group by 'DepMap_ID'
+        rnai_essentials = rnai_essentials.groupby('DepMap_ID').apply(lambda x: x.assign(
+            ranking=x['demeter2'].rank(),
+            perc=x['demeter2'].rank() / len(x)
+        )).reset_index(drop=True)
+
+        # Unpivot the DataFrame and calculate 'percentile'
+        rnai_essentials = rnai_essentials.groupby('index').agg(percentile=('perc', lambda x: np.percentile(x, 90))).reset_index()
+
+        # Calculate density estimation
+        density_est = np.histogram(rnai_essentials['percentile'], bins=10, density=True)
+
+        # Find minima
+        minima_indices = np.where(density_est[0] == min(density_est[0]))[0]
+        minima = density_est[1][minima_indices]
+
+        # Filter 'rnai_essentials' based on condition and extract 'index' values
+        rnai_essentials = rnai_essentials.loc[rnai_essentials["percentile"] < min(minima), "index"]
+        
+        # save
+        rnai_essentials.to_csv(output.panessential_genes, **SAVE_PARAMS)
+        
+        print("Done!")
+    
+    
 rule make_achilles_comparable_to_demeter2:
     input:
         demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
