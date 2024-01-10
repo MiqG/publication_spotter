@@ -260,7 +260,10 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         left_join(
             validation_harm_scores %>%
                 group_by(CCLE_Name, event_gene) %>%
-                summarize(harm_score = mean(harm_score, na.rm=TRUE)) %>%
+                summarize(
+                    harm_score = mean(harm_score, na.rm=TRUE),
+                    delta_psi = mean(delta_psi, na.rm=TRUE)
+                ) %>%
                 ungroup(), 
             by=c("CCLE_Name","event_gene")
         ) %>%
@@ -364,6 +367,21 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         theme_pubr() +
         theme(aspect.ratio=1) +
         labs(x="Harm Score", y="Norm. Obs. Cell Prolif. Effect", color="Cell Line")
+    
+    # SSO effect vs deltaPSI across cell types
+    plts[["validation-od_fc_vs_delta_psi"]] = x %>% 
+        ggscatter(x="delta_psi", y="od_fc", color="CCLE_Name", palette=PAL_CELLS, size=1) +
+        geom_smooth(
+            method="lm", color="black", fill="lightgray", 
+            linetype="dashed", size=LINE_SIZE, se=TRUE
+        ) +
+        stat_cor(
+            method="pearson", size=FONT_SIZE, family=FONT_FAMILY
+        ) + 
+        theme_pubr() +
+        facet_wrap(~event_gene, scales="free_x", nrow=2) +
+        theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        labs(x="Delta PSI", y="Obs. Cell Prolif. Effect", color="Cell Line")
     
     return(plts)
 }
@@ -521,25 +539,46 @@ plot_sso_seqs = function(sso_seqs){
 }
 
 
-make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exon_info){
+plot_sso_optimization = function(sso_optimization){
+    plts = list()
+    
+    X = sso_optimization 
+
+    plts[["sso_optimization-ssos_vs_psi-bar"]] = X %>%
+        ggbarplot(x="aso_id", y="psi", fill="condition", palette="nejm", color=NA, position=position_dodge(0.9)) +
+        geom_text(
+            aes(label="#", group=condition), 
+            . %>% filter(selected_treatment),
+            position=position_dodge(0.9)
+        ) +
+        facet_wrap(~event_gene, nrow=2) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        labs(x="SSO ID", y="PSI", fill="Condition")
+    
+    return(plts)
+}
+
+make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization){
     plts = list(
         plot_validation(validation_clonogenic, validation_harm_scores),
         plot_prolif(prolif),
-        plot_protein_domains(exon_info)
+        plot_protein_domains(exon_info),
+        plot_sso_optimization(sso_optimization)
     )
     plts = do.call(c,plts)
     return(plts)
 }
 
 
-make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, exon_info){
+make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization){
 
     figdata = list(
         "experiments" = list(
             "validation_clonogenic" = validation_clonogenic,
             "validation_harm_scores" = validation_harm_scores,
             "proliferation_assay" = prolif,
-            "exon_info" = exon_info
+            "exon_info" = exon_info,
+            "sso_optimization" = sso_optimization
         )
     )
 }
@@ -576,10 +615,13 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_vs_harm_combined_minmax", '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, "validation-od_vs_harm_combined_centered", '.pdf', figs_dir, width=5, height=6)
     save_plt(plts, "validation-od_vs_harm_combined_centered-high_prolif", '.pdf', figs_dir, width=5, height=6)
+    save_plt(plts, "validation-od_fc_vs_delta_psi", '.pdf', figs_dir, width=9, height=9)
     save_plt(plts, "prolif-time_vs_od-scatter", '.pdf', figs_dir, width=5, height=6)
     
     save_plt(plts, "protein_domains-sequence-rect", '.pdf', figs_dir, width=10, height=65)
     save_plt(plts, "sso_seqs-target_regions", '.pdf', figs_dir, width=25, height=20)
+    
+    save_plt(plts, "sso_optimization-ssos_vs_psi-bar", '.pdf', figs_dir, width=11.5, height=9)
 }
 
 
@@ -658,6 +700,8 @@ main = function(){
     sso_seqs = read_tsv(sso_seqs_file) %>%
         left_join(exon_info, by=c("EVENT"="exon_vastdb","GENE"="gene")) %>%
         left_join(event_info %>% distinct(EVENT,COORD_o,REF_CO), by="EVENT")
+    
+    sso_optimization = read_tsv(sso_optimization_file)
     
     events_val = validation_psi %>% pull(EVENT) %>% unique()
     
@@ -774,11 +818,26 @@ main = function(){
         mutate(index = row_number()) %>%
         ungroup()
     
+    # prep sso optimization
+    sso_optimization = sso_optimization %>%
+        distinct(event_gene, psi_treated, psi_scrambled, psi_untreated, aso_id, selected_treatment) %>%
+        pivot_longer(-c(event_gene,aso_id,selected_treatment), names_to="condition", values_to="psi") %>%
+        mutate(
+            aso_id = factor(aso_id, levels=c("A1","A2","A1+A2","A3")),
+            event_gene = factor(event_gene, levels=SELECTED_EXONS),
+            condition = case_when(
+                condition=="psi_treated" ~ "+SSOs",
+                condition=="psi_untreated" ~ "EMPTY",
+                condition=="psi_scrambled" ~ "CONTROL_NEG"
+            ),
+            condition = factor(condition, levels=c("CONTROL_NEG","EMPTY","+SSOs"))
+        )
+    
     # plot
-    plts = make_plots(validation_clonogenic, validation_harm_scores, prolif, exon_info)
+    plts = make_plots(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization)
     
     # make figdata
-    figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif, exon_info)
+    figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization)
 
     # save
     save_plots(plts, figs_dir)
