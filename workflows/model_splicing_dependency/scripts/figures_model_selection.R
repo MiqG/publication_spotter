@@ -66,6 +66,7 @@ PAL_DRIVER_COMP = c(
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
 # cosmic_genes_file = file.path(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv")
 # spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
+# spldep_med_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","median.tsv.gz")
 # rnai_file = file.path(PREP_DIR,"demeter2","CCLE.tsv.gz")
 # genexpr_file = file.path(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz")
 # splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
@@ -75,10 +76,11 @@ PAL_DRIVER_COMP = c(
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # #(TODO: preprocessing)shrna_raw_file = file.path(RAW_DIR,"DepMap","demeter2","")
 # shrna_seqs_file = file.path(RAW_DIR,"DepMap","demeter2","shRNA-mapping.csv")
-# shrna_mapping_ensembl_file = file.path(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts-mapping_coords.tsv.gz")
+# shrna_mapping_gencode_file = file.path(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts-mapping_coords.tsv.gz")
 # shrna_mapping_vastdb_file = file.path(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz")
 # models_achilles_file = file.path(RESULTS_DIR,'files','achilles','models_gene_dependency-EX','model_summaries.tsv.gz')
 # crispr_essentials_file = file.path(SUPPORT_DIR,"CRISPRInferredCommonEssentials.csv")
+# rnai_essentials_file = file.path(PREP_DIR,"demeter2","panessential_genes.tsv.gz")
 # ccle_info_file = file.path(SUPPORT_DIR,"ENA_filereport-PRJNA523380-CCLE.tsv")
 # gencode_annot_file = file.path(RAW_DIR,"GENCODE","gencode.v44.annotation.gtf.gz")
 # genome_annot_file = file.path(RAW_DIR,"ENSEMBL","Homo_sapiens.Gh38.110.sqlite")
@@ -681,7 +683,7 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
             size=FONT_SIZE-0.5, color="black", family=FONT_FAMILY)
     
     # LR p-values and Pearson correlations are independent of number of observations
-    plts[["model_sel-n_obs_vs_pvalue-scatter"]] = X %>%
+    plts[["model_sel-n_obs_vs_pvalue-scatter"]] = models %>%
         ggplot(aes(x=n_obs, y=lr_pvalue)) +
         geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
         geom_hline(yintercept=THRESH_LR_PVALUE, linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2 ) +
@@ -690,7 +692,7 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
         theme(aspect.ratio=1) +
         labs(x="N Observations", y="LR p-value")
     
-    plts[["model_sel-n_obs_vs_pearson-scatter"]] = X %>%
+    plts[["model_sel-n_obs_vs_pearson-scatter"]] = models %>%
         filter(lr_pvalue < THRESH_LR_PVALUE) %>%
         ggplot(aes(x=n_obs, y=pearson_correlation_mean)) +
         geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
@@ -1152,28 +1154,8 @@ plot_cosmic_comparison = function(cosmic_comparison){
 }
 
 
-plot_rnai_qc = function(shrna_mapping_ensembl, event_info, models){
+plot_rnai_qc = function(shrna_mapping, models){
     plts = list()
-    
-    # how many different exons are targeted per gene?
-    n_targeted_exons_per_gene = models %>% 
-        distinct(GENE, ENSEMBL) %>%
-        left_join(
-            shrna_mapping_ensembl %>%
-            mutate(
-                exon_id_coords = sprintf("%s:%s-%s:%s",seqnames,start_exon,end_exon,strand),
-                ENSEMBL = gsub("\\..*","",gene_id)
-            ) %>%
-            distinct(barcode_sequence, ENSEMBL, exon_id_coords), 
-            by="ENSEMBL"
-        ) %>%
-        distinct(GENE,ENSEMBL,exon_id_coords) %>%
-        drop_na() %>%
-        count(GENE, ENSEMBL, name="n_targeted_exons_per_gene")
-    
-    # which ones are in VastDB?
-    shrna_mapping = n_targeted_exons_per_gene %>%
-        left_join(shrna_mapping_vastdb, by="GENE")
     
     # how many exons are targeted for each gene?
     plts[["rnai_qc-n_targeted_exons_per_gene-hist"]] = shrna_mapping %>%
@@ -1266,21 +1248,40 @@ plot_rnaseq_qc = function(metadata, rnai){
     return(plts)
 }
 
+plot_spldep_qc = function(spldep_comparison){
+    plts = list()
+    
+    X = spldep_comparison
+    
+    plt_title = sprintf("n=%s", X %>% distinct(DepMap_ID) %>% nrow())
+    plts[["spldep_qc-spldep_mean_vs_median"]] = X %>%
+        ggplot(aes(x=spldep_mean, y=spldep_median)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5) +
+        geom_abline(slope=1, intercept=0, linetype="dashed", color="black", size=LINE_SIZE) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="Spl. Dep. Mean", y="Spl. Dep. Median", subtitle=plt_title)
+    
+    return(plts)
+}
+
 
 make_plots = function(models, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
                       enrichment, spldep_stats, harm_stats, 
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
-                      cosmic_comparison, shrna_mapping){
+                      cosmic_comparison, shrna_mapping, spldep_comparison){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
         plot_model_properties(models, enrichment,spldep_stats, harm_stats),
         plot_model_validation(models, gene_mut_freq),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata),
         plot_cosmic_comparison(cosmic_comparison),
-        plot_rnai_qc(models, shrna_mapping, rnai_stats),
-        plot_rnaseq_qc(metadata, rnai)
+        plot_rnai_qc(shrna_mapping, models),
+        plot_rnaseq_qc(metadata, rnai),
+        plot_spldep_qc(spldep_comparison)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -1292,7 +1293,7 @@ make_figdata = function(models, rnai_stats, cancer_events,
                       enrichment, spldep_stats, harm_stats,
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
-                      cosmic_comparison, shrna_mapping){
+                      cosmic_comparison, shrna_mapping, spldep_comparison){
     # prep enrichments
     df_enrichs = do.call(rbind,
         lapply(names(enrichment), function(e){
@@ -1311,6 +1312,7 @@ make_figdata = function(models, rnai_stats, cancer_events,
 #         ),
         "qc" = list(
             "shrna_mapping" = shrna_mapping,
+            "spldep_comparison" = spldep_comparison
         ),
         "model_selection" = list(
             "model_summaries"= models,
@@ -1430,6 +1432,9 @@ save_plots = function(plts, figs_dir){
 
     # RNAseq QC
     save_plt(plts, "rnaseq_qc-read_count_vs_n_detected_events-scatter", ".pdf", figs_dir, width=5, height=5)
+    
+    # SplDep QC
+    save_plt(plts, "spldep_qc-spldep_mean_vs_median", ".pdf", figs_dir, width=5, height=5)
 }
 
 
@@ -1500,6 +1505,7 @@ main = function(){
     gene_mut_freq = read_tsv(gene_mut_freq_file) %>% dplyr::rename(GENE=Hugo_Symbol)
     ontologies = load_ontologies(msigdb_dir, protein_impact_file, cosmic_genes_file)
     spldep = read_tsv(spldep_file)
+    spldep_med = read_tsv(spldep_med_file)
     rnai = read_tsv(rnai_file)
     genexpr = read_tsv(genexpr_file)
     splicing = read_tsv(splicing_file)
@@ -1508,11 +1514,12 @@ main = function(){
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
     shrna_seqs = read_csv(shrna_seqs_file)
-    shrna_mapping_ensembl = read_tsv(shrna_mapping_ensembl_file)
+    shrna_mapping_gencode = read_tsv(shrna_mapping_gencode_file)
     shrna_mapping_vastdb = read_tsv(shrna_mapping_vastdb_file)
     #genome_annot = ensembldb::EnsDb(genome_annot_file)
     models_achilles = read_tsv(models_achilles_file)
     crispr_essentials = read_csv(crispr_essentials_file)
+    rnai_essentials = read_csv(rnai_essentials_file)
     ccle_info = read_tsv(ccle_info_file)
     
     gc()
@@ -1540,26 +1547,28 @@ main = function(){
         separate(Essentials, into=c("GENE","ENTREZ"), sep=" ") %>%
         pull(GENE)
     
-    rnai_essentials = rnai %>%
-        pivot_longer(-index, names_to="DepMap_ID", values_to="demeter2") %>%
-        drop_na() %>%
-        group_by(DepMap_ID) %>%
-        mutate(
-            ranking = rank(demeter2),
-            perc = ranking / n()
-        ) %>%
-        ungroup() %>%
-        group_by(index) %>%
-        summarize(
-            percentile = quantile(perc, probs=0.9)
-        ) %>%
-        ungroup()
-
-    density_est = rnai_essentials %>% pull(percentile) %>% density()
-    minima = density_est$x[which(diff(sign(diff(density_est$y))) > 0) + 1]
     rnai_essentials = rnai_essentials %>%
-        filter(percentile < min(minima)) %>%
         pull(index)
+    #     rnai_essentials = rnai %>%
+    #         pivot_longer(-index, names_to="DepMap_ID", values_to="demeter2") %>%
+    #         drop_na() %>%
+    #         group_by(DepMap_ID) %>%
+    #         mutate(
+    #             ranking = rank(demeter2),
+    #             perc = ranking / n()
+    #         ) %>%
+    #         ungroup() %>%
+    #         group_by(index) %>%
+    #         summarize(
+    #             percentile = quantile(perc, probs=0.9)
+    #         ) %>%
+    #         ungroup()
+
+    #     density_est = rnai_essentials %>% pull(percentile) %>% density()
+    #     minima = density_est$x[which(diff(sign(diff(density_est$y))) > 0) + 1]
+    #     rnai_essentials = rnai_essentials %>%
+    #         filter(percentile < min(minima)) %>%
+    #         pull(index)
     
     pan_essentials = union(crispr_essentials, rnai_essentials)
     
@@ -1674,23 +1683,40 @@ main = function(){
         fisher.test()
     # 74 cancer driver genes have cancer-driver exons
     
-    # add VastDB IDs to ENSEMBL exons
-    #     event_coords = data.frame(
-    #         EVENT = event_info[["EVENT"]],
-    #         vastdb_chr = event_info[["COORD_o"]] %>% gsub(":.*","",.) %>% gsub("chr","",.),
-    #         vastdb_start = event_info[["COORD_o"]] %>% gsub(".*:","",.) %>% gsub("-.*","",.) %>% as.integer(),
-    #         vastdb_end = event_info[["COORD_o"]] %>% gsub(".*:","",.) %>% gsub(".*-","",.) %>% as.integer(),
-    #         vastdb_strand = event_info[["REF_CO"]] %>% gsub(".*:","",.)
-    #     ) %>%
-    #     filter(str_detect(EVENT,"EX"))
-    #     shrna_mapping = shrna_mapping %>%
-    #         left_join(
-    #             event_coords, by=c(
-    #                 "start_exon_genomic"="vastdb_start", 
-    #                 "end_exon_genomic"="vastdb_end", 
-    #                 "strand"="vastdb_strand")
-    #         ) %>%
-    #         mutate(is_selected = EVENT %in% selected_events)
+    # spldep comparison
+    spldep_comparison = spldep[,1:51] %>%
+        filter(index %in% (models %>% filter(is_selected) %>% pull(EVENT))) %>%
+        pivot_longer(-index, names_to="DepMap_ID", values_to="spldep_mean") %>%
+        drop_na() %>%
+        left_join(
+            spldep_med[,1:51] %>%
+            filter(index %in% (models %>% filter(is_selected) %>% pull(EVENT))) %>%
+            pivot_longer(-index, names_to="DepMap_ID", values_to="spldep_median"),
+            by=c("index","DepMap_ID")
+        )
+    
+    # RNAi QC
+    ## how many different exons are targeted per gene?
+    n_targeted_exons_per_gene = models %>% 
+        distinct(GENE, ENSEMBL) %>%
+        left_join(
+            shrna_mapping_gencode %>%
+            mutate(
+                exon_id_coords = sprintf("%s:%s-%s:%s",seqnames,start_exon,end_exon,strand),
+                ENSEMBL = gsub("\\..*","",gene_id)
+            ) %>%
+            distinct(barcode_sequence, ENSEMBL, exon_id_coords), 
+            by="ENSEMBL"
+        ) %>%
+        distinct(GENE,ENSEMBL,exon_id_coords) %>%
+        drop_na() %>%
+        count(GENE, ENSEMBL, name="n_targeted_exons_per_gene")
+    
+    ## which ones are in VastDB?
+    shrna_mapping = n_targeted_exons_per_gene %>%
+        left_join(shrna_mapping_vastdb, by="GENE")
+    
+    gc()
     
     # plot
     plts = make_plots(
@@ -1699,7 +1725,7 @@ main = function(){
         enrichment, spldep_stats, harm_stats, 
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
-        cosmic_comparison, shrna_mapping
+        cosmic_comparison, shrna_mapping, spldep_comparison
     )
 
     # make figdata
@@ -1709,7 +1735,7 @@ main = function(){
         enrichment, spldep_stats, harm_stats,
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
-        cosmic_comparison, shrna_mapping
+        cosmic_comparison, shrna_mapping, spldep_comparison
     )
     
     # save
