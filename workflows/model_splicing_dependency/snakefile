@@ -34,6 +34,7 @@ N_SAMPLES = {
     "Thomas2020": 2,
     "Hart2015": 12
 }
+SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
 # model selection parameters
 THRESH_PVALUE = 0.025
@@ -82,7 +83,15 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         expand(os.path.join(RESULTS_DIR,'files','ENCORE','harm_score_rel-{event_type}.tsv.gz'), event_type=EVENT_TYPES),
         ### make figures
-        os.path.join(RESULTS_DIR,'figures','validation_encore')
+        os.path.join(RESULTS_DIR,'figures','validation_encore'),
+        
+        ## PSI UNCERTAINTY
+        ### simulate PSI based on total exon read counts
+        os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","inhouse-EX.tsv.gz"),
+        ### compute splicing depenency
+        os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','inhouse'),
+        ### make figures
+        #os.path.join(RESULTS_DIR,"figures","psi_uncertainty")
         
         
 ##### MODEL SELECTION #####
@@ -583,4 +592,80 @@ rule figures_validation_encore:
                     --figs_dir={output}
         """
         
+##### PSI UNCERTAINTY #####
+rule simulate_psi:
+    input:
+        psi = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
+        total_reads = os.path.join(PREP_DIR,"event_total_reads","inhouse-EX.tsv.gz")
+    output:
+        psi_simulated = os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","inhouse-EX.tsv.gz")
+    run:
+        import pandas as pd
+        import numpy as np
         
+        # load
+        psi = pd.read_table(input.psi, index_col=0)
+        total_reads = pd.read_table(input.total_reads, index_col=0)
+        
+        # subset
+        common_samples = set(psi.columns).intersection(total_reads.columns)
+        common_events = set(psi.index).intersection(total_reads.index)
+        
+        psi = psi.loc[common_events,common_samples].copy()
+        total_reads = total_reads.loc[common_events,common_samples].copy()
+        
+        # simulate psi
+        def simulate_psi_single(x_psi, x_total_reads, n_random_samples=100):
+            
+            if np.isfinite(x_psi):
+                simulation = np.random.binomial(x_total_reads, x_psi/100, 100) / x_total_reads
+                simulation = simulation * 100 # rescale
+                simulated_psi = np.mean(simulation)
+            else:
+                simulated_psi = np.nan
+                
+            return simulated_psi
+        
+        
+        def simulate_psi(col_psi, col_total_reads):
+            df = pd.concat([col_psi, col_total_reads], axis=1)
+            simulated_psi = df.apply(lambda row: simulate_psi_single(row[0], row[1]), axis=1)
+            simulated_psi = np.round(simulated_psi, 2)
+            return simulated_psi
+            
+            
+        psi_simulated = psi.combine(total_reads, 
+            lambda col_psi, col_total_reads: simulate_psi(col_psi, col_total_reads)
+        )
+        
+        # save
+        psi_simulated.reset_index().to_csv(output.psi_simulated, **SAVE_PARAMS)
+        
+        print("Done!")
+        
+
+rule compute_splicing_dependency_psi_simulated:
+    input:
+        psi = os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","inhouse-EX.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','inhouse.tsv.gz'),
+        coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX')
+    output:
+        directory(os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','inhouse'))
+    threads: 15
+    resources:
+        runtime = 3600*1, # 1h
+        memory = 5 # GB
+    params:
+        script_dir = TS_DIR
+    shell:
+        """
+        nice python {params.script_dir}/target_spotter spldep_predict \
+                    --splicing_file={input.psi} \
+                    --genexpr_file={input.genexpr} \
+                    --coefs_splicing_file={input.coefs_dir}/coefs_splicing.pickle.gz \
+                    --coefs_genexpr_file={input.coefs_dir}/coefs_genexpr.pickle.gz \
+                    --coefs_intercept_file={input.coefs_dir}/coefs_intercept.pickle.gz \
+                    --output_dir={output} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """

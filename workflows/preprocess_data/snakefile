@@ -81,7 +81,11 @@ rule all:
         expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}.bed"), transcripts_dataset=TRANSCRIPTS_DATASETS),
         expand(os.path.join(PREP_DIR,"demeter2","shRNA_to_{transcripts_dataset}-mapping_coords.tsv.gz"), transcripts_dataset=TRANSCRIPTS_DATASETS),
         
-        expand(os.path.join(PREP_DIR,"{dataset}","panessential_genes.tsv.gz"), dataset=DEPMAP_RAW.keys())
+        expand(os.path.join(PREP_DIR,"{dataset}","panessential_genes.tsv.gz"), dataset=DEPMAP_RAW.keys()),
+        
+        # preprocess total read counts per exon
+        os.path.join(PREP_DIR,'event_total_reads','inhouse-EX.tsv.gz')
+
 #         # preprocess CCLE
 #         ## metadata
 #         os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
@@ -131,7 +135,7 @@ rule all:
 #         os.path.join(PREP_DIR,"event_psi","inhouse-ALTA.tsv.gz"),
 #         os.path.join(PREP_DIR,"event_psi","inhouse-ALTD.tsv.gz"),
 #         os.path.join(PREP_DIR,"event_psi","inhouse-INT.tsv.gz"),
-#         os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),        
+#         os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
 
 #         # preprocess STRINGDB
 #         os.path.join(PREP_DIR,"ppi","STRINGDB.tsv.gz"),
@@ -907,6 +911,32 @@ rule preprocess_inhouse:
         print("Done!")   
         
         
+rule preprocess_exon_read_counts_inhouse:
+    input:
+        metadata = os.path.join(PREP_DIR,'metadata','inhouse.tsv.gz'),
+        total_reads = os.path.join(RAW_DIR,'inhouse',"20230124-rnaseq_cancer_cell_lines",'vast_out','total_reads.tsv.gz')
+    output:
+        total_reads_EX = os.path.join(PREP_DIR,'event_total_reads','inhouse-EX.tsv.gz')
+    run:
+        import pandas as pd
+        
+        # load
+        metadata = pd.read_table(input.metadata)
+        total_reads = pd.read_table(input.total_reads, index_col=0)
+        
+        # prep column names
+        total_reads.columns = total_reads.columns.str.replace("-Q","")
+        total_reads = total_reads.rename(columns=metadata.set_index("sampleID")["DepMap_ID"].to_dict())
+        
+        # subset event types
+        total_reads_EX = total_reads.loc[total_reads.index.str.contains("EX")]
+        
+        # save
+        total_reads_EX.reset_index().to_csv(output.total_reads_EX, **SAVE_PARAMS)
+        
+        print("Done!")
+        
+
 rule preprocess_gdsc:
     input:
         drug_screen = os.path.join(RAW_DIR,'DepMap','gdsc','sanger-dose-response.csv'),
