@@ -96,7 +96,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
     
     plts[["uncertainty_quant-psi_real_vs_simulated-scatter"]] = X %>%
         ggplot(aes(x=psi_real, y=psi_simulated)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color="black") +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color="black") +
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
         theme_pubr() +
         facet_wrap(~sampleID) +
@@ -104,19 +104,20 @@ plot_uncertainty_quant = function(uncertainty_quant){
         labs(x="PSI Real", y="PSI Simulated")
     
     plts[["uncertainty_quant-total_reads_vs_diff_psi-scatter"]] = X %>%
+        mutate(total_reads = log10(total_reads+1)) %>%
         ggplot(aes(x=total_reads, y=abs(diff_psi))) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color="black") +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color="black") +
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
-        geom_vline(xintercept=10, size=LINE_SIZE, color="black", linetype="dashed") +
+        geom_vline(xintercept=log10(10+1), size=LINE_SIZE, color="black", linetype="dashed") +
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="Total Exon Reads", y="|PSI Real - PSI Simulated|")
+        labs(x="log10(Total Exon Reads+1)", y="|PSI Real - PSI Simulated|")
     
     
     plts[["uncertainty_quant-spldep_real_vs_simulated-scatter"]] = X %>%
         ggplot(aes(x=spldep_real, y=spldep_simulated)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color="black") +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color="black") +
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
         theme_pubr() +
         facet_wrap(~sampleID) +
@@ -125,19 +126,20 @@ plot_uncertainty_quant = function(uncertainty_quant){
     
     
     plts[["uncertainty_quant-total_reads_vs_diff_spldep-scatter"]] = X %>%
+        mutate(total_reads = log10(total_reads+1)) %>%
         ggplot(aes(x=total_reads, y=abs(diff_spldep))) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color="black") +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color="black") +
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
-        geom_vline(xintercept=10, size=LINE_SIZE, color="black", linetype="dashed") +
+        geom_vline(xintercept=log10(10+1), size=LINE_SIZE, color="black", linetype="dashed") +
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="Total Exon Reads", y="|Spl. Dep. Real - Spl. Dep. Simulated|")
+        labs(x="log10(Total Exon Reads+1)", y="|Spl. Dep. Real - Spl. Dep. Simulated|")
     
     
     plts[["uncertainty_quant-diff_psi_vs_diff_spldep-scatter"]] = X %>%
         ggplot(aes(x=abs(diff_psi), y=abs(diff_spldep))) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color="black") +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color="black") +
         stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
         theme_pubr() +
         facet_wrap(~sampleID) +
@@ -188,13 +190,12 @@ save_plt = function(plts, plt_name, extension=".pdf",
 save_plots = function(plts, figs_dir){
     save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
     
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "uncertainty_quant-distr_total_reads-hist", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "uncertainty_quant-psi_real_vs_simulated-scatter", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "uncertainty_quant-total_reads_vs_diff_psi-scatter", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "uncertainty_quant-spldep_real_vs_simulated-scatter", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "uncertainty_quant-total_reads_vs_diff_spldep-scatter", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "uncertainty_quant-diff_psi_vs_diff_spldep-scatter", ".pdf", figs_dir, width=5, height=5.5)
 }
 
 

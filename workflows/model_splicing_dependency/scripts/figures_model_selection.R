@@ -72,6 +72,7 @@ PAL_DRIVER_COMP = c(
 # splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 # ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
+# gene_annot_file = file.path(RAW_DIR,"HGNC","gene_annotations.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
 # #(TODO: preprocessing)shrna_raw_file = file.path(RAW_DIR,"DepMap","demeter2","")
@@ -83,7 +84,7 @@ PAL_DRIVER_COMP = c(
 # rnai_essentials_file = file.path(PREP_DIR,"demeter2","panessential_genes.tsv.gz")
 # ccle_info_file = file.path(SUPPORT_DIR,"ENA_filereport-PRJNA523380-CCLE.tsv")
 # gencode_annot_file = file.path(RAW_DIR,"GENCODE","gencode.v44.annotation.gtf.gz")
-# genome_annot_file = file.path(RAW_DIR,"ENSEMBL","Homo_sapiens.Gh38.110.sqlite")
+# genome_annot_file = file.path(RAW_DIR,"GENCODE","Homo_sapiens.GRCh38.gencode_v44.sqlite")
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
 ##### FUNCTIONS #####
@@ -1245,6 +1246,83 @@ plot_rnaseq_qc = function(metadata, rnai){
         theme(aspect.ratio=1) +
         labs(x="Read Count", y="N Different Exons Detected")
     
+    # reads per exon vs reads per gene
+    X = models %>%
+        distinct(EVENT,GENE,ENSEMBL) %>%
+        left_join(junction_counts, by="EVENT") %>%
+        pivot_longer(-c(EVENT,GENE,ENSEMBL), names_to="sampleID", values_to="counts_junction") %>%
+        mutate(
+            sampleID = case_when(
+                sampleID=="a549_18496AAD_ATTATGTCAT-AATGCGGAAG_R1_001-Q" ~ "ACH-000681",
+                sampleID=="ht29_18495AAD_GACTCAAGTC-TGAAGAAGGC_R1_001-Q" ~ "ACH-000552",
+                sampleID=="mda_18556AAD_CTGGACTAAC-CTGATCACGG_R1_001-Q" ~ "ACH-000768",
+        )) %>%
+        group_by(sampleID, GENE, ENSEMBL) %>%
+        mutate(
+            counts_gene = sum(counts_junction)
+        ) %>%
+        ungroup() %>%
+        drop_na(counts_junction, counts_gene) %>%
+        mutate(
+            junction_counts_norm = counts_junction / counts_gene
+        ) %>% 
+        drop_na() %>%
+        left_join(
+            event_info %>%
+                mutate(
+                    event_start = as.numeric(gsub(".*:","",gsub("-.*","",COORD_o))),
+                    event_end = as.numeric(gsub(".*-","",COORD_o))
+                ) %>% distinct(EVENT, GENE, event_start, event_end), 
+            by=c("EVENT","GENE")
+        ) %>%
+        left_join(
+            gene_info %>%
+                mutate(
+                    ENSEMBL = gsub("\\..*","",gene_id),
+                    GENE = gene_name,
+                    gene_chr = seqnames,
+                    gene_start = start,
+                    gene_end = end
+                ) %>%
+                distinct(ENSEMBL, GENE, gene_start, gene_end, strand),
+            by=c("ENSEMBL","GENE")
+        )
+    
+    # when gene in + strand, the more downstream the closer to the polyA tail
+    # when gene in - strand, the more upstram the closer to the polyA tail
+    # Note: gene and event coordinates are DNA coordinates
+    x = X %>%
+        filter(strand=="+") %>%
+        mutate(distance_to_start = gene_start - event_start) %>%
+        bind_rows(
+            X %>%
+            filter(strand=="-") %>%
+            mutate(distance_to_start = gene_end - event_end)
+        ) %>%
+        group_by(sampleID, GENE) %>%
+        mutate(
+            ranking = rank(abs(distance_to_start)),
+            n_exons = n(),
+            ranking_ratio = ranking / n_exons
+        ) %>%
+        ungroup()
+    
+    plts[["rnaseq_qc-distr_n_exons-hist"]] = x %>%
+        gghistogram(x="n_exons", bins=30) +
+        geom_vline(xintercept = 2, linetype="dashed", color="black") +
+        labs(x="N VastDB Exons per Gene", y="Count")    
+    
+    plts[["rnaseq_qc-reads_exon_vs_position-scatter"]] = x %>%
+        filter(n_exons > 2) %>%
+        ggplot(aes(x=ranking_ratio, y=junction_counts_norm)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5) +
+        geom_smooth() +
+        theme_pubr() +
+        facet_wrap(~sampleID, scales="free") +
+        theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        stat_cor(method="spearman", size=FONT_SIZE, family=FONT_FAMILY) +
+        labs(x="Exon Position Ratio", y="Norm. Exon Read Counts")
+    
     return(plts)
 }
 
@@ -1511,18 +1589,26 @@ main = function(){
     splicing = read_tsv(splicing_file)
     cancer_events = read_tsv(cancer_events_file)
     ascanceratlas = read_tsv(ascanceratlas_file)
+    gene_annot = read_tsv(gene_annot_file)
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
     shrna_seqs = read_csv(shrna_seqs_file)
     shrna_mapping_gencode = read_tsv(shrna_mapping_gencode_file)
     shrna_mapping_vastdb = read_tsv(shrna_mapping_vastdb_file)
-    #genome_annot = ensembldb::EnsDb(genome_annot_file)
+    genome_annot = ensembldb::EnsDb(genome_annot_file)
     models_achilles = read_tsv(models_achilles_file)
     crispr_essentials = read_csv(crispr_essentials_file)
     rnai_essentials = read_csv(rnai_essentials_file)
     ccle_info = read_tsv(ccle_info_file)
     
+    junction_counts = read_tsv("/home/miquel/mounts/crg_hpc/projects/publication_spotter/data/raw/inhouse/20230124-rnaseq_cancer_cell_lines/vast_out/total_reads.tsv.gz")
+    genexpr_counts = read_tsv(file.path(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"))
+    
     gc()
+    
+    # prep annotations
+    gene_info = ensembldb::genes(genome_annot) %>% 
+        as.data.frame()
     
     # prep cancer events
     ascanceratlas = ascanceratlas %>%
