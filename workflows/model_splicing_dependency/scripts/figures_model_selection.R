@@ -8,7 +8,6 @@
 # 
 
 require(optparse)
-require(ensembldb)
 require(tidyverse)
 require(ggpubr)
 require(cowplot)
@@ -1245,26 +1244,32 @@ plot_rnaseq_qc = function(metadata, rnai){
         geom_smooth(linetype="dashed", color="black", size=LINE_SIZE, alpha=0.2) +
         theme(aspect.ratio=1) +
         labs(x="Read Count", y="N Different Exons Detected")
-    
+    # lowest read count: ACH-000934
+    # highest read count: ACH-000143
     # reads per exon vs reads per gene
     X = models %>%
         distinct(EVENT,GENE,ENSEMBL) %>%
-        left_join(junction_counts, by="EVENT") %>%
-        pivot_longer(-c(EVENT,GENE,ENSEMBL), names_to="sampleID", values_to="counts_junction") %>%
+        left_join(exon_counts, by="EVENT") %>%
+        pivot_longer(-c(EVENT,GENE,ENSEMBL), names_to="sampleID", values_to="counts_exon") %>%
+        left_join(
+            genexpr_counts %>%
+                pivot_longer(-c(NAME,ID), names_to="sampleID", values_to="counts_gene") %>%
+                mutate(
+                    sampleID = case_when(
+                        sampleID=="SRR8615581_1" ~ "ACH-000934",
+                        sampleID=="SRR8615995_1" ~ "ACH-000143"
+                )),
+            by = c("GENE"="NAME","ENSEMBL"="ID","sampleID")
+        ) %>%
+        group_by(sampleID,GENE,ENSEMBL) %>%
         mutate(
-            sampleID = case_when(
-                sampleID=="a549_18496AAD_ATTATGTCAT-AATGCGGAAG_R1_001-Q" ~ "ACH-000681",
-                sampleID=="ht29_18495AAD_GACTCAAGTC-TGAAGAAGGC_R1_001-Q" ~ "ACH-000552",
-                sampleID=="mda_18556AAD_CTGGACTAAC-CTGATCACGG_R1_001-Q" ~ "ACH-000768",
-        )) %>%
-        group_by(sampleID, GENE, ENSEMBL) %>%
-        mutate(
-            counts_gene = sum(counts_junction)
+            counts_exon_sum = sum(counts_exon),
+            counts_gene_max = max(counts_exon_sum, counts_gene)
         ) %>%
         ungroup() %>%
-        drop_na(counts_junction, counts_gene) %>%
+        drop_na(counts_exon, counts_gene_max) %>%
         mutate(
-            junction_counts_norm = counts_junction / counts_gene
+            counts_exon_norm = counts_exon / counts_gene_max
         ) %>% 
         drop_na() %>%
         left_join(
@@ -1293,11 +1298,21 @@ plot_rnaseq_qc = function(metadata, rnai){
     # Note: gene and event coordinates are DNA coordinates
     x = X %>%
         filter(strand=="+") %>%
-        mutate(distance_to_start = gene_start - event_start) %>%
+        mutate(
+            gene_length = gene_end - gene_start,
+            event_center = event_start + round((event_end - event_start) / 2),
+            distance_to_start = gene_start - event_center,
+            event_pos_ratio = abs(distance_to_start) / gene_length
+        ) %>%
         bind_rows(
             X %>%
             filter(strand=="-") %>%
-            mutate(distance_to_start = gene_end - event_end)
+            mutate(
+                gene_length = gene_end - gene_start,
+                event_center = event_start + round((event_end - event_start) / 2),
+                distance_to_start = gene_end - event_center,
+                event_pos_ratio = abs(distance_to_start) / gene_length
+            )
         ) %>%
         group_by(sampleID, GENE) %>%
         mutate(
@@ -1308,20 +1323,22 @@ plot_rnaseq_qc = function(metadata, rnai){
         ungroup()
     
     plts[["rnaseq_qc-distr_n_exons-hist"]] = x %>%
+        distinct(GENE,n_exons) %>%
         gghistogram(x="n_exons", bins=30) +
         geom_vline(xintercept = 2, linetype="dashed", color="black") +
         labs(x="N VastDB Exons per Gene", y="Count")    
     
     plts[["rnaseq_qc-reads_exon_vs_position-scatter"]] = x %>%
-        filter(n_exons > 2) %>%
-        ggplot(aes(x=ranking_ratio, y=junction_counts_norm)) +
-        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5) +
+        # 139 misannotated genes with event_pos_ratio > 1
+        filter(n_exons > 2 & abs(event_pos_ratio) <= 1) %>%
+        ggplot(aes(x=event_pos_ratio, y=counts_exon_norm)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.1) +
         geom_smooth() +
         theme_pubr() +
         facet_wrap(~sampleID, scales="free") +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         stat_cor(method="spearman", size=FONT_SIZE, family=FONT_FAMILY) +
-        labs(x="Exon Position Ratio", y="Norm. Exon Read Counts")
+        labs(x="Exon Relative Position in Gene", y="Total Exon Read Counts / Total Gene Read Counts")
     
     return(plts)
 }
@@ -1601,8 +1618,9 @@ main = function(){
     rnai_essentials = read_csv(rnai_essentials_file)
     ccle_info = read_tsv(ccle_info_file)
     
-    junction_counts = read_tsv("/home/miquel/mounts/crg_hpc/projects/publication_spotter/data/raw/inhouse/20230124-rnaseq_cancer_cell_lines/vast_out/total_reads.tsv.gz")
-    genexpr_counts = read_tsv(file.path(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"))
+    # lowest and highest read counts
+    exon_counts = read_tsv(file.path(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz"), col_select=c("EVENT","ACH-000934","ACH-000143"))
+    genexpr_counts = read_tsv(file.path(RAW_DIR,"CCLE","vast_out","COUNTS-hg38-1019.tab.gz"), col_select=c("ID","NAME","SRR8615581_1","SRR8615995_1"))
     
     gc()
     

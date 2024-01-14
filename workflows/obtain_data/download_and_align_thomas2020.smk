@@ -25,7 +25,8 @@ rule all:
         # finish
         os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','TPM-hg38-2.tab.gz'),
         os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','INCLUSION_LEVELS_FULL-hg38-2.tab.gz'),
-        os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
+        os.path.join(ARTICLES_DIR,'Thomas2020','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
+        
         
         
 rule download:

@@ -87,9 +87,9 @@ rule all:
         
         ## PSI UNCERTAINTY
         ### simulate PSI based on total exon read counts
-        os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","inhouse-EX.tsv.gz"),
+        os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","CCLE-EX.tsv.gz"),
         ### compute splicing depenency
-        os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','inhouse'),
+        os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','CCLE'),
         ### make figures
         #os.path.join(RESULTS_DIR,"figures","psi_uncertainty")
         
@@ -595,15 +595,16 @@ rule figures_validation_encore:
 ##### PSI UNCERTAINTY #####
 rule simulate_psi:
     input:
-        psi = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
-        total_reads = os.path.join(PREP_DIR,"event_total_reads","inhouse-EX.tsv.gz")
+        psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        total_reads = os.path.join(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz")
     output:
-        psi_simulated = os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","inhouse-EX.tsv.gz")
+        psi_simulated = os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","CCLE-EX.tsv.gz")
     run:
         import pandas as pd
         import numpy as np
         
         # load
+        print("Loading...")
         psi = pd.read_table(input.psi, index_col=0)
         total_reads = pd.read_table(input.total_reads, index_col=0)
         
@@ -615,6 +616,7 @@ rule simulate_psi:
         total_reads = total_reads.loc[common_events,common_samples].copy()
         
         # simulate psi
+        print("Simulating...")
         def simulate_psi_single(x_psi, x_total_reads, n_random_samples=100):
             
             if np.isfinite(x_psi):
@@ -639,6 +641,7 @@ rule simulate_psi:
         )
         
         # save
+        print("Saving...")
         psi_simulated.reset_index().to_csv(output.psi_simulated, **SAVE_PARAMS)
         
         print("Done!")
@@ -646,11 +649,11 @@ rule simulate_psi:
 
 rule compute_splicing_dependency_psi_simulated:
     input:
-        psi = os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","inhouse-EX.tsv.gz"),
-        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','inhouse.tsv.gz'),
+        psi = os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","CCLE-EX.tsv.gz"),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
         coefs_dir = os.path.join(RESULTS_DIR,'files','models_gene_dependency-EX')
     output:
-        directory(os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','inhouse'))
+        directory(os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','CCLE'))
     threads: 15
     resources:
         runtime = 3600*1, # 1h

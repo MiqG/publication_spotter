@@ -37,11 +37,11 @@ FONT_FAMILY = "Arial"
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
-# psi_file = file.path(PREP_DIR,"event_psi","inhouse-EX.tsv.gz")
-# total_reads_file = file.path(PREP_DIR,"event_total_reads","inhouse-EX.tsv.gz")
-# spldep_file = file.path(ROOT,"results","experimental_validation",'files','splicing_dependency-EX','mean.tsv.gz')
-# psi_simulated_file = file.path(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","inhouse-EX.tsv.gz")
-# spldep_simulated_file = file.path(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','inhouse','mean.tsv.gz')
+# psi_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
+# total_reads_file = file.path(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz")
+# spldep_file = file.path(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz")
+# psi_simulated_file = file.path(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","CCLE-EX.tsv.gz")
+# spldep_simulated_file = file.path(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','CCLE','mean.tsv.gz')
 # figs_dir = file.path(RESULTS_DIR,'figures','psi_uncertainty')
 
 ##### FUNCTIONS #####
@@ -101,7 +101,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="PSI Real", y="PSI Simulated")
+        labs(x="PSI Real", y="PSI with Simulated Error")
     
     plts[["uncertainty_quant-total_reads_vs_diff_psi-scatter"]] = X %>%
         mutate(total_reads = log10(total_reads+1)) %>%
@@ -112,7 +112,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="log10(Total Exon Reads+1)", y="|PSI Real - PSI Simulated|")
+        labs(x="log10(Total Exon Reads+1)", y="|PSI Real - PSI with Simulated Error|")
     
     
     plts[["uncertainty_quant-spldep_real_vs_simulated-scatter"]] = X %>%
@@ -144,7 +144,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="|PSI Real - PSI Simulated|", y="|Spl. Dep. Real - Spl. Dep. Simulated|")
+        labs(x="|PSI Real - PSI with Simulated Error|", y="|Spl. Dep. Real - Spl. Dep. Simulated|")
     
     
     return(plts)
@@ -245,11 +245,12 @@ main = function(){
     
     # load
     selected_events = readLines(selected_events_file)
-    psi = read_tsv(psi_file)
-    total_reads = read_tsv(total_reads_file)
-    spldep = read_tsv(spldep_file)
-    psi_simulated = read_tsv(psi_simulated_file)
-    spldep_simulated = read_tsv(spldep_simulated_file)
+    ## samples with highest and lowes read counts
+    psi = read_tsv(psi_file, col_select=c("EVENT","ACH-000934","ACH-000143"))
+    total_reads = read_tsv(total_reads_file, col_select=c("EVENT","ACH-000934","ACH-000143"))
+    spldep = read_tsv(spldep_file, col_select=c("index","ACH-000934","ACH-000143"))
+    psi_simulated = read_tsv(psi_simulated_file, col_select=c("EVENT","ACH-000934","ACH-000143"))
+    spldep_simulated = read_tsv(spldep_simulated_file, col_select=c("index","ACH-000934","ACH-000143"))
     
     # preprocess
     uncertainty_quant = psi %>%

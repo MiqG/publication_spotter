@@ -47,6 +47,12 @@ rule all:
         expand(os.path.join(CCLE_DIR,'vast_out','.done','{sample}'), sample=SAMPLES_CCLE),
         ## Combine into single tables
         os.path.join(CCLE_DIR,'vast_out','.done/vasttools_combine'),
+        
+        ## get raw read counts
+        os.path.join(CCLE_DIR,'vast_out','inclusion_reads.tsv.gz'),
+        os.path.join(CCLE_DIR,'vast_out','exclusion_reads.tsv.gz'),
+        os.path.join(CCLE_DIR,'vast_out','total_reads.tsv.gz'),
+        
         ## Tidy PSI
         '.done/CCLE.done',
         os.path.join(CCLE_DIR,'vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
@@ -82,7 +88,7 @@ rule download:
         memory = 1 # GB
     shell:
         """
-        set -euo pipefail
+        set -eo pipefail
 
         # download
         echo "Downloading {params.sample}_{params.end}..."
@@ -115,6 +121,8 @@ rule quantify_psi_vasttools:
     group: "CCLE"
     shell:
         """
+        set -eo pipefail
+
         # align paired reads
         echo "Aligning {params.sample}..."
         {params.bin_dir}/vast-tools align \
@@ -145,19 +153,20 @@ rule vasttools_combine_CCLE:
     params:
         bin_dir=VASTTOOLS_DIR,
         folder = os.path.join(CCLE_DIR,'vast_out')
-    threads: 16
+    threads: 56
     resources:
         runtime = 172800, # 48h
-        memory = 60
+        memory = 200
     shell:
         """
+        set -eo pipefail
+        
         # group results
         echo "Grouping results..."
         mkdir -p {params.folder}/to_combine
         ln -s {params.folder}/*/to_combine/* {params.folder}/to_combine/
-        
-        #mkdir -p {params.folder}/expr_out
-        #ln -s {params.folder}/*/expr_out/* {params.folder}/expr_out/
+        mkdir -p {params.folder}/expr_out
+        ln -s {params.folder}/*/expr_out/* {params.folder}/expr_out/
         
         # combine runs
         echo "Combining runs..."
@@ -168,7 +177,8 @@ rule vasttools_combine_CCLE:
                     --keep_raw_reads \
                     --keep_raw_incl \
                     --output {params.folder} \
-                    --TPM
+                    --TPM \
+                    -C
         
         # compress outputs
         echo "Compressing outputs..."
@@ -179,7 +189,7 @@ rule vasttools_combine_CCLE:
         # remove grouped results
         echo "Removing grouped results..."
         rm -r {params.folder}/to_combine
-        #rm -r {params.folder}/expr_out
+        rm -r {params.folder}/expr_out
         
         echo "Done!"
         """
@@ -207,4 +217,29 @@ rule vasttools_tidy_CCLE:
         touch .done/CCLE.done
         
         echo "Done!"
+        """
+
+        
+rule get_raw_reads:
+    input:
+        inclusion_levels = os.path.join(CCLE_DIR,'vast_out','INCLUSION_LEVELS_FULL-hg38-1019.tab.gz')
+    output:
+        inclusion_reads = os.path.join(CCLE_DIR,'vast_out','inclusion_reads.tsv.gz'),
+        exclusion_reads = os.path.join(CCLE_DIR,'vast_out','exclusion_reads.tsv.gz'),
+        total_reads = os.path.join(CCLE_DIR,'vast_out','total_reads.tsv.gz')
+    params:
+        chunksize = 10000
+    threads: 24
+    resources:
+        runtime = 6*3600, # 6h
+        memory = 20 # GB
+    shell:
+        """
+        nice python scripts/get_raw_reads.py \
+                    --inclusion_levels_file={input.inclusion_levels} \
+                    --n_jobs={threads} \
+                    --chunksize={params.chunksize} \
+                    --inclusion_reads_file={output.inclusion_reads} \
+                    --exclusion_reads_file={output.exclusion_reads} \
+                    --total_reads_file={output.total_reads}
         """
