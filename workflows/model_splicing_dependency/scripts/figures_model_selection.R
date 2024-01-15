@@ -1233,7 +1233,7 @@ plot_rnai_qc = function(shrna_mapping, models){
 }
 
 
-plot_rnaseq_qc = function(metadata, rnai){
+plot_rnaseq_qc = function(metadata, rnai, exon_counts, genexpr_counts){
     plts = list()
 
     X = metadata %>%
@@ -1326,7 +1326,7 @@ plot_rnaseq_qc = function(metadata, rnai){
         distinct(GENE,n_exons) %>%
         gghistogram(x="n_exons", bins=30) +
         geom_vline(xintercept = 2, linetype="dashed", color="black") +
-        labs(x="N VastDB Exons per Gene", y="Count")    
+        labs(x="N Exons per Gene (VastDB)", y="Count")    
     
     plts[["rnaseq_qc-reads_exon_vs_position-scatter"]] = x %>%
         # 139 misannotated genes with event_pos_ratio > 1
@@ -1367,7 +1367,8 @@ make_plots = function(models, rnai_stats, cancer_events,
                       enrichment, spldep_stats, harm_stats, 
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
-                      cosmic_comparison, shrna_mapping, spldep_comparison){
+                      cosmic_comparison, shrna_mapping, spldep_comparison,
+                      exon_counts, genexpr_counts){
     plts = list(
         plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
         plot_model_properties(models, enrichment,spldep_stats, harm_stats),
@@ -1375,7 +1376,7 @@ make_plots = function(models, rnai_stats, cancer_events,
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata),
         plot_cosmic_comparison(cosmic_comparison),
         plot_rnai_qc(shrna_mapping, models),
-        plot_rnaseq_qc(metadata, rnai),
+        plot_rnaseq_qc(metadata, rnai, exon_counts, genexpr_counts),
         plot_spldep_qc(spldep_comparison)
     )
     plts = do.call(c,plts)
@@ -1388,7 +1389,8 @@ make_figdata = function(models, rnai_stats, cancer_events,
                       enrichment, spldep_stats, harm_stats,
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
-                      cosmic_comparison, shrna_mapping, spldep_comparison){
+                      cosmic_comparison, shrna_mapping, spldep_comparison,
+                      exon_counts, genexpr_counts){
     # prep enrichments
     df_enrichs = do.call(rbind,
         lapply(names(enrichment), function(e){
@@ -1527,6 +1529,8 @@ save_plots = function(plts, figs_dir){
 
     # RNAseq QC
     save_plt(plts, "rnaseq_qc-read_count_vs_n_detected_events-scatter", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "rnaseq_qc-distr_n_exons-hist", ".pdf", figs_dir, width=5, height=4)
+    save_plt(plts, "rnaseq_qc-reads_exon_vs_position-scatter", ".pdf", figs_dir, width=7, height=5)
     
     # SplDep QC
     save_plt(plts, "spldep_qc-spldep_mean_vs_median", ".pdf", figs_dir, width=5, height=5)
@@ -1829,7 +1833,8 @@ main = function(){
         enrichment, spldep_stats, harm_stats, 
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
-        cosmic_comparison, shrna_mapping, spldep_comparison
+        cosmic_comparison, shrna_mapping, spldep_comparison,
+        exon_counts, genexpr_counts
     )
 
     # make figdata
@@ -1839,7 +1844,8 @@ main = function(){
         enrichment, spldep_stats, harm_stats,
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
-        cosmic_comparison, shrna_mapping, spldep_comparison
+        cosmic_comparison, shrna_mapping, spldep_comparison,
+        exon_counts, genexpr_counts
     )
     
     # save

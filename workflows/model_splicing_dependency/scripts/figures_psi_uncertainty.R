@@ -75,9 +75,9 @@ plot_simulations = function(simulations){
     
     plts[["simulations-psi_vs_std_vs_n_reads-line"]] = X %>%
         mutate(n_reads = as.factor(n_reads)) %>%
-        ggline(x="psi_prob", y="simulation_std", color="n_reads", numeric.x.axis=TRUE) +
+        ggline(x="psi_prob", y="simulation_std", color="n_reads", numeric.x.axis=TRUE, point.size=0.5) +
         labs(x="PSI", y="Simulated PSI Std", color="N Reads to Compute PSI")
-    
+
     return(plts)
 }
 
@@ -87,7 +87,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
     
     X = uncertainty_quant
     
-    plts[["uncertainty_quant-distr_total_reads-hist"]] = X %>%
+    plts[["uncertainty_quant-distr_total_reads-violin"]] = X %>%
         mutate(total_reads = log10(total_reads+1)) %>%
         ggviolin(x="sampleID", y="total_reads", fill=PAL_SINGLE_ACCENT, color=NA, trim=TRUE) + 
         geom_boxplot(fill=NA, outlier.size=0.1, width=0.2) +
@@ -122,7 +122,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="Spl. Dep. Real", y="Spl. Dep. Simulated")
+        labs(x="Spl. Dep. Real", y="Spl. Dep. with Simulated Error")
     
     
     plts[["uncertainty_quant-total_reads_vs_diff_spldep-scatter"]] = X %>%
@@ -134,7 +134,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="log10(Total Exon Reads+1)", y="|Spl. Dep. Real - Spl. Dep. Simulated|")
+        labs(x="log10(Total Exon Reads+1)", y="|Spl. Dep. Real - Spl. Dep. with Simulated Error|")
     
     
     plts[["uncertainty_quant-diff_psi_vs_diff_spldep-scatter"]] = X %>%
@@ -144,7 +144,7 @@ plot_uncertainty_quant = function(uncertainty_quant){
         theme_pubr() +
         facet_wrap(~sampleID) +
         theme(aspect.ratio=1, strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
-        labs(x="|PSI Real - PSI with Simulated Error|", y="|Spl. Dep. Real - Spl. Dep. Simulated|")
+        labs(x="|PSI Real - PSI with Simulated Error|", y="|Spl. Dep. Real - Spl. Dep. with Simulated Error|")
     
     
     return(plts)
@@ -188,9 +188,9 @@ save_plt = function(plts, plt_name, extension=".pdf",
 
 
 save_plots = function(plts, figs_dir){
-    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "simulations-psi_vs_std_vs_n_reads-line", ".pdf", figs_dir, width=5, height=5)
     
-    save_plt(plts, "uncertainty_quant-distr_total_reads-hist", ".pdf", figs_dir, width=5, height=5.5)
+    save_plt(plts, "uncertainty_quant-distr_total_reads-violin", ".pdf", figs_dir, width=3, height=5.5)
     save_plt(plts, "uncertainty_quant-psi_real_vs_simulated-scatter", ".pdf", figs_dir, width=5, height=5.5)
     save_plt(plts, "uncertainty_quant-total_reads_vs_diff_psi-scatter", ".pdf", figs_dir, width=5, height=5.5)
     save_plt(plts, "uncertainty_quant-spldep_real_vs_simulated-scatter", ".pdf", figs_dir, width=5, height=5.5)
@@ -245,7 +245,7 @@ main = function(){
     
     # load
     selected_events = readLines(selected_events_file)
-    ## samples with highest and lowes read counts
+    ## samples with lowest and highest read counts
     psi = read_tsv(psi_file, col_select=c("EVENT","ACH-000934","ACH-000143"))
     total_reads = read_tsv(total_reads_file, col_select=c("EVENT","ACH-000934","ACH-000143"))
     spldep = read_tsv(spldep_file, col_select=c("index","ACH-000934","ACH-000143"))
@@ -284,11 +284,12 @@ main = function(){
         ) %>%
         mutate(
             diff_psi = psi_real - psi_simulated,
-            diff_spldep = spldep_real - spldep_simulated
+            diff_spldep = spldep_real - spldep_simulated,
+            sampleID = factor(sampleID, levels=c("ACH-000934","ACH-000143"))
         )
     
     # simulate
-    n_reads = c(1,10,100,1000)
+    n_reads = c(2,10,100,1000)
     simulations = lapply(n_reads, simulate_psi_vs_read_count) %>% bind_rows()
     
     # plot

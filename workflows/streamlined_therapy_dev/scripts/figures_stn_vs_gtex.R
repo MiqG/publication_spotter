@@ -41,15 +41,15 @@ FONT_FAMILY = "Arial"
 
 # Development
 # -----------
-ROOT = here::here()
-RAW_DIR = file.path(ROOT,'data','raw')
-PREP_DIR = file.path(ROOT,'data','prep')
-RESULTS_DIR = file.path(ROOT,'results','streamlined_therapy_dev')
-annotation_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
-selected_events_file = file.path(ROOT,'results','model_splicing_dependency','files','selected_models-EX.txt')
-diff_result_sample_file = file.path(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
-gtex_file = file.path(RAW_DIR,"inhouse","Sodaei","event_psi","breast-mammary_tissue-EX.tsv.gz")
-figs_dir = file.path(RESULTS_DIR,'figures','stn_vs_gtex')
+# ROOT = here::here()
+# RAW_DIR = file.path(ROOT,'data','raw')
+# PREP_DIR = file.path(ROOT,'data','prep')
+# RESULTS_DIR = file.path(ROOT,'results','streamlined_therapy_dev')
+# annotation_file = file.path(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv')
+# selected_events_file = file.path(ROOT,'results','model_splicing_dependency','files','selected_models-EX.txt')
+# diff_result_sample_file = file.path(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
+# gtex_file = file.path(RAW_DIR,"inhouse","Sodaei","event_psi","breast-mammary_tissue-EX.tsv.gz")
+# figs_dir = file.path(RESULTS_DIR,'figures','stn_vs_gtex')
 
 ##### FUNCTIONS #####
 plot_stn_tcga_vs_gtex = function(diff_result_sample, correlations){
@@ -75,7 +75,7 @@ plot_stn_tcga_vs_gtex = function(diff_result_sample, correlations){
         labs(x="Correlation Method", y="Correlation Coef.\nSTN TCGA vs Breast GTEx")
     
     plts[["stn_tcga_vs_gtex-delta_psi-scatter"]] = diff_result_sample %>%
-        filter(psi__is_significant) %>% 
+        filter(psi__is_significant & cancer_type=="BRCA") %>% 
         drop_na(psi__median_diff, gtex_median_diff) %>%
         ggplot(aes(x=psi__median_diff, y=gtex_median_diff)) +
         geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color="brown") +
@@ -90,7 +90,7 @@ plot_stn_tcga_vs_gtex = function(diff_result_sample, correlations){
 
 make_plots = function(diff_result_sample, correlations){
     plts = list(
-        plot_stn_tcga_vs_gtex(diff_result_sample, correlations),
+        plot_stn_tcga_vs_gtex(diff_result_sample, correlations)
     )
     plts = do.call(c,plts)
     return(plts)
@@ -128,7 +128,7 @@ save_plt = function(plts, plt_name, extension='.pdf',
 save_plots = function(plts, figs_dir){
     # top candidates sample type
     save_plt(plts, 'stn_tcga_vs_gtex-correlations-violin', '.pdf', figs_dir, width=8, height=5)
-    save_plt(plts, 'stn_tcga_vs_gtex-delta_psi-scatter', '.pdf', figs_dir, width=15, height=15)
+    save_plt(plts, 'stn_tcga_vs_gtex-delta_psi-scatter', '.pdf', figs_dir, width=4, height=5)
 }
 
 save_figdata = function(figdata, dir){
