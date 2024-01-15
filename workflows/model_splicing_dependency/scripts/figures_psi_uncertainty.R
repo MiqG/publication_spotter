@@ -61,7 +61,10 @@ simulate_psi_vs_read_count = function(n_reads_size, n_simulation=1000){
             simulation_q25 = quantile(simulation, probs=0.25),
             simulation_q75 = quantile(simulation, probs=0.75)
         ) %>%
-        mutate(simulation_iqr = simulation_q75 - simulation_q25)
+        mutate(
+            simulation_iqr = simulation_q75 - simulation_q25,
+            simulation_error = mean(psi*100 - simulation)
+        )
     }) %>% bind_rows()
     
     return(simulations)
@@ -74,9 +77,9 @@ plot_simulations = function(simulations){
     X = simulations
     
     plts[["simulations-psi_vs_std_vs_n_reads-line"]] = X %>%
-        mutate(n_reads = as.factor(n_reads)) %>%
-        ggline(x="psi_prob", y="simulation_std", color="n_reads", numeric.x.axis=TRUE, point.size=0.5) +
-        labs(x="PSI", y="Simulated PSI Std", color="N Reads to Compute PSI")
+        mutate(n_reads = as.factor(n_reads), simulation_error=abs(simulation_error)) %>%
+        ggline(x="psi_prob", y="simulation_error", color="n_reads", numeric.x.axis=TRUE, point.size=0.25) +
+        labs(x="PSI", y="|PSI Real - PSI with Simulated Error|", color="N Reads to Compute PSI")
 
     return(plts)
 }
