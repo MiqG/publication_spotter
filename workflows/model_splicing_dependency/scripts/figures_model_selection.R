@@ -586,10 +586,9 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
         )    
     
     ### overlap ctl pos and common essentials
+    known_driver_genes = models %>% filter(is_known_driver) %>% pull(GENE)
     plts[["model_sel-set_overlaps-all-venn"]] = models %>%
-        group_by(GENE) %>%
-        mutate(is_known_driver_gene = any(is_known_driver)) %>%
-        ungroup() %>%
+        mutate(is_known_driver_gene = GENE %in% known_driver_genes) %>%
         distinct(GENE, is_known_driver_gene, is_pan_essential, in_cosmic) %>%
         ggplot(aes(A=in_cosmic, B=is_known_driver_gene, C=is_pan_essential)) +
         geom_venn(stroke_color=NA, 
@@ -598,16 +597,16 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
         coord_fixed() +
         theme_void()
     
+    known_driver_genes = models %>% filter(is_known_driver & is_selected) %>% pull(GENE)
     plts[["model_sel-set_overlaps-selected-venn"]] = models %>%
-        group_by(GENE) %>%
-        mutate(is_known_driver_gene = any(is_known_driver)) %>%
-        ungroup() %>%
         filter(is_selected) %>%
+        mutate(is_known_driver_gene = GENE %in% known_driver_genes) %>%
         distinct(GENE, is_known_driver_gene, is_pan_essential, in_cosmic) %>%
         ggplot(aes(A=in_cosmic, B=is_known_driver_gene, C=is_pan_essential)) +
         geom_venn(stroke_color=NA, 
                   fill_color=PAL_DRIVER_COMP,
-                  set_name_size = FONT_SIZE+0.5, text_size = FONT_SIZE) +
+                  set_name_size = FONT_SIZE+0.5, 
+                  text_size = FONT_SIZE) +
         coord_fixed() +
         theme_void()
     
@@ -1657,27 +1656,7 @@ main = function(){
     
     rnai_essentials = rnai_essentials %>%
         pull(index)
-    #     rnai_essentials = rnai %>%
-    #         pivot_longer(-index, names_to="DepMap_ID", values_to="demeter2") %>%
-    #         drop_na() %>%
-    #         group_by(DepMap_ID) %>%
-    #         mutate(
-    #             ranking = rank(demeter2),
-    #             perc = ranking / n()
-    #         ) %>%
-    #         ungroup() %>%
-    #         group_by(index) %>%
-    #         summarize(
-    #             percentile = quantile(perc, probs=0.9)
-    #         ) %>%
-    #         ungroup()
 
-    #     density_est = rnai_essentials %>% pull(percentile) %>% density()
-    #     minima = density_est$x[which(diff(sign(diff(density_est$y))) > 0) + 1]
-    #     rnai_essentials = rnai_essentials %>%
-    #         filter(percentile < min(minima)) %>%
-    #         pull(index)
-    
     pan_essentials = union(crispr_essentials, rnai_essentials)
     
     # log normalize gene expression
