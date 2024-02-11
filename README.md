@@ -30,13 +30,14 @@ After running all workflows (indicated below), the figures used in the manuscrip
 We indicate the versions used, however, you'll probably be able to run the full pipeline with different versions.
 - command-line tools
     - conda==23.3.1
-    - snakemake==6.10.0
+    - snakemake-minimal==6.10.0
     - vast-tools==2.5.1
     - csvkit==1.0.5
     - fastq-dump==2.9.1
     - gdc-client==1.6.1
     - ascp==4.1.1.73
     - axel==2.17.10
+    - bowtie==1.3.0
     
 - Python==3.8.3
     - joblib==1.1.0
@@ -44,13 +45,20 @@ We indicate the versions used, however, you'll probably be able to run the full 
     - pandas==1.3.0
     - networkx==2.8.4
     - numpy==1.20.3
+    - target_spotter==0.1.1
 
 - R==4.1.0
+    - Biostrings==2.64.1
+    - BSgenome.Hsapiens.UCSC.hg38
     - cluster==2.1.2
     - clusterProfiler==4.0.5
     - ComplexHeatmap==2.9.3
     - cowplot==1.1.1
+    - doParallel==1.0.16
     - extrafont==0.17
+    - ensembldb==2.16.4
+    - EnsDb.Hsapiens.v86
+    - foreach==1.5.1
     - ggnewscale==0.4.5
     - ggplotify==0.1.0
     - ggpubr==0.4.0

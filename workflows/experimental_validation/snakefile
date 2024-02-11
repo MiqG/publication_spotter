@@ -335,15 +335,16 @@ rule figures_validation:
     input:
         annotation = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz'),
         event_info = os.path.join(RAW_DIR,'VastDB','EVENT_INFO-hg38_noseqs.tsv'),
-        splicing = os.path.join(PREP_DIR,"genexpr_tpm","inhouse.tsv.gz"),
+        splicing = os.path.join(PREP_DIR,"event_psi","inhouse-EX.tsv.gz"),
         genexpr = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX"),
         validation_splicing = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20230215-psi-aso.tsv"),
         validation_od = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","clonogenic_assay-od-merged.tsv"),
         prolif = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","resazurin_cell_proliferation-merged.tsv"),
-        exon_info_file = os.path.join(SUPPORT_DIR,"exon_mapping_validated_exons.tsv"),
-        domains_file = os.path.join(RESULTS_DIR,'files','proteoform_info',"domains.tsv.gz"),
-        sso_seqs_file = os.path.join(SUPPORT_DIR,"sso_sequences.tsv")
+        exon_info = os.path.join(SUPPORT_DIR,"exon_mapping_validated_exons.tsv"),
+        domains = os.path.join(RESULTS_DIR,'files','proteoform_info',"domains.tsv.gz"),
+        sso_seqs = os.path.join(SUPPORT_DIR,"sso_sequences.tsv"),
+        sso_optimization = os.path.join(RAW_DIR,"experiments","validation_therapeutic_potential","20220928-psi-aso-optimization.tsv")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation'))
     shell:
@@ -361,6 +362,7 @@ rule figures_validation:
                     --exon_info_file={input.exon_info} \
                     --domains_file={input.domains} \
                     --sso_seqs_file={input.sso_seqs} \
+                    --sso_optimization_file={input.sso_optimization} \
                     --figs_dir={output}
         """
 

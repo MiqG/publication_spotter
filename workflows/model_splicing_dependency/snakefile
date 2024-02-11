@@ -32,7 +32,8 @@ TS_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)),'repositories','tar
 EVENT_TYPES = ["EX"]
 N_SAMPLES = {
     "Thomas2020": 2,
-    "Hart2015": 12
+    "Hart2015": 12,
+    "psi_uncertainty": 0
 }
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
@@ -56,10 +57,6 @@ rule all:
         ## make figures
         os.path.join(RESULTS_DIR,'figures','model_selection'),
         os.path.join(RESULTS_DIR,"figures","sf_mutations"),
-        
-        ## CRISPR KO SCREENS - Achilles KO gene dependencies rather than KD gene dependencies
-        expand(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'), event_type=EVENT_TYPES),
-        
         
         # MODEL VALIDATION
         ## EXON-LEVEL CRISPR SCREENS
@@ -91,7 +88,7 @@ rule all:
         ### compute splicing depenency
         os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','CCLE'),
         ### make figures
-        #os.path.join(RESULTS_DIR,"figures","psi_uncertainty")
+        os.path.join(RESULTS_DIR,"figures","psi_uncertainty")
         
         
 ##### MODEL SELECTION #####
@@ -107,35 +104,6 @@ rule model_gene_dependency:
     resources:
         runtime = 3600*12, # 12h
         memory = 50
-    params:
-        script_dir = TS_DIR,
-        n_iterations = 1000
-    shell:
-        """
-        nice python {params.script_dir}/target_spotter spldep_fit \
-                    --gene_dependency_file={input.gene_dependency_file} \
-                    --splicing_file={input.splicing_file} \
-                    --genexpr_file={input.genexpr_file} \
-                    --mapping_file={input.mapping_file} \
-                    --output_dir={output} \
-                    --n_iterations={params.n_iterations} \
-                    --n_jobs={threads} \
-                    --log_transform
-        """
-        
-        
-rule model_gene_dependency_achilles:
-    input:
-        splicing_file = os.path.join(PREP_DIR,'event_psi','CCLE-{event_type}.tsv.gz'),
-        genexpr_file = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
-        gene_dependency_file = os.path.join(PREP_DIR,'achilles','CCLE_comparable.tsv.gz'),
-        mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
-    output:
-        directory(os.path.join(RESULTS_DIR,'files','achilles','models_gene_dependency-{event_type}'))
-    threads: 24
-    resources:
-        runtime = 604800, # seconds = 168h = 7 days
-        memory = 30
     params:
         script_dir = TS_DIR,
         n_iterations = 1000
@@ -216,13 +184,22 @@ rule figures_model_selection:
         protein_impact = os.path.join(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
         cosmic_genes = os.path.join(ROOT,"data","raw","COSMIC","cancer_gene_census.tsv"),
         spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        spldep_med = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","median.tsv.gz"),
         rnai = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
         genexpr = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         splicing = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
         cancer_events = os.path.join(ROOT,"support","cancer_events.tsv"),
         ascanceratlas = os.path.join(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz"),
         event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
-        metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz")
+        metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        shrna_mapping_gencode = os.path.join(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts-mapping_coords.tsv.gz"),
+        shrna_mapping_vastdb = os.path.join(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz"),
+        crispr_essentials = os.path.join(SUPPORT_DIR,"CRISPRInferredCommonEssentials.csv"),
+        rnai_essentials = os.path.join(PREP_DIR,"demeter2","panessential_genes.tsv.gz"),
+        ccle_info = os.path.join(SUPPORT_DIR,"ENA_filereport-PRJNA523380-CCLE.tsv"),
+        genome_annot = os.path.join(RAW_DIR,"GENCODE","Homo_sapiens.GRCh38.gencode_v44.sqlite"),
+        exon_counts = os.path.join(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz"),
+        genexpr_counts = os.path.join(RAW_DIR,"CCLE","vast_out","COUNTS-hg38-1019.tab.gz")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','model_selection'))
     shell:
@@ -235,6 +212,7 @@ rule figures_model_selection:
                     --protein_impact_file={input.protein_impact} \
                     --cosmic_genes_file={input.cosmic_genes} \
                     --spldep_file={input.spldep} \
+                    --spldep_med_file={input.spldep_med} \
                     --rnai_file={input.rnai} \
                     --genexpr_file={input.genexpr} \
                     --splicing_file={input.splicing} \
@@ -242,6 +220,14 @@ rule figures_model_selection:
                     --ascanceratlas_file={input.ascanceratlas} \
                     --event_info_file={input.event_info} \
                     --metadata_file={input.metadata} \
+                    --shrna_mapping_gencode_file={input.shrna_mapping_gencode} \
+                    --shrna_mapping_vastdb_file={input.shrna_mapping_vastdb} \
+                    --crispr_essentials_file={input.crispr_essentials} \
+                    --rnai_essentials_file={input.rnai_essentials} \
+                    --ccle_info_file={input.ccle_info} \
+                    --genome_annot_file={input.genome_annot} \
+                    --exon_counts_file={input.exon_counts} \
+                    --genexpr_counts_file={input.genexpr_counts} \
                     --figs_dir={output}
         """
     
@@ -269,8 +255,8 @@ rule figures_sf_mutations:
         """
         
         
-##### MODEL VALIDATION #####        
-rule compute_splicing_dependency_exon_crispr_screen_datsets:
+##### MODEL VALIDATION #####
+rule compute_splicing_dependency_exon_crispr_screen_datasets:
     input:
         psi = os.path.join(RAW_DIR,'articles','{dataset}','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
         genexpr = lambda wildcards: os.path.join(RAW_DIR,'articles','{dataset}','vast_out','TPM-hg38-{n_samples}.tab.gz').format(dataset=wildcards.dataset, n_samples=N_SAMPLES[wildcards.dataset]),
@@ -672,3 +658,27 @@ rule compute_splicing_dependency_psi_simulated:
                     --n_jobs={threads} \
                     --log_transform
         """
+        
+        
+rule figures_psi_uncertainty:
+    input:
+        selected_events = os.path.join(RESULTS_DIR,"files","selected_models-EX.txt"),
+        psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        total_reads = os.path.join(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz"),
+        spldep = os.path.join(RESULTS_DIR,"files","splicing_dependency-EX","mean.tsv.gz"),
+        psi_simulated = os.path.join(RESULTS_DIR,"files","psi_uncertainty","psi_simulated","CCLE-EX.tsv.gz"),
+        spldep_simulated = os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','CCLE','mean.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'figures','psi_uncertainty'))
+    shell:
+        """
+        Rscript scripts/figures_psi_uncertainty.R \
+                    --selected_events_file={input.selected_events} \
+                    --psi_file={input.psi} \
+                    --total_reads_file={input.total_reads} \
+                    --spldep_file={input.spldep} \
+                    --psi_simulated_file={input.psi_simulated} \
+                    --spldep_simulated_file={input.spldep_simulated} \
+                    --figs_dir={output}
+        """    
+        

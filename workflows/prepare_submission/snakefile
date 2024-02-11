@@ -16,6 +16,7 @@ PREP_DIR = os.path.join(DATA_DIR,'prep')
 RESULTS_DIR = os.path.join(ROOT,'results')
 
 MODEL_SEL_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","model_selection","figdata")
+PSI_UNC_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","psi_uncertainty","figdata")
 SF_MUTATIONS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","sf_mutations","figdata")
 MODEL_VAL_THOMAS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Thomas2020","figdata")
 MODEL_VAL_GONATO_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Gonatopoulos-Pournatzis2020","figdata")
@@ -33,98 +34,107 @@ rule all:
 
 rule supplementary_tables:
     input:
+        # prior knowledge
+        suptab01_event_prior_knowledge = os.path.join(MODEL_SEL_DIR,"model_selection","event_prior_knowledge.tsv.gz"),
         # model cancer-driver exons
         ## CCLE RNAi - demeter2
-        suptab01_ccle_demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        suptab02_ccle_demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
         ## CCLE tpm
-        suptab02_ccle_tpm = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        suptab03_ccle_tpm = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         ## CCLE psi
-        suptab03_ccle_psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        suptab04_ccle_psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
         ## CCLE metadata
-        suptab04_ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        suptab05_ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
         ## model summaries
-        suptab05_model_summaries = os.path.join(MODEL_SEL_DIR,"model_selection","model_summaries.tsv.gz"),
-        ## known cancer-driver events
-        suptab06_cancer_events = os.path.join(MODEL_SEL_DIR,"model_selection","cancer_events.tsv.gz"),
+        suptab06_model_summaries = os.path.join(MODEL_SEL_DIR,"model_selection","model_summaries.tsv.gz"),
+        ## ROC evaluation
+        suptab07_roc_evaluation = os.path.join(MODEL_SEL_DIR,"model_selection","roc_analysis.tsv.gz"),
+        ## shRNA mapping
+        suptab08_shrna_mapping = os.path.join(MODEL_SEL_DIR,"qc","shrna_mapping.tsv.gz"),
+        
         ## rnai stats
-        suptab07_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
+        suptab09_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
         ## lr-tests thresholds
-        suptab08_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
+        suptab10_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
         ## pearson thresholds
-        suptab09_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
-        ## gsoa
-        suptab10_gsoa = os.path.join(MODEL_SEL_DIR,"model_properties","gsoa_selected.tsv.gz"),
+        suptab11_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
+        ## psi simulation
+        suptab12_psi_simulation = os.path.join(PSI_UNC_DIR,"psi_uncertainty","simulations.tsv.gz"),
+        ## uncertainty evaluation
+        suptab13_uncertainty_eval = os.path.join(PSI_UNC_DIR,"psi_uncertainty","uncertainty_quant.tsv.gz"),
         ## cosmic comparison
-        suptab11_cosmic_comparison = os.path.join(MODEL_SEL_DIR,"model_properties","cosmic_comparison.tsv.gz"),
+        suptab14_cosmic_comparison = os.path.join(MODEL_SEL_DIR,"model_properties","cosmic_comparison.tsv.gz"),
+        ## gsoa
+        suptab15_gsoa = os.path.join(MODEL_SEL_DIR,"model_properties","gsoa_selected.tsv.gz"),
         ## gene-level mutation frequency
-        suptab12_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
+        suptab16_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
         ## splicing dependency CCLE
-        suptab13_spldep_ccle = os.path.join(RESULTS_DIR,"model_splicing_dependency","files","splicing_dependency-EX","mean.tsv.gz"),
+        suptab17_spldep_ccle = os.path.join(RESULTS_DIR,"model_splicing_dependency","files","splicing_dependency-EX","mean.tsv.gz"),
         ## splicing dependency summary stats
-        suptab14_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
+        suptab18_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
         ## SF mutations summary
-        suptab15_sf_mutations_harm_scores = os.path.join(SF_MUTATIONS_DIR,"sf_mutations","diff_max_harm.tsv.gz"),
+        suptab19_sf_mutations_harm_scores = os.path.join(SF_MUTATIONS_DIR,"sf_mutations","diff_max_harm.tsv.gz"),
         
         # model validation
         ## Thomas - observed changes in cell proliferation
-        suptab16_thomas_crispr_screen = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","crispr_screen.tsv.gz"),
+        suptab20_thomas_crispr_screen = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","crispr_screen.tsv.gz"),
         ## Thomas - spotter results
-        suptab17_thomas_spotter_results = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","spotter_results.tsv.gz"),
+        suptab21_thomas_spotter_results = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","spotter_results.tsv.gz"),
         ## Gonatopoulos - observed changes in cell proliferation
-        suptab18_gonatopoulos_crispr_screen = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","crispr_screen.tsv.gz"),
+        suptab22_gonatopoulos_crispr_screen = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","crispr_screen.tsv.gz"),
         ## Gonatopoulos - spotter results
-        suptab19_gonatopoulos_spotter_results = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","spotter_results.tsv.gz"),
+        suptab23_gonatopoulos_spotter_results = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","spotter_results.tsv.gz"),
         ## ENCORE - PSI
-        suptab20_encore_psi = os.path.join(PREP_DIR,'event_psi','ENCORE-EX.tsv.gz'),
+        suptab24_encore_psi = os.path.join(PREP_DIR,'event_psi','ENCORE-EX.tsv.gz'),
         ## ENCORE - TPM
-        suptab21_encore_tpm = os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
+        suptab25_encore_tpm = os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
         ## ENCORE - metadata
-        suptab22_encore_metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        suptab26_encore_metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
         ## ENCORE - spotter results
-        suptab23_encore_spotter_results = os.path.join(MODEL_VAL_ENCORE,"model_validation","spotter_results.tsv.gz"),
+        suptab27_encore_spotter_results = os.path.join(MODEL_VAL_ENCORE,"model_validation","spotter_results.tsv.gz"),
         ## ENCORE - correlation tables
-        suptab24_encore_evaluation = os.path.join(MODEL_VAL_ENCORE,"model_validation","evaluation.tsv.gz"),
+        suptab28_encore_evaluation = os.path.join(MODEL_VAL_ENCORE,"model_validation","evaluation.tsv.gz"),
         
         # streamlined drug development
         ## TCGA - PSI (not as sup. tab.)
         ## TCGA - mRNA level counts (not as sup. tab.)
         ## TCGA - Differential Splicing, Spl. Dep., Harm Score
-        suptab25_targetable_exons_cancer_types = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_type.tsv.gz"),
-        suptab26_targetable_exons_cancer_subtypes = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_subtype.tsv.gz"),
+        suptab29_targetable_exons_cancer_types = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_type.tsv.gz"),
+        suptab30_targetable_exons_cancer_subtypes = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_subtype.tsv.gz"),
         ## SSO - cancer cells RNA-seq: PSI, TPM, Spl. Dep., Harm Score
-        suptab27_selected_exons_spotter_results = os.path.join(TARGET_VAL_SEL,"selection_events","selected_events_inhouse.tsv.gz"),
+        suptab31_selected_exons_spotter_results = os.path.join(TARGET_VAL_SEL,"selection_events","selected_events_inhouse.tsv.gz"),
         ## SSO - structural analysis (hand-made)
-        #suptab28_targetable_exons_proteoform_sequences = ""
+        #suptab32_targetable_exons_proteoform_sequences = ""
         ## SSO - sequences SSO (hand-made)
-        #suptab29_targetable_exons_sso_sequences = ""
+        #suptab33_targetable_exons_sso_sequences = ""
         ## SSO - sequences primers (hand-made)
-        #suptab30_targetable_exons_primer_sequences = ""
+        #suptab34_targetable_exons_primer_sequences = ""
         ## SSO - cell proliferation experiments
-        suptab31_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz"),
+        suptab35_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz"),
         ## Growth curve cell lines
-        suptab32_growth_curves = os.path.join(TARGET_VAL_EXP,"experiments","proliferation_assay.tsv.gz"),
+        suptab36_growth_curves = os.path.join(TARGET_VAL_EXP,"experiments","proliferation_assay.tsv.gz"),
 
         # drug-exon mechanistic interactions
         ## GDSC - drug sensitivities (training + test)
-        suptab33_drug_sensitivites = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_sensitivities.tsv.gz'),
+        suptab37_drug_sensitivites = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_sensitivities.tsv.gz'),
         ## GDSC - drug target info
-        suptab34_drug_targets = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_targets.tsv.gz'),
+        suptab38_drug_targets = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_targets.tsv.gz'),
         ## drug-exon - model summaries
-        suptab35_drug_exon_associations = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','model_summaries.tsv.gz'),
+        suptab39_drug_exon_associations = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','model_summaries.tsv.gz'),
         ## drug-exon - ReactomeDB pathway tests
-        suptab36_evaluation_reactome_pathways = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','evaluation_reactome.tsv.gz'),
+        suptab40_evaluation_reactome_pathways = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','evaluation_reactome.tsv.gz'),
         ## drug-exon - shortest path lengths
-        suptab37_evaluation_stringdb_ppi = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','shortest_paths.tsv.gz'),
+        suptab41_evaluation_stringdb_ppi = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','shortest_paths.tsv.gz'),
         
         # treatment recommendation
         ## GDSC - correlations training and test sets
-        suptab38_gdsc_pred_drug_ic50 = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','pred_ic50_by_drug.tsv.gz'),
+        suptab42_gdsc_pred_drug_ic50 = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','pred_ic50_by_drug.tsv.gz'),
         ## Pietilla - PSI, TPM, Spl. Dep., Pred. IC50, Metadata
-        suptab39_pietilla_splicing_dependency_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","splicing_dependency_analysis.tsv.gz"),
+        suptab43_pietilla_splicing_dependency_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","splicing_dependency_analysis.tsv.gz"),
         ## Pietilla - estimated drug responses
-        suptab40_pietilla_estimated_ic50 = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","estimated_ic50.tsv.gz"),
+        suptab44_pietilla_estimated_ic50 = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","estimated_ic50.tsv.gz"),
         ## Pietilla - ROC analysis
-        suptab41_pietilla_roc_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","roc_analysis.tsv.gz")
+        suptab45_pietilla_roc_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","roc_analysis.tsv.gz")
         
     output:
         directory(os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_tables'))

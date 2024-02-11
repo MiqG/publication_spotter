@@ -35,7 +35,7 @@ FONT_FAMILY = "Arial"
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
-# event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
+
 # selected_events_file = file.path(RESULTS_DIR,"files","selected_models-EX.txt")
 # psi_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # total_reads_file = file.path(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz")

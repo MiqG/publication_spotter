@@ -71,19 +71,20 @@ PAL_DRIVER_COMP = c(
 # splicing_file = file.path(PREP_DIR,"event_psi","CCLE-EX.tsv.gz")
 # cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 # ascanceratlas_file = file.path(RAW_DIR,"ASCancerAtlas","CASE_all-VastDB_mapped.tsv.gz")
-# gene_annot_file = file.path(RAW_DIR,"HGNC","gene_annotations.tsv.gz")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # metadata_file = file.path(PREP_DIR,"metadata","CCLE.tsv.gz")
-# #(TODO: preprocessing)shrna_raw_file = file.path(RAW_DIR,"DepMap","demeter2","")
-# shrna_seqs_file = file.path(RAW_DIR,"DepMap","demeter2","shRNA-mapping.csv")
+
 # shrna_mapping_gencode_file = file.path(PREP_DIR,"demeter2","shRNA_to_gencode.v44.transcripts-mapping_coords.tsv.gz")
 # shrna_mapping_vastdb_file = file.path(PREP_DIR,"demeter2","shRNA-mapping_to_vastdb_exons.tsv.gz")
-# models_achilles_file = file.path(RESULTS_DIR,'files','achilles','models_gene_dependency-EX','model_summaries.tsv.gz')
 # crispr_essentials_file = file.path(SUPPORT_DIR,"CRISPRInferredCommonEssentials.csv")
 # rnai_essentials_file = file.path(PREP_DIR,"demeter2","panessential_genes.tsv.gz")
 # ccle_info_file = file.path(SUPPORT_DIR,"ENA_filereport-PRJNA523380-CCLE.tsv")
-# gencode_annot_file = file.path(RAW_DIR,"GENCODE","gencode.v44.annotation.gtf.gz")
 # genome_annot_file = file.path(RAW_DIR,"GENCODE","Homo_sapiens.GRCh38.gencode_v44.sqlite")
+
+# exon_counts_file = file.path(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz")
+# genexpr_counts_file = file.path(RAW_DIR,"CCLE","vast_out","COUNTS-hg38-1019.tab.gz")
+
+
 # figs_dir = file.path(RESULTS_DIR,"figures","model_selection")
 
 ##### FUNCTIONS #####
@@ -314,7 +315,63 @@ compute_auc = function(x, y){
 }
 
 
-plot_model_selection = function(models, rnai_stats, cancer_events, 
+make_roc_analysis = function(models){
+    
+    ## ROC analysis - LR p-value
+    ### to detect cancer-driver exons
+    roc_cancer_driver = models %>%
+        mutate(is_ctl_pos = is_known_driver) %>%
+        roc(response=is_ctl_pos, predictor=lr_pvalue, 
+            levels=c(TRUE,FALSE), direction="<") %>%
+        coords(transpose=FALSE, re="all") %>% 
+        mutate(
+            fpr = 1 - specificity,
+            auc_tf = compute_auc(fpr, sensitivity),
+            auc_pr = compute_auc(recall, precision),
+            ground_truth = "is_known_driver"
+        )
+    
+    ### to detect common essentials
+    roc_essentials = models %>%
+        distinct(lr_pvalue, is_pan_essential, GENE) %>%
+        group_by(GENE) %>%
+        slice_min(lr_pvalue, n=1) %>%
+        ungroup() %>%
+        roc(response=is_pan_essential, predictor=lr_pvalue, 
+            levels=c(TRUE,FALSE), direction="<") %>%
+        coords(transpose=FALSE, re="all") %>% 
+        mutate(
+            fpr = 1 - specificity,
+            auc_tf = compute_auc(fpr, sensitivity),
+            auc_pr = compute_auc(recall, precision),
+            ground_truth = "is_pan_essential"
+        )
+    
+    ### to detect COSMIC
+    roc_cosmic = models %>%
+        distinct(lr_pvalue, in_cosmic, GENE) %>%
+        group_by(GENE) %>%
+        slice_min(lr_pvalue, n=1) %>%
+        ungroup() %>%
+        roc(response=in_cosmic, predictor=lr_pvalue, 
+            levels=c(TRUE,FALSE), direction="<") %>%
+        coords(transpose=FALSE, re="all") %>% 
+        mutate(
+            fpr = 1 - specificity,
+            auc_tf = compute_auc(fpr, sensitivity),
+            auc_pr = compute_auc(recall, precision),
+            ground_truth = "in_cosmic"
+        )
+    
+    roc_analysis = roc_cancer_driver %>%
+        bind_rows(roc_essentials) %>%
+        bind_rows(roc_cosmic)
+    
+    return(roc_analysis)
+}
+
+
+plot_model_selection = function(models, roc_analysis, rnai_stats, cancer_events, 
                                 eval_pvalue, eval_corr){
     plts = list()         
     
@@ -395,56 +452,6 @@ plot_model_selection = function(models, rnai_stats, cancer_events,
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         guides(fill="none") + 
         labs(x="", y="LR Test p-value")
-    
-    ## ROC analysis - LR p-value
-    ### to detect cancer-driver exons
-    roc_cancer_driver = models %>%
-        mutate(is_ctl_pos = is_known_driver) %>%
-        roc(response=is_ctl_pos, predictor=lr_pvalue, 
-            levels=c(TRUE,FALSE), direction="<") %>%
-        coords(transpose=FALSE, re="all") %>% 
-        mutate(
-            fpr = 1 - specificity,
-            auc_tf = compute_auc(fpr, sensitivity),
-            auc_pr = compute_auc(recall, precision),
-            ground_truth = "is_known_driver"
-        )
-    
-    ### to detect common essentials
-    roc_essentials = models %>%
-        distinct(lr_pvalue, is_pan_essential, GENE) %>%
-        group_by(GENE) %>%
-        slice_min(lr_pvalue, n=1) %>%
-        ungroup() %>%
-        roc(response=is_pan_essential, predictor=lr_pvalue, 
-            levels=c(TRUE,FALSE), direction="<") %>%
-        coords(transpose=FALSE, re="all") %>% 
-        mutate(
-            fpr = 1 - specificity,
-            auc_tf = compute_auc(fpr, sensitivity),
-            auc_pr = compute_auc(recall, precision),
-            ground_truth = "is_pan_essential"
-        )
-    
-    ### to detect COSMIC
-    roc_cosmic = models %>%
-        distinct(lr_pvalue, in_cosmic, GENE) %>%
-        group_by(GENE) %>%
-        slice_min(lr_pvalue, n=1) %>%
-        ungroup() %>%
-        roc(response=in_cosmic, predictor=lr_pvalue, 
-            levels=c(TRUE,FALSE), direction="<") %>%
-        coords(transpose=FALSE, re="all") %>% 
-        mutate(
-            fpr = 1 - specificity,
-            auc_tf = compute_auc(fpr, sensitivity),
-            auc_pr = compute_auc(recall, precision),
-            ground_truth = "in_cosmic"
-        )
-    
-    roc_analysis = roc_cancer_driver %>%
-        bind_rows(roc_essentials) %>%
-        bind_rows(roc_cosmic)
     
     plts[["model_sel-roc_analysis-fpr_vs_tpr-lr_pvalue-line"]] = roc_analysis %>%
         mutate(auc_lab = sprintf("AUC=%s",round(auc_tf,2))) %>%
@@ -721,6 +728,16 @@ plot_model_properties = function(models, enrichment,
                  fill="is_selected", palette=PAL_DUAL) +
         geom_boxplot(fill=NA, outlier.size = 0.1) +
         stat_compare_means(method="wilcox.test", size=FONT_SIZE, family=FONT_FAMILY) +
+        guides(color="none", fill="none") +
+        labs(x="Selected Model", y="Event Std.", fill="Selected Model")
+    
+    plts[["model_prop-selected_vs_event_std_vs_is_known_driver"]] = X %>%
+        ggviolin(x="is_selected", y="event_std", color=NA, trim=TRUE,
+                 fill="is_selected", palette=PAL_DUAL) +
+        geom_boxplot(fill=NA, outlier.size = 0.1) +
+        stat_compare_means(method="wilcox.test", size=FONT_SIZE, family=FONT_FAMILY) +
+        facet_wrap(~is_known_driver) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
         guides(color="none", fill="none") +
         labs(x="Selected Model", y="Event Std.", fill="Selected Model")
     
@@ -1232,7 +1249,7 @@ plot_rnai_qc = function(shrna_mapping, models){
 }
 
 
-plot_rnaseq_qc = function(metadata, rnai, exon_counts, genexpr_counts){
+plot_rnaseq_qc = function(models, metadata, rnai, exon_counts, genexpr_counts, event_info, gene_info){
     plts = list()
 
     X = metadata %>%
@@ -1361,21 +1378,21 @@ plot_spldep_qc = function(spldep_comparison){
 }
 
 
-make_plots = function(models, rnai_stats, cancer_events, 
+make_plots = function(models, roc_analysis, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
                       enrichment, spldep_stats, harm_stats, 
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
                       cosmic_comparison, shrna_mapping, spldep_comparison,
-                      exon_counts, genexpr_counts){
+                      exon_counts, genexpr_counts, event_info, gene_info){
     plts = list(
-        plot_model_selection(models, rnai_stats, cancer_events, eval_pvalue, eval_corr),
+        plot_model_selection(models, roc_analysis, rnai_stats, cancer_events, eval_pvalue, eval_corr),
         plot_model_properties(models, enrichment,spldep_stats, harm_stats),
         plot_model_validation(models, gene_mut_freq),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata),
         plot_cosmic_comparison(cosmic_comparison),
         plot_rnai_qc(shrna_mapping, models),
-        plot_rnaseq_qc(metadata, rnai, exon_counts, genexpr_counts),
+        plot_rnaseq_qc(models, metadata, rnai, exon_counts, genexpr_counts, event_info, gene_info),
         plot_spldep_qc(spldep_comparison)
     )
     plts = do.call(c,plts)
@@ -1383,13 +1400,13 @@ make_plots = function(models, rnai_stats, cancer_events,
 }
 
 
-make_figdata = function(models, rnai_stats, cancer_events, 
+make_figdata = function(models, roc_analysis, rnai_stats, cancer_events, 
                       eval_pvalue, eval_corr, 
                       enrichment, spldep_stats, harm_stats,
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
                       cosmic_comparison, shrna_mapping, spldep_comparison,
-                      exon_counts, genexpr_counts){
+                      exon_counts, genexpr_counts, event_info, gene_info){
     # prep enrichments
     df_enrichs = do.call(rbind,
         lapply(names(enrichment), function(e){
@@ -1413,7 +1430,9 @@ make_figdata = function(models, rnai_stats, cancer_events,
         "model_selection" = list(
             "model_summaries"= models,
             "rnai_stats" = rnai_stats,
-            "cancer_events" = cancer_events,
+            "event_prior_knowledge" = models %>% 
+                distinct(event_gene,EVENT,GENE,ENSEMBL,is_known_driver,is_pan_essential,in_cosmic),
+            "roc_analysis" = roc_analysis,
             "evaluation_pvalue" = eval_pvalue,
             "evaluation_correlation" = eval_corr
         ),
@@ -1475,6 +1494,7 @@ save_plots = function(plts, figs_dir){
     # model properties
     ## std
     save_plt(plts, "model_prop-selected_vs_event_std", ".pdf", figs_dir, width=4, height=5)
+    save_plt(plts, "model_prop-selected_vs_event_std_vs_is_known_driver", ".pdf", figs_dir, width=7, height=5)
     ## lengths
     save_plt(plts, "model_prop-selected_vs_event_length", ".pdf", figs_dir, width=4, height=5)
     ## n. exons
@@ -1559,6 +1579,7 @@ parseargs = function(){
         make_option("--msigdb_dir", type="character"),
         make_option("--protein_impact_file", type="character"),
         make_option("--cosmic_genes_file", type="character"),
+        make_option("--spldep_med_file", type="character"),
         make_option("--spldep_file", type="character"),
         make_option("--rnai_file", type="character"),
         make_option("--genexpr_file", type="character"),
@@ -1567,6 +1588,14 @@ parseargs = function(){
         make_option("--ascanceratlas_file", type="character"),
         make_option("--event_info_file", type="character"),
         make_option("--metadata_file", type="character"),
+        make_option("--shrna_mapping_gencode_file", type="character"),
+        make_option("--shrna_mapping_vastdb_file", type="character"),
+        make_option("--crispr_essentials_file", type="character"),
+        make_option("--rnai_essentials_file", type="character"),
+        make_option("--ccle_info_file", type="character"),
+        make_option("--genome_annot_file", type="character"),
+        make_option("--exon_counts_file", type="character"),
+        make_option("--genexpr_counts_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -1585,6 +1614,7 @@ main = function(){
     msigdb_dir = args[["msigdb_dir"]]
     protein_impact_file = args[["protein_impact_file"]]
     cosmic_genes_file = args[["cosmic_genes_file"]]
+    spldep_med_file = args[["spldep_med_file"]]
     spldep_file = args[["spldep_file"]]
     rnai_file = args[["rnai_file"]]
     genexpr_file = args[["genexpr_file"]]
@@ -1593,6 +1623,14 @@ main = function(){
     ascanceratlas_file = args[["ascanceratlas_file"]]
     event_info_file = args[["event_info_file"]]
     metadata_file = args[["metadata_file"]]
+    shrna_mapping_gencode_file = args[["shrna_mapping_gencode_file"]]
+    shrna_mapping_vastdb_file = args[["shrna_mapping_vastdb_file"]]
+    crispr_essentials_file = args[["crispr_essentials_file"]]
+    rnai_essentials_file = args[["rnai_essentials_file"]]
+    ccle_info_file = args[["ccle_info_file"]]
+    genome_annot_file = args[["genome_annot_file"]]
+    exon_counts_file = args[["exon_counts_file"]]
+    genexpr_counts_file = args[["genexpr_counts_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -1609,21 +1647,19 @@ main = function(){
     splicing = read_tsv(splicing_file)
     cancer_events = read_tsv(cancer_events_file)
     ascanceratlas = read_tsv(ascanceratlas_file)
-    gene_annot = read_tsv(gene_annot_file)
     event_info = read_tsv(event_info_file)
     metadata = read_tsv(metadata_file)
-    shrna_seqs = read_csv(shrna_seqs_file)
     shrna_mapping_gencode = read_tsv(shrna_mapping_gencode_file)
     shrna_mapping_vastdb = read_tsv(shrna_mapping_vastdb_file)
     genome_annot = ensembldb::EnsDb(genome_annot_file)
-    models_achilles = read_tsv(models_achilles_file)
     crispr_essentials = read_csv(crispr_essentials_file)
     rnai_essentials = read_csv(rnai_essentials_file)
     ccle_info = read_tsv(ccle_info_file)
+    exon_counts = read_tsv(exon_counts_file)
     
     # lowest and highest read counts
-    exon_counts = read_tsv(file.path(PREP_DIR,"event_total_reads","CCLE-EX.tsv.gz"), col_select=c("EVENT","ACH-000934","ACH-000143"))
-    genexpr_counts = read_tsv(file.path(RAW_DIR,"CCLE","vast_out","COUNTS-hg38-1019.tab.gz"), col_select=c("ID","NAME","SRR8615581_1","SRR8615995_1"))
+    exon_counts = read_tsv(exon_counts_file, col_select=c("EVENT","ACH-000934","ACH-000143"))
+    genexpr_counts = read_tsv(genexpr_counts_file, col_select=c("ID","NAME","SRR8615581_1","SRR8615995_1"))
     
     gc()
     
@@ -1803,28 +1839,30 @@ main = function(){
     shrna_mapping = n_targeted_exons_per_gene %>%
         left_join(shrna_mapping_vastdb, by="GENE")
     
+    roc_analysis = make_roc_analysis(models)
+    
     gc()
     
     # plot
     plts = make_plots(
-        models, rnai_stats, cancer_events, 
+        models, roc_analysis, rnai_stats, cancer_events, 
         eval_pvalue, eval_corr, 
         enrichment, spldep_stats, harm_stats, 
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
         cosmic_comparison, shrna_mapping, spldep_comparison,
-        exon_counts, genexpr_counts
+        exon_counts, genexpr_counts, event_info, gene_info
     )
 
     # make figdata
     figdata = make_figdata(
-        models, rnai_stats, cancer_events, 
+        models, roc_analysis, rnai_stats, cancer_events, 
         eval_pvalue, eval_corr, 
         enrichment, spldep_stats, harm_stats,
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
         cosmic_comparison, shrna_mapping, spldep_comparison,
-        exon_counts, genexpr_counts
+        exon_counts, genexpr_counts, event_info, gene_info
     )
     
     # save

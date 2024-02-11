@@ -558,11 +558,12 @@ plot_sso_optimization = function(sso_optimization){
     return(plts)
 }
 
-make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization){
+make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization, sso_seqs){
     plts = list(
         plot_validation(validation_clonogenic, validation_harm_scores),
         plot_prolif(prolif),
         plot_protein_domains(exon_info),
+        plot_sso_seqs(sso_seqs),
         plot_sso_optimization(sso_optimization)
     )
     plts = do.call(c,plts)
@@ -570,7 +571,7 @@ make_plots = function(validation_clonogenic, validation_harm_scores, prolif, exo
 }
 
 
-make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization){
+make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization, sso_seqs){
 
     figdata = list(
         "experiments" = list(
@@ -578,7 +579,8 @@ make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, e
             "validation_harm_scores" = validation_harm_scores,
             "proliferation_assay" = prolif,
             "exon_info" = exon_info,
-            "sso_optimization" = sso_optimization
+            "sso_optimization" = sso_optimization,
+            "sso_seqs" = sso_seqs
         )
     )
 }
@@ -651,6 +653,10 @@ parseargs = function(){
         make_option("--validation_spldep_file", type="character"),
         make_option("--validation_od_file", type="character"),
         make_option("--prolif_file", type="character"),
+        make_option("--exon_info_file", type="character"),
+        make_option("--domains_file", type="character"),
+        make_option("--sso_seqs_file", type="character"),
+        make_option("--sso_optimization_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -671,6 +677,10 @@ main = function(){
     validation_spldep_file = args[["validation_splicing_file"]]
     validation_od_file = args[["validation_od_file"]]
     prolif_file = args[["prolif_file"]]
+    exon_info_file = args[["exon_info_file"]]
+    domains_file = args[["domains_file"]]
+    sso_seqs_file = args[["sso_seqs_file"]]
+    sso_optimization_file = args[["sso_optimization_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -834,10 +844,10 @@ main = function(){
         )
     
     # plot
-    plts = make_plots(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization)
+    plts = make_plots(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization, sso_seqs)
     
     # make figdata
-    figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization)
+    figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization, sso_seqs)
 
     # save
     save_plots(plts, figs_dir)
