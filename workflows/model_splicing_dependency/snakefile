@@ -37,6 +37,8 @@ N_SAMPLES = {
 }
 SAVE_PARAMS = {"sep":"\t", "index":False, "compression":"gzip"}
 
+KRAS_TYPES = ["KRASmut","KRASwt"]
+
 # model selection parameters
 THRESH_PVALUE = 0.025
 THRESH_CORR = 0.2
@@ -88,7 +90,16 @@ rule all:
         ### compute splicing depenency
         os.path.join(RESULTS_DIR,"files","psi_uncertainty",'splicing_dependency-EX','CCLE'),
         ### make figures
-        os.path.join(RESULTS_DIR,"figures","psi_uncertainty")
+        os.path.join(RESULTS_DIR,"figures","psi_uncertainty"),
+        
+        ## KRASmut vs KRASwt models
+        ## subset
+        os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-KRASmut.tsv.gz'),
+        os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-KRASmut.tsv.gz"),
+        os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-KRASwt.tsv.gz'),
+        os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-KRASwt.tsv.gz"),
+        ## fit
+        expand(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{mut_type}-EX'), mut_type=KRAS_TYPES),
         
         
 ##### MODEL SELECTION #####
@@ -560,7 +571,8 @@ rule figures_validation_encore:
         event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
         gene_annot = os.path.join(RAW_DIR,"HGNC","gene_annotations.tsv.gz"),
         metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
-        crispr = os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
+        crispr = os.path.join(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz'),
+        event_prior_knowledge = os.path.join(RESULTS_DIR,'figures','model_selection')
     output:
         directory(os.path.join(RESULTS_DIR,'figures','validation_encore'))
     shell:
@@ -575,6 +587,7 @@ rule figures_validation_encore:
                     --event_info_file={input.event_info} \
                     --metadata_file={input.metadata} \
                     --crispr_file={input.crispr} \
+                    --event_prior_knowledge_file={input.event_prior_knowledge}/figdata/model_selection/event_prior_knowledge.tsv.gz \
                     --figs_dir={output}
         """
         
@@ -682,3 +695,92 @@ rule figures_psi_uncertainty:
                     --figs_dir={output}
         """    
         
+        
+##### KRAS MUTATIONS #####
+rule subset_by_KRAS_mutation:
+    input:
+        splicing = os.path.join(PREP_DIR,'event_psi','CCLE-EX.tsv.gz'),
+        genexpr = os.path.join(PREP_DIR,'genexpr_tpm','CCLE.tsv.gz'),
+        metadata = os.path.join(PREP_DIR,'metadata','CCLE.tsv.gz'),
+        mutations = os.path.join(RAW_DIR,'DepMap','achilles_ccle','CCLE_mutations.csv'),
+        mapping = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        splicing_KRASmut = os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-KRASmut.tsv.gz'),
+        genexpr_KRASmut = os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-KRASmut.tsv.gz"),
+        splicing_KRASwt = os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-KRASwt.tsv.gz'),
+        genexpr_KRASwt = os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-KRASwt.tsv.gz"),
+    run:
+        import pandas as pd
+        import numpy as np
+        
+        # load
+        splicing = pd.read_table(input.splicing, index_col=0, low_memory=False)
+        genexpr = pd.read_table(input.genexpr, index_col=0)
+        metadata = pd.read_table(input.metadata)
+        genes_oi = ["KRAS"]
+        mutations_oi = ["Missense_Mutation"]
+        mutations = pd.read_csv(input.mutations)
+        mapping = pd.read_table(input.mapping)
+        
+        # prep
+        mutations = mutations.loc[(
+            mutations["Hugo_Symbol"].isin(genes_oi) & 
+            mutations["Variant_Classification"].isin(mutations_oi)
+        )].copy()
+        
+        ## mutated
+        mutated_cells = mutations["DepMap_ID"]
+        cells_oi_mut = metadata.loc[metadata["DepMap_ID"].isin(mutated_cells),"DepMap_ID"]
+        cells_oi_mut = list(set(cells_oi_mut).intersection(genexpr.columns))
+        
+        # wild type
+        cells_oi_wt = metadata.loc[~metadata["DepMap_ID"].isin(mutated_cells),"DepMap_ID"]
+        cells_oi_wt = list(set(cells_oi_wt).intersection(genexpr.columns))
+        cells_oi_wt = cells_oi_wt[:len(cells_oi_mut)]
+        
+        # consider only genes of interest
+        events_oi = list(mapping.loc[mapping["GENE"].isin(genes_oi),"EVENT"].unique())
+        genes_oi = list(mapping.loc[mapping["GENE"].isin(genes_oi),"ENSEMBL"].unique())
+        splicing = splicing.loc[splicing.index.isin(events_oi),:].copy()
+        genexpr = genexpr.loc[genexpr.index.isin(genes_oi),:].copy()
+        
+        # save
+        splicing[cells_oi_mut].reset_index().to_csv(output.splicing_KRASmut, **SAVE_PARAMS)
+        genexpr[cells_oi_mut].reset_index().to_csv(output.genexpr_KRASmut, **SAVE_PARAMS)
+        splicing[cells_oi_wt].reset_index().to_csv(output.splicing_KRASwt, **SAVE_PARAMS)
+        genexpr[cells_oi_wt].reset_index().to_csv(output.genexpr_KRASwt, **SAVE_PARAMS)
+        
+        print("Done!")
+        
+        
+rule model_gene_dependency_subsetted:
+    input:
+        splicing_file = os.path.join(RESULTS_DIR,"files",'CCLE-event_psi-EX-{mut_type}.tsv.gz'),
+        genexpr_file = os.path.join(RESULTS_DIR,"files","CCLE-genexpr_tpm-{mut_type}.tsv.gz"),
+        gene_dependency_file = os.path.join(PREP_DIR,'demeter2','CCLE.tsv.gz'),
+        isoform_stats = os.path.join(PREP_DIR,'stats','CCLE.tsv.gz'),
+        mapping_file = os.path.join(RAW_DIR,'VastDB','event_annotation-Hs2.tsv.gz')
+    output:
+        directory(os.path.join(RESULTS_DIR,'files','models_gene_dependency-{mut_type}-EX'))
+    threads: 10
+    resources:
+        runtime = 3600*12, # 12h
+        memory = 50
+    params:
+        script_dir = TS_DIR,
+        n_iterations = 1000
+    shell:
+        """
+        export MKL_NUM_THREADS="1"
+        export OMP_NUM_THREADS="1"
+        
+        nice python {params.script_dir}/target_spotter spldep_fit \
+                    --gene_dependency_file={input.gene_dependency_file} \
+                    --splicing_file={input.splicing_file} \
+                    --genexpr_file={input.genexpr_file} \
+                    --mapping_file={input.mapping_file} \
+                    --output_dir={output} \
+                    --n_iterations={params.n_iterations} \
+                    --n_jobs={threads} \
+                    --log_transform
+        """

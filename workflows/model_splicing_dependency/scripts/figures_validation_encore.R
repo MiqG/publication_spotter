@@ -58,8 +58,10 @@ FONT_FAMILY = "Arial"
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # gene_annot_file = file.path(RAW_DIR,"HGNC","gene_annotations.tsv.gz")
 # metadata_file = file.path(PREP_DIR,'metadata','ENCORE.tsv.gz')
-# figs_dir = file.path(RESULTS_DIR,'figures','validation_encore')
 # crispr_file = file.path(PREP_DIR,'Thomas2020','crispr_screen.tsv.gz')
+# MODEL_SEL_DIR = file.path(RESULTS_DIR,"figures","model_selection","figdata")
+# event_prior_knowledge_file = file.path(MODEL_SEL_DIR,"model_selection","event_prior_knowledge.tsv.gz")
+# figs_dir = file.path(RESULTS_DIR,'figures','validation_encore')
 
 ##### FUNCTIONS #####
 prepare_data = function(
@@ -246,7 +248,7 @@ compute_correls_dyn_ranges = function(df){
 
 plot_encore_validation = function(
     df, correls_top_max, correls_dyn_ranges, 
-    event_info, metadata, events_crispr
+    event_info, metadata, events_crispr, event_prior_knowledge
 ){
     plts = list()
     
@@ -402,6 +404,7 @@ plot_encore_validation = function(
         count(cell_line, index) %>%
         group_by(cell_line) %>%
         slice_max(n, n=10) %>%
+        ungroup() %>%
         left_join(event_info, by=c("index"="EVENT")) %>%
         mutate(event_gene=paste0(index,"_",GENE))
     plts[["encore_val-top10-bars"]] = x %>% 
@@ -409,6 +412,29 @@ plot_encore_validation = function(
                   color=NA, palette=PAL_DUAL, position=position_dodge(0.9)) + 
         labs(x="Event & Gene", y="N. Exon in Top 10 Harm", fill="Cell Line") + 
         coord_flip()
+    
+     plts[["encore_val-top10_vs_prior_class-scatter"]] = X %>% 
+        group_by(cell_line, KD, demeter2) %>% 
+        slice_min(harm, n=10) %>%
+        ungroup() %>% 
+        count(cell_line, index) %>%
+        group_by(cell_line) %>%
+        ungroup() %>%
+        left_join(event_prior_knowledge, by=c("index"="EVENT")) %>%
+        pivot_longer(c(is_known_driver, is_pan_essential, in_cosmic, is_uncategorized), names_to="prior_class", values_to="is_class") %>%
+        filter(is_class) %>%
+        group_by(prior_class) %>%
+        arrange(-n) %>%
+        mutate(ranking=row_number()) %>%
+        ungroup() %>%
+        ggscatter(x="ranking", y="n", color="cell_line", palette=PAL_DUAL, size=1, alpha=0.5) +
+        facet_wrap(~cell_line+prior_class, nrow=2) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY), aspect.ratio=1) +
+        geom_text_repel(
+            aes(label=event_gene), . %>% group_by(cell_line, prior_class) %>% slice_max(n, n=3),
+            size=FONT_SIZE, segment.size=0.1, family=FONT_FAMILY, max.overlaps=50) +
+        labs(x="Ranking Event & Gene", y="N. Exon in Top 10 Harm", color="Cell Line")
+        
     
     # harm scores of Thomas 2020 exons?
     plts[["encore_val-harm-thomas2020"]] = X %>% 
@@ -436,12 +462,14 @@ plot_encore_validation = function(
 
 make_plots = function(
     df, correls_top_max, correls_dyn_ranges, 
-    event_info, metadata, events_crispr
+    event_info, metadata, events_crispr,
+    event_prior_knowledge
 ){
     plts = list(
         plot_encore_validation(
             df, correls_top_max, correls_dyn_ranges, 
-            event_info, metadata, events_crispr
+            event_info, metadata, events_crispr,
+            event_prior_knowledge
         )
     )
     plts = do.call(c,plts)
@@ -450,7 +478,7 @@ make_plots = function(
 
 
 make_figdata = function(
-    df, correls_top_max, correls_dyn_ranges
+    df, correls_top_max, correls_dyn_ranges, event_prior_knowledge
 ){
     
     evaluation = correls_top_max %>% 
@@ -461,7 +489,8 @@ make_figdata = function(
     figdata = list(
         "model_validation" = list(
             "spotter_results" = df,
-            "evaluation" = evaluation
+            "evaluation" = evaluation,
+            "event_prior_knowledge" = event_prior_knowledge
         )
     )
     return(figdata)
@@ -493,6 +522,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "encore_val-top1-scatters", ".pdf", figs_dir, width=5, height=10)
     save_plt(plts, "encore_val-top10-scatters", ".pdf", figs_dir, width=5, height=10)
     save_plt(plts, "encore_val-top10-bars", ".pdf", figs_dir, width=5, height=6.5)
+    save_plt(plts, "encore_val-top10_vs_prior_class-scatter", ".pdf", figs_dir, width=10, height=9)
     
     save_plt(plts, "encore_val-harm-hist", ".pdf", figs_dir, width=6, height=4)
     save_plt(plts, "encore_val-ranges_vs_pearsons", ".pdf", figs_dir, width=4.5, height=10.25)
@@ -535,7 +565,7 @@ parseargs = function(){
         make_option("--event_info_file", type="character"),
         make_option("--metadata_file", type="character"),
         make_option("--crispr_file", type="character"),
-        make_option("--psi_file", type="character"),
+        make_option("--event_prior_knowledge_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -557,6 +587,7 @@ main = function(){
     gene_annot_file = args[["gene_annot_file"]]
     metadata_file = args[["metadata_file"]]
     crispr_file = args[["crispr_file"]]
+    event_prior_knowledge_file = args[["event_prior_knowledge_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -571,8 +602,13 @@ main = function(){
     selected_events = readLines(selected_events_file)
     event_info = read_tsv(event_info_file)
     crispr = read_tsv(crispr_file)
-    
+    event_prior_knowledge = read_tsv(event_prior_knowledge_file)
     events_crispr = crispr %>% pull(EVENT) %>% unique()
+    
+    event_prior_knowledge = event_prior_knowledge %>%
+        rowwise() %>%
+        mutate(is_uncategorized = !any(c(is_known_driver, is_pan_essential, in_cosmic))) %>%
+        ungroup()
     
     df = prepare_data(
         metadata, event_info, rnai, diff_tpm, delta_psi, 
@@ -585,12 +621,13 @@ main = function(){
     # make plots
     plts = make_plots(
             df, correls_top_max, correls_dyn_ranges, 
-            event_info, metadata, events_crispr
+            event_info, metadata, events_crispr,
+            event_prior_knowledge
     )
 
     # make figdata
     figdata = make_figdata(
-        df, correls_top_max, correls_dyn_ranges
+        df, correls_top_max, correls_dyn_ranges, event_prior_knowledge
     )
     
     # save

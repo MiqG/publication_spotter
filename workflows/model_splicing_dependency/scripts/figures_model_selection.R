@@ -48,6 +48,7 @@ PAL_COSMIC_COMP = setNames(c("#d5b1d8ff","orange"),c("is_cancer_driver","has_can
 PAL_DRIVER_COMP = c(
     "in_cosmic" = "#d5b1d8ff",
     "is_known_driver" = PAL_SINGLE_ACCENT,
+    "is_uncategorized" = PAL_SINGLE_ACCENT,
     "is_pan_essential" = PAL_SINGLE_NEUTRAL
 )
 
@@ -657,12 +658,14 @@ plot_model_selection = function(models, roc_analysis, rnai_stats, cancer_events,
     # - TPR vs FDR with p-value thresholds
     plts[["model_sel-tpr_vs_fpr"]] = eval_pvalue %>% 
         ggbarplot(x="thresh", y="cumsums", fill=PAL_SINGLE_LIGHT, color=NA) +
-        labs(x="Thresholds LR Test p-value", y="CumSum(TPR - FPR)") +
         geom_text(aes(y=0.8+0.10, label=total_events), 
                   size=FONT_SIZE, family=FONT_FAMILY, color="black") +
         geom_text(aes(y=0.8+0.05, label=total_genes), 
-                  size=FONT_SIZE, family=FONT_FAMILY, color="black") + 
-        theme_pubr(x.text.angle=45)
+                  size=FONT_SIZE, family=FONT_FAMILY, color="black") +
+        theme_pubr(x.text.angle=45) + 
+        labs(x="Thresholds LR Test p-value", y="CumSum(TPR - FPR)") +
+        facet_wrap(~size_ctl_neg, nrow=1) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
     
     # - Spearman correlation with Pearson threshold
     # find the threshold for the mean pearson correlation
@@ -673,6 +676,7 @@ plot_model_selection = function(models, roc_analysis, rnai_stats, cancer_events,
         labs(x="Pearson Correlation Mean (Test Set)", y="Count")
     
     plts[["model_sel-pearson_corr_vs_spearman"]] = eval_corr %>%
+        filter(size_ctl_neg==SIZE_CTL & size_ctl_pos==SIZE_CTL) %>%
         ggviolin(x="thresh_fct", y="corr", fill=PAL_SINGLE_LIGHT, color=NA, trim=TRUE) + 
         geom_boxplot(fill=NA, outlier.size=0.1, width=0.2) +
         labs(x="Thresholds Single-Model Avg. Pearson Correlation", y="Spearman Correlation") +
@@ -707,6 +711,19 @@ plot_model_selection = function(models, roc_analysis, rnai_stats, cancer_events,
         theme_pubr() +
         theme(aspect.ratio=1) +
         labs(x="N Observations", y="Pearson Correlation Mean")
+    
+    # LR p-values vs number of exons per gene
+    plts[["model_sel-n_exons_vs_pvalue-scatter"]] = models %>%
+        group_by(GENE, ENSEMBL) %>%
+        mutate(n_exons = n()) %>%
+        ungroup() %>%
+        ggplot(aes(x=n_exons, y=lr_pvalue)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_NEUTRAL) +
+        geom_density_2d(linetype="dashed", color="black", size=LINE_SIZE) + 
+        stat_cor(method="spearman", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="N Exons per Gene", y="LR p-value")
     
     return(plts)
 }
@@ -1018,7 +1035,20 @@ plot_model_validation = function(models, gene_mut_freq){
         fill_palette(PAL_DUAL) +
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb) Norm.", fill="Selected Model") +
         theme_pubr(x.text.angle=70)
-      
+    
+    plts[["model_val-mutation_gene_ranking-scatter"]] = gene_mut_freq %>%
+        filter(n>1) %>%
+        group_by(Variant_Classification) %>%
+        arrange(-n) %>%
+        mutate(ranking = row_number()) %>%
+        ungroup() %>%
+        ggplot(aes(x=ranking, y=n)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=5, alpha=0.5, color=PAL_SINGLE_DARK) +
+        theme_pubr() + 
+        facet_wrap(~Variant_Classification) +
+        theme(strip.text.x = element_text(size=6, family=FONT_FAMILY)) +
+        labs(x="Ranking", y="N Mutations")
+    
     return(plts)
 }
 
@@ -1108,33 +1138,24 @@ plot_events_oi = function(models, cancer_events, rnai, spldep, splicing, genexpr
 }
 
 
-plot_cosmic_comparison = function(cosmic_comparison){
+plot_pathway_comparison = function(pathway_comparison){
     plts = list()
     
-    X = cosmic_comparison
-    
-    x = sapply(c("is_cancer_driver", "has_cancer_driver_exon"), function(col){
-            genes_oi = X %>%
-                distinct(gene, is_cancer_driver, has_cancer_driver_exon) %>%
-                filter(get(col)) %>%
-                pull(gene)
-            return(genes_oi)
-    }, simplify=FALSE)
-    plts[["cosmic_comparison-overlap-venn"]] = x %>%
-        ggvenn(
-            fill_color = as.character(PAL_COSMIC_COMP),
-            stroke_color = NA,
-            set_name_size = FONT_SIZE+0.5,
-            text_size = FONT_SIZE
-        )
-    
+    # only uncategorized genes
+    X = pathway_comparison %>%
+        rowwise() %>%
+        mutate(
+            is_uncategorized = !any(c(in_cosmic,is_pan_essential,is_known_driver)) & is_selected,
+            is_sel_panessential = is_pan_essential & is_selected
+        ) %>%
+        ungroup()
     
     x = X %>%
         pivot_longer(
-            c(has_cancer_driver_exon, is_cancer_driver), 
+            c(is_selected, in_cosmic, is_pan_essential, is_known_driver, is_uncategorized), 
             names_to="gene_set", values_to="in_gene_set"
         ) %>%
-        filter(in_gene_set) %>%
+        filter(in_gene_set & !c(gene_set%in%c("is_selected"))) %>%
         drop_na(term) %>%
         group_by(gene_set) %>%
         count(term) %>%
@@ -1142,29 +1163,68 @@ plot_cosmic_comparison = function(cosmic_comparison){
         ungroup()
     terms_oi = x %>%
         group_by(gene_set) %>%
-        slice_max(perc, n=10) %>%
+        slice_max(perc, n=50) %>%
         ungroup() %>%
         pull(term) %>%
         unique()
     terms_order = x %>%
         filter(term %in% terms_oi) %>%
         pivot_wider(id_cols=term, names_from=gene_set, values_from=perc) %>%
-        mutate(perc_diff = has_cancer_driver_exon - is_cancer_driver) %>%
-        arrange(-has_cancer_driver_exon) %>%
+        arrange(-is_uncategorized) %>%
         pull(term)
-        
-    plts[["cosmic_comparison-reactome-bar"]] = x %>%
+    
+    x = x %>%
         filter(term %in% terms_oi) %>%
-        mutate(term = factor(term, levels=terms_order)) %>%
-        ggplot(aes(x=term, y=perc, group=gene_set)) +
-        geom_col(aes(fill=gene_set), color=NA, position="dodge") + 
-        geom_text(
-            aes(label=n), position=position_dodge(width=0.9),
-            size=FONT_SIZE, family=FONT_FAMILY, hjust=0, vjust=0, angle=45
-        ) +
-        fill_palette(PAL_COSMIC_COMP) +
-        theme_pubr(x.text.angle = 70) +
-        labs(x="Reactome Pathway", y="% Overlap", fill="Gene Set")
+        pivot_wider(id_cols="term", values_from="perc", names_from="gene_set") %>%
+        drop_na()
+    
+    plts[["pathway_comparison-uncategorized_vs_cosmic-reactome-scatter"]] = x %>%
+        ggplot(aes(x=is_uncategorized, y=in_cosmic)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color=PAL_DRIVER_COMP[["in_cosmic"]]) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="% Pathway Overlap\nUncategorized", y="% Pathway Overlap\nCOSMIC-CGC Genes")
+        
+    plts[["pathway_comparison-uncategorized_vs_panessential-reactome-scatter"]] = x %>%
+        ggplot(aes(x=is_uncategorized, y=is_pan_essential)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color=PAL_DRIVER_COMP[["is_pan_essential"]]) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="% Pathway Overlap\nUncategorized", y="% Pathway Overlap\nPan-Essential Genes")
+    
+    plts[["pathway_comparison-uncategorized_vs_known_driver_exons-reactome-scatter"]] = x %>%
+        ggplot(aes(x=is_uncategorized, y=is_known_driver)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color=PAL_DRIVER_COMP[["is_known_driver"]]) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="% Pathway Overlap\nUncategorized", y="% Pathway Overlap\nGenes with Known Driver Exons")
+    
+    plts[["pathway_comparison-known_driver_exons_vs_cosmic-reactome-scatter"]] = x %>%
+        ggplot(aes(x=is_known_driver, y=in_cosmic)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color=PAL_SINGLE_DARK) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="% Pathway Overlap\nGenes with Known Driver Exons", y="% Pathway Overlap\nCOSMIC-CGC Genes")
+    
+    plts[["pathway_comparison-known_driver_exons_vs_panessential-reactome-scatter"]] = x %>%
+        ggplot(aes(x=is_known_driver, y=is_pan_essential)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color=PAL_SINGLE_DARK) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="% Pathway Overlap\nGenes with Known Driver Exons", y="% Pathway Overlap\nPan-Essential Genes")
+    
+    plts[["pathway_comparison-cosmic_vs_panessential-reactome-scatter"]] = x %>%
+        ggplot(aes(x=in_cosmic, y=is_pan_essential)) +
+        geom_scattermore(pixels = c(1000,1000), pointsize=15, alpha=0.5, color=PAL_SINGLE_DARK) +
+        stat_cor(method="pearson", size=FONT_SIZE, family=FONT_FAMILY) +
+        theme_pubr() +
+        theme(aspect.ratio=1) +
+        labs(x="% Pathway Overlap\nCOSMIC-CGC Genes", y="% Pathway Overlap\nPan-Essential Genes")
     
     return(plts)
 }
@@ -1383,14 +1443,14 @@ make_plots = function(models, roc_analysis, rnai_stats, cancer_events,
                       enrichment, spldep_stats, harm_stats, 
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
-                      cosmic_comparison, shrna_mapping, spldep_comparison,
+                      pathway_comparison, shrna_mapping, spldep_comparison,
                       exon_counts, genexpr_counts, event_info, gene_info){
     plts = list(
         plot_model_selection(models, roc_analysis, rnai_stats, cancer_events, eval_pvalue, eval_corr),
         plot_model_properties(models, enrichment,spldep_stats, harm_stats),
         plot_model_validation(models, gene_mut_freq),
         plot_events_oi(models, cancer_events, rnai, spldep, splicing, genexpr, metadata),
-        plot_cosmic_comparison(cosmic_comparison),
+        plot_pathway_comparison(pathway_comparison),
         plot_rnai_qc(shrna_mapping, models),
         plot_rnaseq_qc(models, metadata, rnai, exon_counts, genexpr_counts, event_info, gene_info),
         plot_spldep_qc(spldep_comparison)
@@ -1405,7 +1465,7 @@ make_figdata = function(models, roc_analysis, rnai_stats, cancer_events,
                       enrichment, spldep_stats, harm_stats,
                       gene_mut_freq, 
                       rnai, spldep, splicing, genexpr, metadata, 
-                      cosmic_comparison, shrna_mapping, spldep_comparison,
+                      pathway_comparison, shrna_mapping, spldep_comparison,
                       exon_counts, genexpr_counts, event_info, gene_info){
     # prep enrichments
     df_enrichs = do.call(rbind,
@@ -1439,7 +1499,7 @@ make_figdata = function(models, roc_analysis, rnai_stats, cancer_events,
         "model_properties" = list(
             "gsoa_selected" = df_enrichs,
             "splicing_dependecy_stats" = spldep_stats,
-            "cosmic_comparison" = cosmic_comparison
+            "pathway_comparison" = pathway_comparison
         ),
         "model_validation" = list(
             "gene_mutation_frequency" = gene_mut_freq
@@ -1475,7 +1535,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_sel-gt_lists_vs_lr_pvalue-random", ".pdf", figs_dir, width=8.5, height=5)
     save_plt(plts, "model_sel-gt_lists_vs_lr_pvalue-lowest", ".pdf", figs_dir, width=8.5, height=5)
     save_plt(plts, "model_sel-lr_pvalue", ".pdf", figs_dir, width=4, height=4)
-    save_plt(plts, "model_sel-tpr_vs_fpr", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "model_sel-tpr_vs_fpr", ".pdf", figs_dir, width=12, height=6)
     ## pearson selection
     save_plt(plts, "model_sel-pearson_corr", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_sel-pearson_corr_vs_spearman", ".pdf", figs_dir, width=5, height=5)
@@ -1490,6 +1550,7 @@ save_plots = function(plts, figs_dir){
     ## selection variables vs n observations
     save_plt(plts, "model_sel-n_obs_vs_pvalue-scatter", ".pdf", figs_dir, width=5, height=5)
     save_plt(plts, "model_sel-n_obs_vs_pearson-scatter", ".pdf", figs_dir, width=5, height=5)
+    save_plt(plts, "model_sel-n_exons_vs_pvalue-scatter", ".pdf", figs_dir, width=5, height=5)
     
     # model properties
     ## std
@@ -1523,6 +1584,7 @@ save_plots = function(plts, figs_dir){
     save_plt(plts, "model_val-mutation_gene_frequency", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_gene_frequency_without_known_genes", ".pdf", figs_dir, width=8, height=8)
     save_plt(plts, "model_val-mutation_gene_frequency_silent_norm", ".pdf", figs_dir, width=8, height=8)
+    save_plt(plts, "model_val-mutation_gene_ranking-scatter", ".pdf", figs_dir, width=15, height=15)
     
     # events oi
     genes_oi = c("KRAS","SMNDC1","NUMB","NUMB_lung")
@@ -1535,8 +1597,12 @@ save_plots = function(plts, figs_dir){
     })
     
     # comparison cosmic
-    save_plt(plts, "cosmic_comparison-overlap-venn", ".pdf", figs_dir, width=4, height=4)
-    save_plt(plts, "cosmic_comparison-reactome-bar", ".pdf", figs_dir, width=8, height=18)
+    save_plt(plts, "pathway_comparison-uncategorized_vs_cosmic-reactome-scatter", ".pdf", figs_dir, width=4, height=4)
+    save_plt(plts, "pathway_comparison-uncategorized_vs_panessential-reactome-scatter", ".pdf", figs_dir, width=4, height=4)
+    save_plt(plts, "pathway_comparison-uncategorized_vs_known_driver_exons-reactome-scatter", ".pdf", figs_dir, width=4, height=4)
+    save_plt(plts, "pathway_comparison-known_driver_exons_vs_cosmic-reactome-scatter", ".pdf", figs_dir, width=4, height=4)
+    save_plt(plts, "pathway_comparison-known_driver_exons_vs_panessential-reactome-scatter", ".pdf", figs_dir, width=4, height=4)
+    save_plt(plts, "pathway_comparison-cosmic_vs_panessential-reactome-scatter", ".pdf", figs_dir, width=4, height=4)
     
     # RNAi (shRNA) QC
     save_plt(plts, "rnai_qc-n_targeted_exons_per_gene-hist", ".pdf", figs_dir, width=5, height=2.5)
@@ -1745,16 +1811,34 @@ main = function(){
         left_join(cancer_events, by="GENE") %>%
         pull(EVENT) %>%
         unique()
-    ctl_neg = rnai_stats %>% 
-        filter(!(GENE %in% ctl_pos_genes)) %>% # do not include positive controls
-        slice_min(order_by = rnai_std, n=SIZE_CTL) %>% # selected top 100
-        pull(GENE)
-    cancer_events = cancer_events %>%
-        mutate(is_ctl_pos = EVENT %in% ctl_pos,
-               is_ctl_neg = GENE %in% ctl_neg)
-    ### evaluate thresholds
-    eval_pvalue = thresh_eval_pvalue(models, ctl_neg, ctl_pos)
-    eval_corr = thresh_eval_corr(models, rnai, spldep, ctl_neg, ctl_pos)
+    
+    sizes_ctl_neg = c(1e2,1e3,1e4)
+    eval_pvalue = list()
+    eval_corr = list()
+    for (size_ctl_neg in sizes_ctl_neg){
+        
+        ctl_neg = rnai_stats %>% 
+            filter(!(GENE %in% ctl_pos_genes)) %>% # do not include positive controls
+            slice_min(order_by = rnai_std, n=size_ctl_neg) %>% # selected top 100
+            pull(GENE)
+        cancer_events = cancer_events %>%
+            mutate(is_ctl_pos = EVENT %in% ctl_pos,
+                   is_ctl_neg = GENE %in% ctl_neg)
+        ### evaluate thresholds
+        eval_pvalue[[size_ctl_neg]] = thresh_eval_pvalue(models, ctl_neg, ctl_pos) %>%
+            mutate(
+                size_ctl_neg = size_ctl_neg,
+                size_ctl_pos = SIZE_CTL
+            )
+        eval_corr[[size_ctl_neg]] = thresh_eval_corr(models, rnai, spldep, ctl_neg, ctl_pos) %>%
+            mutate(
+                size_ctl_neg = size_ctl_neg,
+                size_ctl_pos = SIZE_CTL
+            )
+    }
+    eval_pvalue = eval_pvalue %>% bind_rows()
+    eval_corr = eval_corr %>% bind_rows()
+
     
     ## model properties
     ### GSEA of selected events
@@ -1791,20 +1875,16 @@ main = function(){
     
     harm_stats = get_spldep_stats(harm %>% rownames_to_column("index"), models)
     
-    # number of selected genes in COSMIC
-    available_genes = models %>% pull(GENE) %>% unique() 
-    selected_genes = models %>% filter(is_selected) %>% pull(GENE) %>% unique()
-    cosmic_comparison = data.frame(gene = available_genes) %>%
+    # pathway level analysis of the genes carrying selected exons
+    pathway_comparison = models %>%
+        group_by(ENSEMBL, GENE) %>%
         mutate(
-            has_cancer_driver_exon = gene %in% selected_genes,
-            is_cancer_driver = gene %in% ontologies[["cosmic"]][["gene"]]
-        ) %>% 
-        left_join(ontologies[["reactome"]], by="gene")
-    cosmic_test = cosmic_comparison %>%
-        distinct(gene, has_cancer_driver_exon, is_cancer_driver) %>%
-        with(table(has_cancer_driver_exon, is_cancer_driver)) %>%
-        fisher.test()
-    # 74 cancer driver genes have cancer-driver exons
+            is_known_driver = any(is_known_driver),
+            is_selected = any(is_selected)
+        ) %>%
+        ungroup() %>%
+        distinct(ENSEMBL, GENE, in_cosmic, is_pan_essential, is_known_driver, is_selected) %>%
+        left_join(ontologies[["reactome"]], by=c("GENE"="gene"))
     
     # spldep comparison
     spldep_comparison = spldep[,1:51] %>%
@@ -1850,7 +1930,7 @@ main = function(){
         enrichment, spldep_stats, harm_stats, 
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
-        cosmic_comparison, shrna_mapping, spldep_comparison,
+        pathway_comparison, shrna_mapping, spldep_comparison,
         exon_counts, genexpr_counts, event_info, gene_info
     )
 
@@ -1861,7 +1941,7 @@ main = function(){
         enrichment, spldep_stats, harm_stats,
         gene_mut_freq,
         rnai, spldep, splicing, genexpr, metadata,
-        cosmic_comparison, shrna_mapping, spldep_comparison,
+        pathway_comparison, shrna_mapping, spldep_comparison,
         exon_counts, genexpr_counts, event_info, gene_info
     )
     
