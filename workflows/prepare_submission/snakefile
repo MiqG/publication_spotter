@@ -36,34 +36,34 @@ rule supplementary_tables:
     input:
         # prior knowledge
         suptab01_event_prior_knowledge = os.path.join(MODEL_SEL_DIR,"model_selection","event_prior_knowledge.tsv.gz"),
+        # pathway comparison
+        suptab02_pathway_comparison = os.path.join(MODEL_SEL_DIR,"model_properties","pathway_comparison.tsv.gz"),
         # model cancer-driver exons
         ## CCLE RNAi - demeter2
-        suptab02_ccle_demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        suptab03_ccle_demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
         ## CCLE tpm
-        suptab03_ccle_tpm = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        suptab04_ccle_tpm = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         ## CCLE psi
-        suptab04_ccle_psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        suptab05_ccle_psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
         ## CCLE metadata
-        suptab05_ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        suptab06_ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
         ## model summaries
-        suptab06_model_summaries = os.path.join(MODEL_SEL_DIR,"model_selection","model_summaries.tsv.gz"),
+        suptab07_model_summaries = os.path.join(MODEL_SEL_DIR,"model_selection","model_summaries.tsv.gz"),
         ## ROC evaluation
-        suptab07_roc_evaluation = os.path.join(MODEL_SEL_DIR,"model_selection","roc_analysis.tsv.gz"),
+        suptab08_roc_evaluation = os.path.join(MODEL_SEL_DIR,"model_selection","roc_analysis.tsv.gz"),
         ## shRNA mapping
-        suptab08_shrna_mapping = os.path.join(MODEL_SEL_DIR,"qc","shrna_mapping.tsv.gz"),
+        suptab09_shrna_mapping = os.path.join(MODEL_SEL_DIR,"qc","shrna_mapping.tsv.gz"),
         
         ## rnai stats
-        suptab09_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
+        suptab10_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
         ## lr-tests thresholds
-        suptab10_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
+        suptab11_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
         ## pearson thresholds
-        suptab11_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
+        suptab12_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
         ## psi simulation
-        suptab12_psi_simulation = os.path.join(PSI_UNC_DIR,"psi_uncertainty","simulations.tsv.gz"),
+        suptab13_psi_simulation = os.path.join(PSI_UNC_DIR,"psi_uncertainty","simulations.tsv.gz"),
         ## uncertainty evaluation
-        suptab13_uncertainty_eval = os.path.join(PSI_UNC_DIR,"psi_uncertainty","uncertainty_quant.tsv.gz"),
-        ## cosmic comparison
-        suptab14_cosmic_comparison = os.path.join(MODEL_SEL_DIR,"model_properties","cosmic_comparison.tsv.gz"),
+        suptab14_uncertainty_eval = os.path.join(PSI_UNC_DIR,"psi_uncertainty","uncertainty_quant.tsv.gz"),
         ## gsoa
         suptab15_gsoa = os.path.join(MODEL_SEL_DIR,"model_properties","gsoa_selected.tsv.gz"),
         ## gene-level mutation frequency
