@@ -54,24 +54,24 @@ rule supplementary_tables:
         ## shRNA mapping
         suptab09_shrna_mapping = os.path.join(MODEL_SEL_DIR,"qc","shrna_mapping.tsv.gz"),
         
-        ## rnai stats
-        suptab10_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
-        ## lr-tests thresholds
-        suptab11_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
-        ## pearson thresholds
-        suptab12_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
         ## psi simulation
-        suptab13_psi_simulation = os.path.join(PSI_UNC_DIR,"psi_uncertainty","simulations.tsv.gz"),
+        suptab10_psi_simulation = os.path.join(PSI_UNC_DIR,"psi_uncertainty","simulations.tsv.gz"),
         ## uncertainty evaluation
-        suptab14_uncertainty_eval = os.path.join(PSI_UNC_DIR,"psi_uncertainty","uncertainty_quant.tsv.gz"),
+        suptab11_uncertainty_eval = os.path.join(PSI_UNC_DIR,"psi_uncertainty","uncertainty_quant.tsv.gz"),
+        ## rnai stats
+        suptab12_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
+        ## lr-tests thresholds
+        suptab13_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
+        ## pearson thresholds
+        suptab14_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
         ## gsoa
         suptab15_gsoa = os.path.join(MODEL_SEL_DIR,"model_properties","gsoa_selected.tsv.gz"),
-        ## gene-level mutation frequency
-        suptab16_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
         ## splicing dependency CCLE
-        suptab17_spldep_ccle = os.path.join(RESULTS_DIR,"model_splicing_dependency","files","splicing_dependency-EX","mean.tsv.gz"),
+        suptab16_spldep_ccle = os.path.join(RESULTS_DIR,"model_splicing_dependency","files","splicing_dependency-EX","mean.tsv.gz"),
         ## splicing dependency summary stats
-        suptab18_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
+        suptab17_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
+        ## gene-level mutation frequency
+        suptab18_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
         ## SF mutations summary
         suptab19_sf_mutations_harm_scores = os.path.join(SF_MUTATIONS_DIR,"sf_mutations","diff_max_harm.tsv.gz"),
         
