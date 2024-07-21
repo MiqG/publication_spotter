@@ -329,7 +329,8 @@ rule figures_targetable_events:
         spldep_stats_subtypes = os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','summary_splicing_dependency-EX.tsv.gz'),
         diff_result_sample = os.path.join(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
         diff_result_subtypes = os.path.join(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz'),
-        protein_impact = os.path.join(RAW_DIR,"VastDB","PROT_IMPACT-hg38-v3.tab.gz")
+        protein_impact = os.path.join(RAW_DIR,"VastDB","PROT_IMPACT-hg38-v3.tab.gz"),
+        cancer_events = os.path.join(ROOT,"support","cancer_events.tsv")
     output:
         directory(os.path.join(RESULTS_DIR,'figures','targetable_events'))
     shell:
@@ -342,6 +343,7 @@ rule figures_targetable_events:
                     --diff_result_sample_file={input.diff_result_sample} \
                     --diff_result_subtypes_file={input.diff_result_subtypes} \
                     --protein_impact_file={input.protein_impact} \
+                    --cancer_events_file={input.cancer_events} \
                     --figs_dir={output}        
         """
         

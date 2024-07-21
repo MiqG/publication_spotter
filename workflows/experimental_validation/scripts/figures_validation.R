@@ -89,7 +89,7 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         color_palette(PAL_REPLICATES) +
         labs(x="Condition", y="Cell Proliferation (OD570)", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
-        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
+        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.format", 
                            size=FONT_SIZE, family=FONT_FAMILY) + 
         facet_wrap(~CCLE_Name, ncol=1) +
         theme(strip.text.x = element_text(size=6, family=FONT_FAMILY))
@@ -102,7 +102,7 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         color_palette(PAL_REPLICATES) +
         labs(x="Condition", y="Cell Proliferation (Norm. OD570)", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
-        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
+        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.format", 
                            size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_hline(yintercept=1, linetype='dashed', size=LINE_SIZE) +
         facet_wrap(~CCLE_Name, ncol=1) +
@@ -117,7 +117,7 @@ plot_validation = function(validation_clonogenic, validation_harm_scores){
         color_palette(PAL_REPLICATES) +
         labs(x="Condition", y="Cell Proliferation (Norm. OD570)", color="Replicate") +
         theme_pubr(x.text.angle = 70) +
-        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.signif", 
+        stat_compare_means(ref.group="CONTROL_NEG", method="t.test", label="p.format", 
                            size=FONT_SIZE, family=FONT_FAMILY) + 
         geom_hline(yintercept=1, linetype='dashed', size=LINE_SIZE) +
         facet_wrap(~CCLE_Name, ncol=1) +
@@ -585,6 +585,41 @@ make_figdata = function(validation_clonogenic, validation_harm_scores, prolif, e
     )
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # FIGURE 3
+        ## Fig. 3c
+        "fig03c" = plts[["validation-od_norm_averaged"]][["data"]] %>%
+            filter(CCLE_Name!="HT29_LARGE_INTESTINE"),
+        
+        # SUPPLEMENTARY FIGURE 8
+        ## Sup. Fig. 8b
+        "supfig08b" = plts[["validation-psi_effects"]][["data"]] %>%
+            filter(CCLE_Name!="HT29_LARGE_INTESTINE"),
+        
+        ## Sup. Fig. 8c
+        "supfig08c" = plts[["validation-od_vs_harm_combined_centered-high_prolif"]][["data"]],
+        
+        # SUPPLEMENTARY FIGURE 10
+        ## Sup. Fig. 10a
+        "supfig10a" = plts[["prolif-time_vs_od-scatter"]][["data"]],
+        
+        ## Sup. Fig. 10c
+        "supfig10c" = plts[["validation-od_norm_averaged"]][["data"]] %>%
+            filter(CCLE_Name=="HT29_LARGE_INTESTINE"),
+        
+        # SUPPLEMENTARY FIGURE 11
+        ## Sup. Fig. 11b
+        "supfig11b" = plts[["validation-psi_effects"]][["data"]] %>%
+            filter(CCLE_Name=="HT29_LARGE_INTESTINE"),
+        
+        # SUPPLEMENTARY FIGURE 13
+        "supfig13" = plts[["validation-od_norm_averaged-a549_vs_mdamb231"]][["data"]]
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension='.pdf', 
                     directory='', dpi=350, format=TRUE,
@@ -599,7 +634,6 @@ save_plt = function(plts, plt_name, extension='.pdf',
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units='cm')
 }
-
 
 save_plots = function(plts, figs_dir){
     save_plt(plts, "validation-od_raw", '.pdf', figs_dir, width=5, height=16)
@@ -638,6 +672,17 @@ save_figdata = function(figdata, dir){
             
             print(filename)
         })
+    })
+}
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
     })
 }
 
@@ -849,9 +894,13 @@ main = function(){
     # make figdata
     figdata = make_figdata(validation_clonogenic, validation_harm_scores, prolif, exon_info, sso_optimization, sso_seqs)
 
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

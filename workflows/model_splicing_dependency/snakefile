@@ -66,7 +66,7 @@ rule all:
         expand(os.path.join(RESULTS_DIR,'files','{dataset}','splicing_dependency-{event_type}'), event_type=EVENT_TYPES, dataset=["Thomas2020","Hart2015"]),
         ### make figures
         os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Thomas2020'),
-        os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020'),        
+        os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','GonatopoulosPournatzis2020'),        
         
         ## ENCORE RBP KD SCREENS
         ### compute splicing dependencies
@@ -323,14 +323,14 @@ rule figures_validation_crispr_Thomas2020:
         
 rule figures_validation_crispr_GonatopoulosPournatzis2020:
     input:
-        crispr = os.path.join(RAW_DIR,"articles","Gonatopoulos-Pournatzis2020","exon_targeting_library_scores.xlsx"),
+        crispr = os.path.join(RAW_DIR,"articles","GonatopoulosPournatzis2020","exon_targeting_library_scores.xlsx"),
         event_info = os.path.join(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv"),
         psi = os.path.join(RAW_DIR,'articles','Hart2015','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz'),
         tpm = os.path.join(RAW_DIR,'articles','Hart2015','vast_out','TPM-hg38-12.tab.gz'),
         selected_events = os.path.join(RESULTS_DIR,"files","selected_models-EX.txt"),
         spldep = os.path.join(RESULTS_DIR,'files','Hart2015','splicing_dependency-EX','mean.tsv.gz'),
     output:
-        directory(os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','Gonatopoulos-Pournatzis2020'))
+        directory(os.path.join(RESULTS_DIR,'figures','validation_crispr_screen','GonatopoulosPournatzis2020'))
     params:
         total = 100
     shell:

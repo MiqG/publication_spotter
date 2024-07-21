@@ -63,8 +63,7 @@ FONT_FAMILY = "Arial"
 # diff_result_sample_file = file.path(RESULTS_DIR,'files','PANCAN','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # diff_result_subtypes_file = file.path(RESULTS_DIR,'files','PANCAN_subtypes','mannwhitneyu-PrimaryTumor_vs_SolidTissueNormal-EX.tsv.gz')
 # protein_impact_file = file.path(ROOT,"data","raw","VastDB","PROT_IMPACT-hg38-v3.tab.gz")
-
-# figdata_cancer_events_file = file.path(ROOT,'results','model_splicing_dependency','figures','model_selection',"figdata","model_selection","cancer_events.tsv.gz")
+# cancer_events_file = file.path(ROOT,"support","cancer_events.tsv")
 
 # figs_dir = file.path(RESULTS_DIR,'figures','targetable_events')
 
@@ -85,7 +84,7 @@ prep_diff_result = function(diff_result, spldep_stats){
 }
 
 
-plot_top_candidates_sample_type = function(diff_result, figdata_cancer_events, patt=''){
+plot_top_candidates_sample_type = function(diff_result, cancer_events, patt=''){
     
     plts = list()
 
@@ -115,7 +114,7 @@ plot_top_candidates_sample_type = function(diff_result, figdata_cancer_events, p
                 paste0("*",event_gene), event_gene
            ),
            event_gene = ifelse(
-                EVENT %in% figdata_cancer_events[["EVENT"]],
+                EVENT %in% cancer_events[["EVENT"]],
                 paste0(event_gene,"*"), event_gene
            )
         ) 
@@ -213,10 +212,10 @@ plot_top_candidates_sample_type = function(diff_result, figdata_cancer_events, p
 }
 
 
-make_plots = function(diff_result_sample, diff_result_subtypes, figdata_cancer_events){
+make_plots = function(diff_result_sample, diff_result_subtypes, cancer_events){
     plts = list(
-        plot_top_candidates_sample_type(diff_result_sample, figdata_cancer_events),
-        plot_top_candidates_sample_type(diff_result_subtypes, figdata_cancer_events, 'subtypes-')
+        plot_top_candidates_sample_type(diff_result_sample, cancer_events),
+        plot_top_candidates_sample_type(diff_result_subtypes, cancer_events, 'subtypes-')
     )
     plts = do.call(c,plts)
     return(plts)
@@ -233,6 +232,34 @@ make_figdata = function(diff_result_sample, diff_result_subtypes){
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # SUPPLEMENTARY FIGURE 6
+        ## Sup. Fig. 6a
+        "supfig06a" = plts[["top_samples-sample_counts_cancer"]][["data"]],
+        ## Sup. Fig. 6b
+        "supfig06b" = plts[["subtypes-top_samples-sample_counts_cancer"]][["data"]],
+        ## Sup. Fig. 6c
+        "supfig06c" = plts[["top_samples-dpsi_vs_spldep-candidates_harm"]][["data"]]  %>%
+            dplyr::select(
+                event_gene, EVENT, GENE, harm_score, median, 
+                psi__median_diff, psi__pvalue, psi__padj, 
+                `psi__condition_a-median`, `psi__condition_b-median`, 
+                cancer_type, event_type,
+            ) %>% dplyr::rename(spldep_pt = median),
+        ## Sup. Fig. 6d
+        "supfig06d" = plts[["subtypes-top_samples-dpsi_vs_spldep-candidates_harm"]][["data"]]  %>%
+            dplyr::select(
+                event_gene, EVENT, GENE, harm_score, median, 
+                psi__median_diff, psi__pvalue, psi__padj, 
+                `psi__condition_a-median`, `psi__condition_b-median`, 
+                cancer_type, event_type,
+            ) %>% dplyr::rename(spldep_pt = median)
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension='.pdf', 
                     directory='', dpi=350, format=TRUE,
@@ -283,6 +310,17 @@ save_figdata = function(figdata, dir){
     })
 }
 
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
+    })
+}
+
 parseargs = function(){
     
     option_list = list( 
@@ -293,6 +331,7 @@ parseargs = function(){
         make_option("--protein_impact_file", type="character"),
         make_option("--diff_result_sample_file", type="character"),
         make_option("--diff_result_subtypes_file", type="character"),
+        make_option("--cancer_events_file", type="character"),
         make_option("--figs_dir", type="character")
     )
 
@@ -311,6 +350,7 @@ main = function(){
     diff_result_sample_file = args[["diff_result_sample_file"]]
     diff_result_subtypes_file = args[["diff_result_subtypes_file"]]
     protein_impact_file = args[["protein_impact_file"]]
+    cancer_events_file = args[["cancer_events_file"]]
     figs_dir = args[["figs_dir"]]
     
     dir.create(figs_dir, recursive = TRUE)
@@ -329,7 +369,7 @@ main = function(){
             ONTO = gsub("ORF disruption upon sequence inclusion \\(Alt\\. Stop\\)",
                           "Alternative protein isoforms \\(Ref, Alt\\. Stop\\)", ONTO)
         )
-    figdata_cancer_events = read_tsv(figdata_cancer_events_file)
+    cancer_events = read_tsv(cancer_events_file)
     
     # add event gene
     spldep_stats = spldep_stats %>%
@@ -380,14 +420,18 @@ main = function(){
         filter(str_detect(ONTO,"Alternative protein"))
     
     # plot
-    plts = make_plots(diff_result_sample, diff_result_subtypes, figdata_cancer_events)
+    plts = make_plots(diff_result_sample, diff_result_subtypes, cancer_events)
     
     # make figdata
     figdata = make_figdata(diff_result_sample, diff_result_subtypes)
 
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

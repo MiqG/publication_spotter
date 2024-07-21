@@ -386,6 +386,11 @@ plot_targets = function(models, drug_targets){
         geom_boxplot(width=0.1, outlier.size=0.1) + 
         guides(fill="none") + 
         stat_compare_means(method="wilcox", size=FONT_SIZE, family=FONT_FAMILY) + 
+        geom_text(
+            aes(label=label, y=-0.01), 
+            . %>% count(is_target) %>% mutate(label=sprintf("n=%s",n)), 
+            family=FONT_FAMILY, size=FONT_SIZE
+        ) +
         labs(x="Is Target", y="LR p-value")
     
     plts[["targets-violin-lr_padj"]] = X %>% 
@@ -1075,6 +1080,11 @@ plot_reactome = function(eval_reactome){
                  fill="dataset", color=NA, palette=c("gray","#6CA29B")) + 
         geom_boxplot(width=0.1, outlier.size=0.1) +
         stat_compare_means(method="wilcox.test", family=FONT_FAMILY, size=FONT_SIZE) +
+        geom_text(
+            aes(label=label, y=-1), 
+            . %>% count(dataset) %>% mutate(label=sprintf("n=%s",n)), 
+            family=FONT_FAMILY, size=FONT_SIZE
+        ) +
         guides(fill="none") + 
         labs(x="Drug-Exon Association", y="N. Associations in Drug Pathway")
     
@@ -1304,6 +1314,123 @@ make_figdata = function(
     return(figdata)
 }
 
+make_source_data = function(plts, rnai, drug_screen, model_summaries, ppi){
+    
+    # required custom preprocessing
+    ### Sup. Fig. 14a - get overlaps
+    samples_oi = list(
+        "Demeter2" = rnai %>% dplyr::select(-index) %>% colnames(),
+        "GDSC1" = drug_screen %>% filter(DATASET=="GDSC1") %>% pull(ARXSPAN_ID) %>% unique() %>% na.omit(),
+        "GDSC2" = drug_screen %>% filter(DATASET=="GDSC2") %>% pull(ARXSPAN_ID) %>% unique() %>% na.omit()
+    )
+    m = samples_oi %>% 
+        list_to_matrix() %>%
+        as.data.frame() %>%
+        rownames_to_column("sampleID")
+    
+    ## Sup. Fig. 16b
+    ### create network subset
+    events_sel = model_summaries %>%
+        filter(lr_padj<THRESH_FDR & n_obs>THRESH_NOBS & DRUG_ID==1047) %>%
+        slice_max(spldep_coefficient, n=10) %>% 
+        mutate(node=GENE)
+    genes_sel = events_sel %>% pull(GENE) %>% unique()
+    targets_sel = "MDM2"
+
+    # make big network
+    ppi_net = graph_from_data_frame(ppi, directed=FALSE)
+
+    # prepare edges
+    ## find possible shortest paths
+    notfound = setdiff(genes_sel, names(V(ppi_net)))
+    print(sprintf("Genes not found in stringdb: %s", paste0(notfound, collapse=", ")))
+
+    r = lapply(intersect(genes_sel, names(V(ppi_net))), function(from){
+        r = lapply(targets_sel, function(to){
+            path_edges = shortest_paths(ppi_net, from, to, output="both")[["epath"]][[1]]
+            edges_oi = subgraph.edges(ppi_net, path_edges) %>% as_data_frame()
+            return(edges_oi)
+        })
+        r = do.call(rbind, r)
+        return(r)
+    })
+    edges = do.call(rbind, r) %>% distinct()        
+    
+    # make source data
+    source_data = list(
+        # FIGURE 4
+        ## Fig. 4b
+        "fig04b" = plts[["targets-bar-n_signifs"]][["data"]],
+        
+        ## Fig. 4c
+        "fig04b" = plts[["targets-violin-lr_pvalue"]][["data"]] %>%
+            dplyr::select(ID,DRUG_ID,drug_screen,EVENT,ENSEMBL,GENE,is_target,lr_pvalue),
+        
+        ## Fig. 4d
+        "fig04b" = plts[["reactome-violin-hits_in_pathway"]][["data"]],
+        
+        ## Fig. 4e
+        "fig04e" = plts[["ppi-bar-rel_prop"]][["data"]],
+        
+        # FIGURE 5
+        ## Fig. 5b
+        "fig05b" = plts[["drug_rec-correlations"]][["data"]] %>%
+            dplyr::rename(in_test_set = in_demeter2),
+        
+        # SUPPLEMENTARY FIGURE 14
+        ## Sup. Fig. 14a (not working from plot)
+        "supfig14a" = m,
+        
+        ## Sup. Fig. 14b
+        "supfig14b" = plts[["associations-nobs_vs_coef"]][["data"]] %>% 
+            dplyr::select(ID,DRUG_ID,drug_screen,EVENT,spldep_coefficient,n_obs),
+        
+        ## Sup. Fig. 14c
+        "supfig14c" = bind_rows(
+            plts[["associations-drug_counts"]][["data"]] %>% mutate(count_type="drug"),
+            plts[["associations-spldep_counts"]][["data"]] %>% mutate(count_type="event_gene"),
+        ),
+        
+        ## Sup. Fig. 14d
+        "supfig14d" = plts[["associations-top_drug_counts"]][["data"]],
+        
+        ## Sup. Fig. 14e
+        "supfig14e" = plts[["associations-top_spldep_counts"]][["data"]],
+        
+        # SUPPLEMENTARY FIGURE 15
+        ## Sup. Fig. 15b
+        "supfig15b" = plts[["mediators-on_target-event_coef"]][["data"]],
+        
+        ## Sup. Fig. 15c
+        "supfig15c" = plts[["mediators-on_target-spldep_coef"]][["data"]] %>% 
+            dplyr::select(
+                ID,DRUG_ID,DRUG_NAME,drug_screen,EVENT,ENSEMBL,GENE,
+                term, term_clean, spldep_coefficient,is_target
+            ),
+        
+        # SUPPLEMENTARY FIGURE 16
+        ## Sup. Fig. 16a
+        "supfig16a" = plts[["mediators-on_target-top_assocs_event_coef_pos"]][["data"]] %>% 
+            filter(DRUG_NAME=="NUTLIN-3A (-)") %>%
+            dplyr::select(-c(lr_padj,pearson_correlation_mean)) %>%
+            left_join(
+                plts[["mediators-drugs_oi-box-splicing"]][["data"]] %>%
+                    dplyr::select(event_gene,DRUG_NAME,sampleID,psi),
+                by=c("event_gene","DRUG_NAME")
+            ),
+        
+        ## Sup. Fig. 16b (not working from plot)
+        "supfig16b" = edges,
+        
+        ## Sup. Fig. 16c (not working from plot)
+        "supfig16c" = events_sel %>%
+            filter(GENE %in% c("MDM2","MDM4")) %>%
+            distinct(EVENT,ENSEMBL,GENE) %>%
+            left_join(event_info, by=c("EVENT","GENE"))
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
@@ -1318,7 +1445,6 @@ save_plt = function(plts, plt_name, extension=".pdf",
     filename = file.path(directory,paste0(plt_name,extension))
     save_plot(filename, plt, base_width=width, base_height=height, dpi=dpi, units="cm")
 }
-
 
 save_plots = function(plts, figs_dir){
     # drug-event associations
@@ -1391,6 +1517,17 @@ save_figdata = function(figdata, dir){
             
             print(filename)
         })
+    })
+}
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
     })
 }
 
@@ -1510,9 +1647,13 @@ main = function(){
         examples
     )
     
+    # make source data
+    source_data = make_source_data(plts, rnai, drug_screen, models, ppi)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

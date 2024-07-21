@@ -176,6 +176,27 @@ make_figdata = function(crispr, selected_events, harm, ccle_harm){
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # FIGURE 2
+        ## Fig. 2b left
+        "fig02b_left" = plts[["predictions-scatters"]][["data"]] %>% 
+            dplyr::select(event,EVENT,geneName,sign_harm,fitness_score,comparison,cell_line) %>%
+            filter(cell_line=="PC9 (n=16)"),
+        
+        # SUPPLEMENTARY FIGURE 5
+        ## Sup. Fig. 5a
+        "supfig05a" = plts[["summary-scatters"]][["data"]]%>% 
+            dplyr::select(event,EVENT,geneName,fitness_score,pvalue,comparison,cell_line),
+        
+        ## Sup. Fig. 5c
+        "supfig05c" = plts[["predictions-scatters-low_dynrange"]][["data"]] %>%
+            dplyr::select(event,EVENT,geneName,sign_harm,fitness_score,comparison,cell_line)
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
@@ -214,6 +235,16 @@ save_figdata = function(figdata, dir){
     })
 }
 
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
+    })
+}
 
 parseargs = function(){
     
@@ -324,9 +355,13 @@ main = function(){
     # make figdata
     figdata = make_figdata(crispr, selected_events, harm, ccle_harm)
     
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

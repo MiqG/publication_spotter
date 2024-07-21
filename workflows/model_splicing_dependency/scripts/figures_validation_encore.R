@@ -496,6 +496,42 @@ make_figdata = function(
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # FIGURE 2
+        ## Fig. 2c
+        "fig02c" = bind_rows(
+            plts[["encore_val-thresh_vs_pearsons"]][["data"]] %>%
+                filter(dataset!="random") %>%
+                mutate(dataset = case_when(
+                    dataset=="real" ~ "most",
+                    dataset=="reversed" ~ "less"
+                )) %>% dplyr::select(-c(thresh_dtpm,thresh_dtpm_lab)),
+            plts[["encore_val-ranges_vs_pearsons"]][["data"]] %>%
+                filter(dataset=="higher")
+        ),
+        ## Fig. 2d
+        "fig02d" = plts[["encore_val-top10-bars"]][["data"]],
+        
+        # SUPPLEMENTARY FIGURE 5
+        ## Fig. 5d
+        "supfig05d" = plts[["encore_val-demeter2-violin"]][["data"]],
+        ## Fig. 5e
+        "supfig05e" = plts[["encore_val-diff_genexpr_kd-violin"]][["data"]],
+        ## Fig. 5f
+        "supfig05f" = plts[["encore_val-n_selected_events-violin"]][["data"]],
+        ## Fig. 5g
+        "supfig05g" = bind_rows(
+            plts[["encore_val-top1-scatters"]][["data"]] %>%
+                mutate(dataset="top1"),
+            plts[["encore_val-top10-scatters"]][["data"]] %>%
+                mutate(dataset="top10")
+        )
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
@@ -550,6 +586,17 @@ save_figdata = function(figdata, dir){
             
             print(filename)
         })
+    })
+}
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
     })
 }
 
@@ -630,9 +677,13 @@ main = function(){
         df, correls_top_max, correls_dyn_ranges, event_prior_knowledge
     )
     
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

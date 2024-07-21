@@ -40,7 +40,7 @@ FONT_FAMILY = "Arial"
 # RAW_DIR = file.path(ROOT,"data","raw")
 # PREP_DIR = file.path(ROOT,"data","prep")
 # RESULTS_DIR = file.path(ROOT,"results","model_splicing_dependency")
-# crispr_file = file.path(RAW_DIR,"articles","Gonatopoulos-Pournatzis2020","exon_targeting_library_scores.xlsx")
+# crispr_file = file.path(RAW_DIR,"articles","GonatopoulosPournatzis2020","exon_targeting_library_scores.xlsx")
 # event_info_file = file.path(RAW_DIR,"VastDB","EVENT_INFO-hg38_noseqs.tsv")
 # psi_file = file.path(RAW_DIR,'articles','Hart2015','vast_out','PSI-minN_1-minSD_0-noVLOW-min_ALT_use25-Tidy.tab.gz')
 # tpm_file = file.path(RAW_DIR,'articles','Hart2015','vast_out','TPM-hg38-12.tab.gz')
@@ -120,6 +120,20 @@ make_figdata = function(crispr, avail_events, harm){
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # FIGURE 2
+        ## Fig. 2b
+        "fig02b_right" = plts[["predictions-scatters"]][["data"]],
+        
+        # SUPPLEMENTARY FIGURE 5
+        ## Sup. Fig. 5b
+        "supfig05b" = plts[["summary-scatters"]][["data"]]
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
@@ -153,6 +167,17 @@ save_figdata = function(figdata, dir){
             
             print(filename)
         })
+    })
+}
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
     })
 }
 
@@ -235,9 +260,13 @@ main = function(){
     # make figdata
     figdata = make_figdata(crispr, avail_events, harm)
     
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

@@ -6,7 +6,6 @@ Combine results from different workflows for publication.
 """
 
 import os
-import pandas as pd
 
 ##### VARIABLES #####
 ROOT = os.path.dirname(os.path.dirname(os.getcwd()))
@@ -18,126 +17,136 @@ RESULTS_DIR = os.path.join(ROOT,'results')
 MODEL_SEL_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","model_selection","figdata")
 PSI_UNC_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","psi_uncertainty","figdata")
 SF_MUTATIONS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","sf_mutations","figdata")
+
 MODEL_VAL_THOMAS_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Thomas2020","figdata")
 MODEL_VAL_GONATO_DIR = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_crispr_screen","Gonatopoulos-Pournatzis2020","figdata")
 MODEL_VAL_ENCORE = os.path.join(RESULTS_DIR,"model_splicing_dependency","figures","validation_encore","figdata")
+
 TARGET_VAL_TCGA = os.path.join(RESULTS_DIR,"streamlined_therapy_dev","figures","targetable_events","figdata")
 TARGET_VAL_SEL = os.path.join(RESULTS_DIR,"experimental_validation","figures","selection_exons_to_validate","figdata")
 TARGET_VAL_EXP = os.path.join(RESULTS_DIR,"experimental_validation","figures","validation","figdata")
+
 MODEL_DRUG_SENS_DIR = os.path.join(RESULTS_DIR,"exon_drug_interactions","figures","model_drug_screens","figdata")
+
 VAL_TREAT_RECOM_DIR = os.path.join(RESULTS_DIR,"splicing_dependency_treatments","figures","eda_treatments","figdata")
 
 ##### RULES #####
 rule all:
     input:
-        os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_tables')
+        # make supplementary tables
+        os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_data'),
+        os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_data_txt'),
+        
+        # make source data
+        os.path.join(RESULTS_DIR,'prepare_submission','files','source_data.xlsx'),
+        
 
-rule supplementary_tables:
+rule supplementary_data:
     input:
         # prior knowledge
-        suptab01_event_prior_knowledge = os.path.join(MODEL_SEL_DIR,"model_selection","event_prior_knowledge.tsv.gz"),
+        supdata01_event_prior_knowledge = os.path.join(MODEL_SEL_DIR,"model_selection","event_prior_knowledge.tsv.gz"),
         # pathway comparison
-        suptab02_pathway_comparison = os.path.join(MODEL_SEL_DIR,"model_properties","pathway_comparison.tsv.gz"),
+        supdata02_pathway_comparison = os.path.join(MODEL_SEL_DIR,"model_properties","pathway_comparison.tsv.gz"),
         # model cancer-driver exons
         ## CCLE RNAi - demeter2
-        suptab03_ccle_demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
+        supdata03_ccle_demeter2 = os.path.join(PREP_DIR,"demeter2","CCLE.tsv.gz"),
         ## CCLE tpm
-        suptab04_ccle_tpm = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
+        supdata04_ccle_tpm = os.path.join(PREP_DIR,"genexpr_tpm","CCLE.tsv.gz"),
         ## CCLE psi
-        suptab05_ccle_psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
+        supdata05_ccle_psi = os.path.join(PREP_DIR,"event_psi","CCLE-EX.tsv.gz"),
         ## CCLE metadata
-        suptab06_ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
+        supdata06_ccle_metadata = os.path.join(PREP_DIR,"metadata","CCLE.tsv.gz"),
         ## model summaries
-        suptab07_model_summaries = os.path.join(MODEL_SEL_DIR,"model_selection","model_summaries.tsv.gz"),
+        supdata07_model_summaries = os.path.join(MODEL_SEL_DIR,"model_selection","model_summaries.tsv.gz"),
         ## ROC evaluation
-        suptab08_roc_evaluation = os.path.join(MODEL_SEL_DIR,"model_selection","roc_analysis.tsv.gz"),
+        supdata08_roc_evaluation = os.path.join(MODEL_SEL_DIR,"model_selection","roc_analysis.tsv.gz"),
         ## shRNA mapping
-        suptab09_shrna_mapping = os.path.join(MODEL_SEL_DIR,"qc","shrna_mapping.tsv.gz"),
+        supdata09_shrna_mapping = os.path.join(MODEL_SEL_DIR,"qc","shrna_mapping.tsv.gz"),
         
         ## psi simulation
-        suptab10_psi_simulation = os.path.join(PSI_UNC_DIR,"psi_uncertainty","simulations.tsv.gz"),
+        supdata10_psi_simulation = os.path.join(PSI_UNC_DIR,"psi_uncertainty","simulations.tsv.gz"),
         ## uncertainty evaluation
-        suptab11_uncertainty_eval = os.path.join(PSI_UNC_DIR,"psi_uncertainty","uncertainty_quant.tsv.gz"),
+        supdata11_uncertainty_eval = os.path.join(PSI_UNC_DIR,"psi_uncertainty","uncertainty_quant.tsv.gz"),
         ## rnai stats
-        suptab12_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
+        supdata12_rnai_stats = os.path.join(MODEL_SEL_DIR,"model_selection","rnai_stats.tsv.gz"),
         ## lr-tests thresholds
-        suptab13_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
+        supdata13_evaluation_pvalue = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_pvalue.tsv.gz"),
         ## pearson thresholds
-        suptab14_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
+        supdata14_evaluation_correlation = os.path.join(MODEL_SEL_DIR,"model_selection","evaluation_correlation.tsv.gz"),
         ## gsoa
-        suptab15_gsoa = os.path.join(MODEL_SEL_DIR,"model_properties","gsoa_selected.tsv.gz"),
+        supdata15_gsoa = os.path.join(MODEL_SEL_DIR,"model_properties","gsoa_selected.tsv.gz"),
         ## splicing dependency CCLE
-        suptab16_spldep_ccle = os.path.join(RESULTS_DIR,"model_splicing_dependency","files","splicing_dependency-EX","mean.tsv.gz"),
+        supdata16_spldep_ccle = os.path.join(RESULTS_DIR,"model_splicing_dependency","files","splicing_dependency-EX","mean.tsv.gz"),
         ## splicing dependency summary stats
-        suptab17_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
+        supdata17_spldep_stats = os.path.join(MODEL_SEL_DIR,"model_properties","splicing_dependecy_stats.tsv.gz"),
         ## gene-level mutation frequency
-        suptab18_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
+        supdata18_gene_mut_freq = os.path.join(MODEL_SEL_DIR,"model_validation","gene_mutation_frequency.tsv.gz"),
         ## SF mutations summary
-        suptab19_sf_mutations_harm_scores = os.path.join(SF_MUTATIONS_DIR,"sf_mutations","diff_max_harm.tsv.gz"),
+        supdata19_sf_mutations_harm_scores = os.path.join(SF_MUTATIONS_DIR,"sf_mutations","diff_max_harm.tsv.gz"),
         
         # model validation
         ## Thomas - observed changes in cell proliferation
-        suptab20_thomas_crispr_screen = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","crispr_screen.tsv.gz"),
+        supdata20_thomas_crispr_screen = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","crispr_screen.tsv.gz"),
         ## Thomas - spotter results
-        suptab21_thomas_spotter_results = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","spotter_results.tsv.gz"),
+        supdata21_thomas_spotter_results = os.path.join(MODEL_VAL_THOMAS_DIR,"model_validation","spotter_results.tsv.gz"),
         ## Gonatopoulos - observed changes in cell proliferation
-        suptab22_gonatopoulos_crispr_screen = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","crispr_screen.tsv.gz"),
+        supdata22_gonatopoulos_crispr_screen = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","crispr_screen.tsv.gz"),
         ## Gonatopoulos - spotter results
-        suptab23_gonatopoulos_spotter_results = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","spotter_results.tsv.gz"),
+        supdata23_gonatopoulos_spotter_results = os.path.join(MODEL_VAL_GONATO_DIR,"model_validation","spotter_results.tsv.gz"),
         ## ENCORE - PSI
-        suptab24_encore_psi = os.path.join(PREP_DIR,'event_psi','ENCORE-EX.tsv.gz'),
+        supdata24_encore_psi = os.path.join(PREP_DIR,'event_psi','ENCORE-EX.tsv.gz'),
         ## ENCORE - TPM
-        suptab25_encore_tpm = os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
+        supdata25_encore_tpm = os.path.join(PREP_DIR,'genexpr_tpm','ENCORE.tsv.gz'),
         ## ENCORE - metadata
-        suptab26_encore_metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
+        supdata26_encore_metadata = os.path.join(PREP_DIR,'metadata','ENCORE.tsv.gz'),
         ## ENCORE - spotter results
-        suptab27_encore_spotter_results = os.path.join(MODEL_VAL_ENCORE,"model_validation","spotter_results.tsv.gz"),
+        supdata27_encore_spotter_results = os.path.join(MODEL_VAL_ENCORE,"model_validation","spotter_results.tsv.gz"),
         ## ENCORE - correlation tables
-        suptab28_encore_evaluation = os.path.join(MODEL_VAL_ENCORE,"model_validation","evaluation.tsv.gz"),
+        supdata28_encore_evaluation = os.path.join(MODEL_VAL_ENCORE,"model_validation","evaluation.tsv.gz"),
         
         # streamlined drug development
         ## TCGA - PSI (not as sup. tab.)
         ## TCGA - mRNA level counts (not as sup. tab.)
         ## TCGA - Differential Splicing, Spl. Dep., Harm Score
-        suptab29_targetable_exons_cancer_types = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_type.tsv.gz"),
-        suptab30_targetable_exons_cancer_subtypes = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_subtype.tsv.gz"),
+        supdata29_targetable_exons_cancer_types = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_type.tsv.gz"),
+        supdata30_targetable_exons_cancer_subtypes = os.path.join(TARGET_VAL_TCGA,"targetable_events","differential_analysis-by_cancer_subtype.tsv.gz"),
         ## SSO - cancer cells RNA-seq: PSI, TPM, Spl. Dep., Harm Score
-        suptab31_selected_exons_spotter_results = os.path.join(TARGET_VAL_SEL,"selection_events","selected_events_inhouse.tsv.gz"),
+        supdata31_selected_exons_spotter_results = os.path.join(TARGET_VAL_SEL,"selection_events","selected_events_inhouse.tsv.gz"),
         ## SSO - structural analysis (hand-made)
-        #suptab32_targetable_exons_proteoform_sequences = ""
+        #suptab01_targetable_exons_proteoform_sequences = ""
         ## SSO - sequences SSO (hand-made)
-        #suptab33_targetable_exons_sso_sequences = ""
+        #suptab02_targetable_exons_sso_sequences = ""
         ## SSO - sequences primers (hand-made)
-        #suptab34_targetable_exons_primer_sequences = ""
+        #suptab03_targetable_exons_primer_sequences = ""
         ## SSO - cell proliferation experiments
-        suptab35_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz"),
+        supdata32_targetable_exons_clonogenic_assays = os.path.join(TARGET_VAL_EXP,"experiments","validation_clonogenic.tsv.gz"),
         ## Growth curve cell lines
-        suptab36_growth_curves = os.path.join(TARGET_VAL_EXP,"experiments","proliferation_assay.tsv.gz"),
+        supdata33_growth_curves = os.path.join(TARGET_VAL_EXP,"experiments","proliferation_assay.tsv.gz"),
 
         # drug-exon mechanistic interactions
         ## GDSC - drug sensitivities (training + test)
-        suptab37_drug_sensitivites = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_sensitivities.tsv.gz'),
+        supdata34_drug_sensitivites = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_sensitivities.tsv.gz'),
         ## GDSC - drug target info
-        suptab38_drug_targets = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_targets.tsv.gz'),
+        supdata35_drug_targets = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','drug_targets.tsv.gz'),
         ## drug-exon - model summaries
-        suptab39_drug_exon_associations = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','model_summaries.tsv.gz'),
+        supdata36_drug_exon_associations = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','model_summaries.tsv.gz'),
         ## drug-exon - ReactomeDB pathway tests
-        suptab40_evaluation_reactome_pathways = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','evaluation_reactome.tsv.gz'),
+        supdata37_evaluation_reactome_pathways = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','evaluation_reactome.tsv.gz'),
         ## drug-exon - shortest path lengths
-        suptab41_evaluation_stringdb_ppi = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','shortest_paths.tsv.gz'),
+        supdata38_evaluation_stringdb_ppi = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','shortest_paths.tsv.gz'),
         
         # treatment recommendation
         ## GDSC - correlations training and test sets
-        suptab42_gdsc_pred_drug_ic50 = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','pred_ic50_by_drug.tsv.gz'),
+        supdata39_gdsc_pred_drug_ic50 = os.path.join(MODEL_DRUG_SENS_DIR,'drug_event_assoc','pred_ic50_by_drug.tsv.gz'),
         ## Pietilla - PSI, TPM, Spl. Dep., Pred. IC50, Metadata
-        suptab43_pietilla_splicing_dependency_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","splicing_dependency_analysis.tsv.gz"),
+        supdata40_pietilla_splicing_dependency_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","splicing_dependency_analysis.tsv.gz"),
         ## Pietilla - estimated drug responses
-        suptab44_pietilla_estimated_ic50 = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","estimated_ic50.tsv.gz"),
+        supdata41_pietilla_estimated_ic50 = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","estimated_ic50.tsv.gz"),
         ## Pietilla - ROC analysis
-        suptab45_pietilla_roc_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","roc_analysis.tsv.gz")
+        supdata42_pietilla_roc_analysis = os.path.join(VAL_TREAT_RECOM_DIR,"pred_sensitivity","roc_analysis.tsv.gz")
         
     output:
-        directory(os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_tables'))
+        directory(os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_data'))
     run:
         import os
         import subprocess
@@ -153,3 +162,79 @@ rule supplementary_tables:
             subprocess.call(cmd)
             
         print("Done!")
+        
+        
+rule convert_to_txt:
+    input:
+        os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_data')
+    output:
+        directory(os.path.join(RESULTS_DIR,'prepare_submission','files','supplementary_data_txt'))
+    run:
+        import os
+        import subprocess
+        
+        indir = input[0]
+        outdir = output[0]
+        os.makedirs(outdir, exist_ok=True)
+        
+        sup_datas = [f for f in os.listdir(indir) if "supdata" in f]
+        for it, f in enumerate(sorted(sup_datas)):
+            filename = os.path.join(indir,f)
+            outfile = os.path.join(outdir,f.replace(".tsv.gz",".txt"))
+            cmd = ["gunzip","--stdout",filename]
+            print(cmd)
+            subprocess.call(cmd, stdout=open(outfile, "wb"))
+
+        print("Done!")
+        
+        
+rule make_source_data:
+    input:
+        source_data_dirs = [
+            # FIGURE 1
+            os.path.join(MODEL_SEL_DIR,"source_data"),
+            os.path.join(PSI_UNC_DIR,"source_data"),
+            os.path.join(SF_MUTATIONS_DIR,"source_data"),
+            
+            # FIGURE 2
+            os.path.join(MODEL_VAL_THOMAS_DIR,"source_data"),
+            os.path.join(MODEL_VAL_GONATO_DIR,"source_data"),
+            os.path.join(MODEL_VAL_ENCORE,"source_data"),
+            
+            # FIGURE 3
+            os.path.join(TARGET_VAL_TCGA,"source_data"),
+            # (no figure) os.path.join(TARGET_VAL_SEL,"source_data"),
+            os.path.join(TARGET_VAL_EXP,"source_data"),
+            
+            # FIGURE 4
+            os.path.join(MODEL_DRUG_SENS_DIR,"source_data"),
+            
+            # FIGURE 5
+            os.path.join(VAL_TREAT_RECOM_DIR,"source_data")
+        ]
+    output:
+        source_data = os.path.join(RESULTS_DIR,'prepare_submission','files','source_data.xlsx')
+    run:
+        import pandas as pd
+        
+        source_data = []
+        for source_data_dir in input.source_data_dirs:
+            # load all tables in directory
+            dfs = {
+                f.replace(".tsv.gz",""): pd.read_table(os.path.join(source_data_dir,f))
+                for f in os.listdir(source_data_dir) if "fig" in f
+            }
+            # store
+            source_data.append(dfs)
+            
+        source_data = {k: v for d in source_data for k, v in d.items()}
+        
+        # save into single excel file
+        with pd.ExcelWriter(output.source_data) as writer:  
+            for name in sorted(source_data.keys()):
+                source_data[name].to_excel(writer, sheet_name=name, index=False)
+                print(name)
+        
+        print("Done!")
+
+        

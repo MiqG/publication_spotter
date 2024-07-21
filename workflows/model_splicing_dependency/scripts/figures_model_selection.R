@@ -989,8 +989,18 @@ plot_model_validation = function(models, gene_mut_freq){
                    group=interaction(Variant_Classification,is_selected))) +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
                      position=position_dodge(0.7)) +
-        stat_compare_means(aes(group=is_selected), method="wilcox.test", 
-                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
+        geom_text(
+            aes(y=0.0001, label=label),
+            . %>% count(Variant_Classification, is_selected) %>%
+                mutate(label=sprintf("n=%s",n)),
+            position=position_dodge(0.7),
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
+        stat_compare_means(
+            aes(group=is_selected), 
+            method="wilcox.test", label="p.format", 
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
         yscale("log10", .format=TRUE) + 
         fill_palette(PAL_DUAL) +
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", fill="Selected Model") +
@@ -1003,8 +1013,18 @@ plot_model_validation = function(models, gene_mut_freq){
                    group=interaction(Variant_Classification,is_selected))) +
         geom_boxplot(aes(fill=is_selected), outlier.size=0.1, 
                      position=position_dodge(0.7)) +
-        stat_compare_means(aes(group=is_selected), method="wilcox.test", 
-                           label="p.signif", size=FONT_SIZE, family=FONT_FAMILY) +
+        geom_text(
+            aes(y=0.0001, label=label),
+            . %>% count(Variant_Classification, is_selected) %>%
+                mutate(label=sprintf("n=%s",n)),
+            position=position_dodge(0.7),
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
+        stat_compare_means(
+            aes(group=is_selected), 
+            method="wilcox.test", label="p.format", 
+            size=FONT_SIZE, family=FONT_FAMILY
+        ) +
         yscale("log10", .format=TRUE) + 
         fill_palette(PAL_DUAL) +
         labs(x="Mutation Effect", y="log10(Mut. Freq. per Kb)", fill="Selected Model") +
@@ -1508,6 +1528,75 @@ make_figdata = function(models, roc_analysis, rnai_stats, cancer_events,
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # FIGURE 1
+        ## Fig. 1d
+        "fig01d" = plts[["model_prop-enrichment-GO_BP-dotplot"]][["data"]],
+
+        ## Fig. 1e
+        "fig01e" = plts[["model_prop-protein_impact_clean-freqs"]][["data"]],
+
+        ## Fig. 1f
+        "fig01f" = plts[["pathway_comparison-uncategorized_vs_cosmic-reactome-scatter"]][["data"]],
+
+        ## Fig. 1g
+        "fig01g" = plts[["model_val-mutation_gene_frequency"]][["data"]],
+
+        # SUPPLEMENTARY FIGURE 1
+        ## Sup. Fig. 1a
+        "supfig01a" = plts[["events_oi-KRAS-splicing_vs_rnai"]][["data"]],
+
+        ## Sup. Fig. 1b
+        "supfig01b" = plts[["events_oi-SMNDC1-splicing_vs_rnai"]][["data"]],
+
+        ## Sup. Fig. 1c
+        "supfig01c" = plts[["pathway_comparison-known_driver_exons_vs_cosmic-reactome-scatter"]][["data"]] %>% 
+            dplyr::select(-is_uncategorized),
+
+        ## Sup. Fig. 1d
+        "supfig01d" = plts[["model_sel-roc_analysis-fpr_vs_tpr-lr_pvalue-line"]][["data"]] %>% 
+                distinct(threshold, fpr, sensitivity, auc_tf, recall, precision, auc_pr),
+        
+        ## Sup. Fig. 1e
+        "supfig01e" = plts[["rnai_qc-n_targeted_exons_per_gene-hist"]][["data"]],
+            
+
+        ## Sup. Fig. 1f
+        "supfig01f" = plts[["rnai_qc-n_targeted_exons_per_gene_per_vastdb_exon-hist"]][["data"]],
+
+        ## Sup. Fig. 1g
+        "supfig01g" = plts[["rnai_qc-n_targeted_exons_per_gene_vs_lr_pvalue-box"]][["data"]] %>%
+            select(EVENT, ENSEMBL, GENE, n_targeted_exons_per_gene, is_targeted, is_targeted_lab, lr_pvalue),
+
+        # SUPPLEMENTARY FIGURE 3
+        ## Sup. Fig. 3a
+        "supfig03a" = plts[["model_sel-deps_sorted_vs_std_ctl_pos"]][["data"]],
+
+        ## Sup. Fig. 3b
+        "supfig03b" = plts[["model_sel-deps_sorted_vs_std_ctl_neg"]][["data"]],
+
+        ## Sup. Fig. 3c
+        "supfig03c" = plts[["model_sel-tpr_vs_fpr"]][["data"]],
+
+        ## Sup. Fig. 3d
+        "supfig03d" = plts[["model_sel-pearson_corr_vs_spearman"]][["data"]],
+
+        # SUPPLEMENTARY FIGURE 4
+        ## Sup. Fig. 4a
+        "supfig04a" = plts[["model_prop-protein_impact_clean_vs_sign_coef-freqs"]][["data"]],
+
+        ## Sup. Fig. 4b
+        "supfig04b" = plts[["model_prop-tumorigenesis-scatter"]][["data"]],
+
+        ## Sup. Fig. 4c
+        "supfig04c" = plts[["model_val-mutation_gene_frequency_without_known_genes"]][["data"]]
+    )
+    
+    return(source_data)
+}
+
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
@@ -1633,6 +1722,17 @@ save_figdata = function(figdata, dir){
             
             print(filename)
         })
+    })
+}
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
     })
 }
 
@@ -1945,9 +2045,13 @@ main = function(){
         exon_counts, genexpr_counts, event_info, gene_info
     )
     
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

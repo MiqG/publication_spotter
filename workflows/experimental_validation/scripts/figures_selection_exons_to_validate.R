@@ -850,6 +850,31 @@ make_figdata = function(
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # FIGURE 3
+        ## Fig. 3b
+        "fig03b" = plts[["inhouse-max_harm-bar-high_prolif"]][["data"]] %>%
+            dplyr::select(event_gene,CCLE_Name,max_harm,spldep,psi),
+        
+        # SUPPLEMENTARY FIGURE 10
+        ## Sup. Fig. 10b
+        "supfig10b" = plts[["inhouse-max_harm-bar-low_prolif"]][["data"]] %>%
+            dplyr::select(event_gene,CCLE_Name,max_harm,spldep,psi),
+        
+        ## Sup. Fig. 10d
+        "supfig10d" = plts[["prolif_comp-spldep-bar"]][["data"]] %>%
+            dplyr::select(event_gene,CCLE_Name,spldep) %>%
+            left_join(
+                plts[["prolif_comp-harm_scores-bar"]][["data"]] %>%
+                    dplyr::select(event_gene,CCLE_Name,max_harm),
+                by = c("event_gene","CCLE_Name")
+            )
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension='.pdf', 
                     directory='', dpi=350, format=TRUE,
@@ -917,6 +942,18 @@ save_figdata = function(figdata, dir){
         })
     })
 }
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
+    })
+}
+
 
 parseargs = function(){
     
@@ -1158,9 +1195,13 @@ main = function(){
         inhouse_harm_low_prolif, inhouse_harm_high_prolif
     )
 
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

@@ -174,6 +174,22 @@ make_figdata = function(simulations, uncertainty_quant){
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    source_data = list(
+        # SUPPLEMENTARY FIGURE 2
+        ## Sup. Fig. 2a
+        "supfig02a" = plts[["simulations-psi_vs_std_vs_n_reads-line"]][["data"]],
+        ## Sup. Fig. 2b
+        "supfig02b" = plts[["uncertainty_quant-distr_total_reads-violin"]][["data"]],
+        ## Sup. Fig. 2c
+        "supfig02c" = plts[["uncertainty_quant-total_reads_vs_diff_spldep-scatter"]][["data"]] %>% dplyr::select(-c(psi_real,psi_simulated,spldep_simulated,spldep_real)),
+        ## Sup. Fig. 2d
+        "supfig02d" = plts[["uncertainty_quant-psi_real_vs_simulated-scatter"]][["data"]] %>% dplyr::select(-c(total_reads,diff_psi,diff_spldep))
+    )
+    
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
@@ -213,6 +229,17 @@ save_figdata = function(figdata, dir){
             
             print(filename)
         })
+    })
+}
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
     })
 }
 
@@ -301,9 +328,13 @@ main = function(){
     # make figdata
     figdata = make_figdata(simulations, uncertainty_quant)
     
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 

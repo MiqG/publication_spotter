@@ -461,6 +461,26 @@ make_figdata = function(X, estimated_response, roc_analysis){
     return(figdata)
 }
 
+make_source_data = function(plts){
+    
+    # make source data
+    source_data = list(
+        # FIGURE 5
+        ## Fig. 5c
+        "fig05b" = plts[["eda_metadata-patients-pfi_vs_regimen"]][["data"]],
+        
+        ## Fig. 5d
+        "fig05b" = plts[["drug_rec-pred_ic50-boxplot"]][["data"]],
+        
+        # SUPPLEMENTARY FIGURE 17
+        ## Sup. Fig. 17a
+        "supfig17a" = plts[["eda_metadata-patients-sensitivity"]][["data"]],
+        
+        ## Sup. Fig. 17b
+        "supfig17b" = plts[["drug_rec-pred_ic50-roc_curves"]][["data"]]
+    )
+    return(source_data)
+}
 
 save_plt = function(plts, plt_name, extension=".pdf", 
                     directory="", dpi=350, format=TRUE,
@@ -502,6 +522,18 @@ save_figdata = function(figdata, dir){
         })
     })
 }
+
+save_source_data = function(source_data, dir){
+    d = file.path(dir,"figdata",'source_data')
+    dir.create(d, recursive=TRUE)
+    lapply(names(source_data), function(nm){
+        df = source_data[[nm]]
+        filename = file.path(d, paste0(nm,'.tsv.gz'))
+        write_tsv(df, filename)
+        print(filename)
+    })
+}
+
 
 parseargs = function(){
     
@@ -630,7 +662,7 @@ main = function(){
         dplyr::rename(EVENT = index) %>%
         filter(EVENT %in% selected_events)
     splicing = splicing %>% 
-        filter(EVENT %in% events_oi)
+        filter(EVENT %in% selected_events)
     genexpr = annot %>% 
         filter(EVENT %in% selected_events) %>%
         distinct(GENE, ENSEMBL) %>%
@@ -699,9 +731,13 @@ main = function(){
     # make figdata
     figdata = make_figdata(X, estimated_response, roc_analysis)
     
+    # make source data
+    source_data = make_source_data(plts)
+    
     # save
     save_plots(plts, figs_dir)
     save_figdata(figdata, figs_dir)
+    save_source_data(source_data, figs_dir)
 }
 
 
