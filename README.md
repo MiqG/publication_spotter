@@ -1,4 +1,4 @@
-# *In silico* RNA isoform screening for the systematic discovery of potential cancer-driver exons with therapeutic applications
+# In silico RNA isoform screening to identify potential cancer driver exons with therapeutic applications
 
 This is the repository to reproduce the analysis carried out in our manuscript, from the data download to the figures.
 
